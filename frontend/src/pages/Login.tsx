@@ -29,9 +29,9 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex">
-      {/* Left panel - decorative */}
+
+      {/* ── Desktop left panel ───────────────────────────────────────────── */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-900 via-blue-900 to-blue-800 flex-col justify-between p-12 relative overflow-hidden">
-        {/* Background pattern */}
         <div className="absolute inset-0 opacity-10"
           style={{ backgroundImage: 'radial-gradient(circle at 20% 80%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)', backgroundSize: '60px 60px' }}
         />
@@ -52,8 +52,6 @@ export default function Login() {
             Capture, track and resolve safety observations across all your construction sites in real time.
           </p>
         </div>
-
-        {/* Feature highlights */}
         <div className="relative space-y-4">
           {[
             { icon: '📸', text: 'Capture photos from site instantly' },
@@ -68,34 +66,44 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Right panel - form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-slate-50">
-        <div className="w-full max-w-sm">
-          {/* Mobile logo */}
-          <div className="lg:hidden flex items-center justify-between mb-8">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-blue-700 rounded-xl flex items-center justify-center">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-bold text-gray-900">Neo SHE</span>
-            </div>
-            <img src="/ambuja-logo.png" alt="Ambuja" className="h-9 w-auto object-contain" />
+      {/* ── Right panel ─────────────────────────────────────────────────── */}
+      {/* Desktop: centered card. Mobile: full-screen column layout */}
+      <div className="flex-1 flex flex-col lg:items-center lg:justify-center lg:p-8 bg-slate-50">
+
+        {/* Mobile top branding bar */}
+        <div
+          className="lg:hidden flex items-center gap-3 px-5 py-4 shadow-md flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg, #0f0d2a 0%, #1a1050 100%)' }}
+        >
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0"
+            style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' }}>
+            <Shield className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="text-white font-bold text-sm leading-tight">Neo SHE</p>
+            <p className="text-indigo-300 text-xs">Safety Observation App</p>
+          </div>
+        </div>
+
+        {/* Form area */}
+        <div className="flex-1 flex flex-col lg:block w-full lg:max-w-sm px-5 pt-6 pb-4 lg:px-0 lg:pt-0 lg:pb-0">
+
+          {/* Heading */}
+          <div className="mb-5 lg:mb-8">
+            <h2 className="text-xl lg:text-2xl font-bold text-gray-900">Welcome back</h2>
+            <p className="text-gray-500 mt-0.5 text-sm">Sign in to continue</p>
           </div>
 
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
-            <p className="text-gray-500 mt-1 text-sm">Sign in to your account to continue</p>
-          </div>
-
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+          {/* Card */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 lg:p-8">
             {error && (
-              <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 text-red-700 rounded-xl px-4 py-3 mb-5 text-sm">
+              <div className="flex items-start gap-2.5 bg-red-50 border border-red-100 text-red-700 rounded-xl px-3 py-2.5 mb-4 text-sm">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <span>{error}</span>
               </div>
             )}
 
-            <form onSubmit={submit} className="space-y-5">
+            <form onSubmit={submit} className="space-y-4">
               <div>
                 <label className="label">Email Address</label>
                 <input
@@ -125,7 +133,7 @@ export default function Login() {
 
               <button
                 type="submit" disabled={loading}
-                className="btn-primary w-full justify-center py-2.5 mt-2 text-base"
+                className="btn-primary w-full justify-center py-2.5 mt-1 text-base"
               >
                 {loading
                   ? <><span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Signing in…</>
@@ -135,13 +143,16 @@ export default function Login() {
             </form>
           </div>
 
-          <p className="text-center text-xs text-gray-400 mt-5">
-            Default admin: <span className="font-mono text-gray-600">admin@safety.com</span>
-            {' / '}
-            <span className="font-mono text-gray-600">Admin@123</span>
-          </p>
+          {/* Spacer pushes logo to bottom on mobile */}
+          <div className="flex-1 lg:hidden" />
+
+          {/* Ambuja logo */}
+          <div className="flex justify-center py-4 lg:mt-6">
+            <img src="/ambuja-logo.png" alt="Ambuja" className="h-6 w-auto object-contain opacity-60" />
+          </div>
         </div>
       </div>
+
     </div>
   )
 }
