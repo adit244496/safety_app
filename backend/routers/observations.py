@@ -403,6 +403,11 @@ def list_observations(
     if status:
         q = q.filter(models.Observation.status.in_(status))
 
+    # Drafts are private — only visible to the creator
+    q = q.filter(
+        (models.Observation.status != 'Draft') | (models.Observation.created_by == user.id)
+    )
+
     total = q.count()
     obs_list = q.order_by(models.Observation.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
 
@@ -456,6 +461,8 @@ def get_observation(obs_id: str, db: Session = Depends(get_db), user: models.Use
     else:
         obs = db.query(models.Observation).filter(models.Observation.observation_id == obs_id).first()
     if not obs:
+        raise HTTPException(404, "Observation not found")
+    if obs.status == 'Draft' and obs.created_by != user.id:
         raise HTTPException(404, "Observation not found")
     return obs_to_dict(obs, db)
 

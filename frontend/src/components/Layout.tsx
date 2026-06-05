@@ -26,11 +26,16 @@ export default function Layout() {
         style={{ flex: '1 1 0%' }}
       >
         <Header onMenu={() => setMobileOpen(o => !o)} />
-        <main className="flex-1 overflow-auto p-4 md:p-6 thin-scroll main-scroll">
+        <main className="flex-1 overflow-auto p-4 md:p-6 pb-20 lg:pb-6 thin-scroll main-scroll">
           <div className="max-w-7xl mx-auto">
             <Outlet />
           </div>
         </main>
+      </div>
+
+      {/* Ambuja logo — mobile only, pinned to bottom */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-100 shadow-[0_-1px_4px_rgba(0,0,0,0.06)] flex items-center justify-center py-2.5">
+        <img src="/ambuja-logo.png" alt="Ambuja" className="h-7 w-auto object-contain opacity-90" />
       </div>
     </div>
   )

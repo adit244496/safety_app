@@ -98,7 +98,14 @@ export default function Header({ onMenu }: { onMenu: () => void }) {
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-3">
+        {/* Ambuja logo - desktop only */}
+        <img
+          src="/ambuja-logo.png"
+          alt="Ambuja"
+          className="hidden lg:block h-6 w-auto object-contain"
+        />
+        <div className="hidden lg:block w-px h-6 bg-gray-200" />
         {/* Notification bell */}
         <div className="relative">
           <button

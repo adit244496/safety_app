@@ -16,10 +16,10 @@ interface Props {
 
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', exact: true },
-  { to: '/summary', icon: BarChart3, label: 'Summary', exact: true },
   { to: '/observations', icon: ClipboardList, label: 'Observations', exact: false },
   { to: '/observations/new', icon: PlusCircle, label: 'New Observation', exact: true },
   { to: '/report', icon: FileBarChart2, label: 'SHE Report', exact: true },
+  { to: '/summary', icon: BarChart3, label: 'Summary', exact: true },
 ]
 
 export default function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggleCollapse }: Props) {

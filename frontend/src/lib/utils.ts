@@ -13,7 +13,7 @@ export const getStatusClass = (status?: string) => {
     case 'Pending': return 'badge-pending'
     case 'Under Review': return 'badge-review'
     case 'Closed': return 'badge-closed'
-    case 'Draft': return 'badge-gray'
+    case 'Draft': return 'badge-draft'
     default: return 'badge-gray'
   }
 }

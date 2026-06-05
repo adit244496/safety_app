@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, ChevronRight, SlidersHorizontal, X, MessageSquare } from 'lucide-react'
+import { Plus, ChevronRight, SlidersHorizontal, X, MessageSquare, PencilLine } from 'lucide-react'
 import api from '../../lib/api'
 import { fmtDate, getStatusClass, getRiskClass, STATUSES } from '../../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
@@ -198,13 +198,20 @@ export default function ObservationsList() {
               {obs.map((o: any) => (
                 <tr
                   key={o.id}
-                  className="tr cursor-pointer"
+                  className={`tr cursor-pointer ${o.status === 'Draft' ? 'bg-amber-50/60 hover:bg-amber-50' : ''}`}
                   onClick={() => navigate(`/observations/${o.observation_id}`)}
                 >
                   <td className="td">
-                    <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md">
-                      {o.observation_id}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md">
+                        {o.observation_id}
+                      </span>
+                      {o.status === 'Draft' && (
+                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 bg-amber-100 border border-dashed border-amber-300 px-1.5 py-0.5 rounded">
+                          <PencilLine className="w-2.5 h-2.5" /> Draft
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="td">
                     <span className="text-gray-700 text-xs font-medium">{o.project_name || '—'}</span>

@@ -61,6 +61,7 @@
   .badge-medium { @apply badge bg-amber-100 text-amber-800 ring-1 ring-amber-200/60; }
   .badge-high   { @apply badge bg-rose-100 text-rose-800 ring-1 ring-rose-200/60; }
   .badge-gray   { @apply badge bg-gray-100 text-gray-700; }
+  .badge-draft  { @apply badge bg-amber-50 text-amber-700 ring-1 ring-amber-300 border border-dashed border-amber-400; }
 
   /* ── Tables ──────────────────────────────────── */
   .th { @apply px-4 py-3 text-left text-[11px] font-semibold text-gray-500 uppercase tracking-widest bg-slate-50/80; }

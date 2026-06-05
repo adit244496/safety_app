@@ -1,0 +1,17 @@
+{
+  "name": "Neo SHE",
+  "short_name": "Neo SHE",
+  "description": "Safety Observation App",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f0d2a",
+  "theme_color": "#6366f1",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

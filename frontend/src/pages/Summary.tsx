@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts'
-import { BarChart3, TrendingUp, ArrowUpRight, Users, Award, ClipboardList, Save, CheckCircle, SlidersHorizontal, X } from 'lucide-react'
+import { BarChart3, TrendingUp, ArrowUpRight, Users, Award, ClipboardList, Save, CheckCircle, SlidersHorizontal, X, ChevronRight, ChevronDown } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../store/authStore'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -47,10 +47,10 @@ const GRADATION_BG: Record<string, string> = {
 // ─── EASE Score Tab ──────────────────────────────────────────────────────────
 
 function EaseScoreView() {
-  const last90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today  = new Date().toISOString().slice(0, 10)
   const [projectFilter, setProjectFilter] = useState('')
-  const [dateFrom, setDateFrom] = useState(last90)
+  const [dateFrom, setDateFrom] = useState(last30)
   const [dateTo, setDateTo]     = useState(today)
 
   const { data: easeProjects } = useQuery({
@@ -153,7 +153,7 @@ function EaseScoreView() {
     )
   }
 
-  const easeActiveCount = (projectFilter ? 1 : 0) + (dateFrom !== last90 ? 1 : 0) + (dateTo !== today ? 1 : 0)
+  const easeActiveCount = (projectFilter ? 1 : 0) + (dateFrom !== last30 ? 1 : 0) + (dateTo !== today ? 1 : 0)
 
   return (
     <div className="space-y-5">
@@ -184,7 +184,7 @@ function EaseScoreView() {
               className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 w-[130px]" title="Date to" />
           </div>
           {easeActiveCount > 0 && (
-            <button onClick={() => { setProjectFilter(''); setDateFrom(last90); setDateTo(today) }}
+            <button onClick={() => { setProjectFilter(''); setDateFrom(last30); setDateTo(today) }}
               className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
               <X className="w-3 h-3" /> Clear
             </button>
@@ -333,8 +333,10 @@ function rowPriority(row: any): 'critical' | 'warning' | 'normal' {
 function ComplianceAnalysis() {
   const [projectIds,    setProjectIds]    = useState<number[]>([])
   const [contractorIds, setContractorIds] = useState<number[]>([])
-  const [dateFrom,      setDateFrom]      = useState('')
-  const [dateTo,        setDateTo]        = useState('')
+  const _last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const _today  = new Date().toISOString().slice(0, 10)
+  const [dateFrom,      setDateFrom]      = useState(_last30)
+  const [dateTo,        setDateTo]        = useState(_today)
   const [projectSort,   setProjectSort]   = useState({ key: 'priority', asc: true })
   const [contractorSort,setContractorSort]= useState({ key: 'priority', asc: true })
 
@@ -419,7 +421,7 @@ function ComplianceAnalysis() {
 
   const compActiveCount =
     (projectIds.length > 0 ? 1 : 0) + (contractorIds.length > 0 ? 1 : 0) +
-    (dateFrom ? 1 : 0) + (dateTo ? 1 : 0)
+    (dateFrom !== _last30 ? 1 : 0) + (dateTo !== _today ? 1 : 0)
 
   return (
     <div className="space-y-5">
@@ -446,7 +448,7 @@ function ComplianceAnalysis() {
               className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 w-[130px]" title="Date to" />
           </div>
           {compActiveCount > 0 && (
-            <button onClick={() => { setProjectIds([]); setContractorIds([]); setDateFrom(''); setDateTo('') }}
+            <button onClick={() => { setProjectIds([]); setContractorIds([]); setDateFrom(_last30); setDateTo(_today) }}
               className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
               <X className="w-3 h-3" /> Clear
             </button>
