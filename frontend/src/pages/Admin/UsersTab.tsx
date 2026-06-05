@@ -3,12 +3,14 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit2, Trash2, X, Save, Users } from 'lucide-react'
 import api from '../../lib/api'
 import { getRoleClass, ROLES } from '../../lib/utils'
+import { useAuth } from '../../store/authStore'
 
 interface UserForm { name: string; email: string; password: string; role: string; project_ids: number[] }
 const EMPTY: UserForm = { name: '', email: '', password: '', role: 'Observer', project_ids: [] }
 
 export default function UsersTab() {
   const qc = useQueryClient()
+  const { isSuperAdmin } = useAuth()
   const [modal, setModal] = useState<{ open: boolean; editing?: any }>({ open: false })
   const [form, setForm] = useState<UserForm>(EMPTY)
   const [saving, setSaving] = useState(false)
@@ -123,13 +125,15 @@ export default function UsersTab() {
                     <button onClick={() => openEdit(u)} className="btn-icon" title="Edit">
                       <Edit2 className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => deleteUser(u.id)}
-                      className="btn-icon text-red-400 hover:text-red-600 hover:bg-red-50"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {isSuperAdmin() && (
+                      <button
+                        onClick={() => deleteUser(u.id)}
+                        className="btn-icon text-red-400 hover:text-red-600 hover:bg-red-50"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -177,7 +181,7 @@ export default function UsersTab() {
                 <div>
                   <label className="label">Role *</label>
                   <select className="select" value={form.role} onChange={e => set('role', e.target.value)}>
-                    {ROLES.map(r => <option key={r}>{r}</option>)}
+                    {ROLES.filter(r => isSuperAdmin() || r !== 'SuperAdmin').map(r => <option key={r}>{r}</option>)}
                   </select>
                 </div>
               </div>

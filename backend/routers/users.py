@@ -4,11 +4,11 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from database import get_db
 import models
-from auth import get_current_user, require_admin, hash_password
+from auth import get_current_user, require_admin, require_super_admin, hash_password
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
-VALID_ROLES = {"Admin", "PC", "HO", "Contractor", "Observer"}
+VALID_ROLES = {"SuperAdmin", "Admin", "PC", "HO", "Contractor", "Observer"}
 
 
 class UserCreate(BaseModel):
@@ -90,7 +90,7 @@ def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db), _
 
 
 @router.delete("/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db), current=Depends(require_admin)):
+def delete_user(user_id: int, db: Session = Depends(get_db), current=Depends(require_super_admin)):
     if user_id == current.id:
         raise HTTPException(400, "Cannot delete yourself")
     user = db.query(models.User).filter(models.User.id == user_id).first()

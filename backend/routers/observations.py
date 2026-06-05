@@ -308,8 +308,8 @@ def stats_details(
 
     category_month_rows = db.query(
         models.CoreConcern.name.label("category"),
-        func.to_char(models.Observation.obs_date, "YYYY").label("year"),
-        func.to_char(models.Observation.obs_date, "MM").label("month"),
+        func.substr(models.Observation.obs_date, 1, 4).label("year"),
+        func.substr(models.Observation.obs_date, 6, 2).label("month"),
         func.sum(case((models.Observation.risk_level == "Low", 1), else_=0)).label("low"),
         func.sum(case((models.Observation.risk_level == "Medium", 1), else_=0)).label("medium"),
         func.sum(case((models.Observation.risk_level == "High", 1), else_=0)).label("high"),
@@ -319,11 +319,11 @@ def stats_details(
         category_month_rows = category_month_rows.filter(*conditions)
     category_month_rows = category_month_rows.group_by(
         models.CoreConcern.name,
-        func.to_char(models.Observation.obs_date, "YYYY"),
-        func.to_char(models.Observation.obs_date, "MM"),
+        func.substr(models.Observation.obs_date, 1, 4),
+        func.substr(models.Observation.obs_date, 6, 2),
     ).order_by(
-        func.to_char(models.Observation.obs_date, "YYYY"),
-        func.to_char(models.Observation.obs_date, "MM"),
+        func.substr(models.Observation.obs_date, 1, 4),
+        func.substr(models.Observation.obs_date, 6, 2),
         models.CoreConcern.name,
     ).all()
 
@@ -355,7 +355,9 @@ def stats_details(
     ).join(models.User, models.Observation.created_by == models.User.id)
     if conditions:
         observer_rows = observer_rows.filter(*conditions)
-    observer_rows = observer_rows.group_by("observer_name").order_by(func.count().desc()).limit(10).all()
+    observer_rows = observer_rows.group_by(
+        func.coalesce(models.Observation.observer_name, models.User.name)
+    ).order_by(func.count().desc()).limit(10).all()
 
     def build_summary(rows, label_fields):
         return [

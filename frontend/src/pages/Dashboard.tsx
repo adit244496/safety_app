@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList,
   PieChart, Pie, Cell,
 } from 'recharts'
 import {
@@ -14,7 +14,7 @@ import { fmtDate, getRiskClass, getStatusClass } from '../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
 
 const STATUS_COLORS: Record<string, string> = {
-  Open: '#6366f1', Pending: '#f59e0b', 'Under Review': '#f97316', Closed: '#10b981',
+  Open: '#6366f1', Pending: '#f59e0b', Closed: '#10b981',
 }
 const RISK_COLORS: Record<string, string> = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e' }
 
@@ -91,8 +91,11 @@ export default function Dashboard() {
   data?.byStatus?.forEach((s: any) => { statusCounts[s.status] = s.count })
   const statusPie     = data?.byStatus?.map((s: any) => ({ name: s.status, value: s.count })) || []
   const riskBars      = (data?.byRisk  || []).filter((r: any) => r.risk_level)
-  const monthData     = (data?.byMonthStatus || []) as any[]
-  const STATUSES_LIST = ['Open', 'Pending', 'Under Review', 'Closed'] as const
+  const STATUSES_LIST = ['Open', 'Pending', 'Closed'] as const
+  const monthData     = ((data?.byMonthStatus || []) as any[]).map((d: any) => ({
+    ...d,
+    _total: STATUSES_LIST.reduce((sum, s) => sum + (d[s] || 0), 0),
+  }))
 
   const cards = [
     { label: 'Total Observations', value: data?.total ?? 0,          icon: ClipboardList, bg: 'bg-indigo-50',  color: 'text-indigo-600',  border: 'border-indigo-100'  },
@@ -218,8 +221,8 @@ export default function Dashboard() {
                 </div>
               </div>
               {monthData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={210}>
-                  <BarChart data={monthData} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={monthData} margin={{ top: 18, right: 8, left: -24, bottom: 0 }}>
                     <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
                     <Tooltip
@@ -253,7 +256,16 @@ export default function Dashboard() {
                         fill={STATUS_COLORS[s]}
                         maxBarSize={48}
                         radius={idx === STATUSES_LIST.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
-                      />
+                      >
+                        {idx === STATUSES_LIST.length - 1 && (
+                          <LabelList
+                            dataKey="_total"
+                            position="top"
+                            formatter={(v: number) => v > 0 ? v : ''}
+                            style={{ fontSize: 10, fontWeight: 700, fill: '#374151' }}
+                          />
+                        )}
+                      </Bar>
                     ))}
                   </BarChart>
                 </ResponsiveContainer>

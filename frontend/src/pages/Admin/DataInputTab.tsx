@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit2, Trash2, Save, X, Link2 } from 'lucide-react'
 import api from '../../lib/api'
+import { useAuth } from '../../store/authStore'
 
 type Section = 'projects' | 'buildings' | 'floors'
 
@@ -116,6 +117,7 @@ function Modal({
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function DataInputTab() {
   const qc = useQueryClient()
+  const { isSuperAdmin } = useAuth()
   const [section, setSection] = useState<Section>('projects')
   const [modal, setModal] = useState<ModalState | null>(null)
 
@@ -234,13 +236,15 @@ export default function DataInputTab() {
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => deleteItem(section, item.id)}
-                        className="btn-icon text-red-400 hover:text-red-600 hover:bg-red-50"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isSuperAdmin() && (
+                        <button
+                          onClick={() => deleteItem(section, item.id)}
+                          className="btn-icon text-red-400 hover:text-red-600 hover:bg-red-50"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

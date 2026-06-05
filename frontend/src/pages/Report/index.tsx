@@ -1290,8 +1290,8 @@ export default function ReportPage() {
 
         {/* Shared filter panel */}
         <div className="card">
-          <h2 className="font-semibold text-gray-800 mb-4">Report Parameters</h2>
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
+          <h2 className="font-semibold text-gray-800 mb-3">Report Parameters</h2>
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <div>
               <label className="label">Project</label>
               <MultiSelectFilter
@@ -1299,15 +1299,8 @@ export default function ReportPage() {
                 value={projectIds}
                 onChange={v => { setProjectIds(v as number[]); setGenerated(false) }}
                 placeholder="All Projects"
+                className="w-full"
               />
-            </div>
-            <div>
-              <label className="label">Date From</label>
-              <input type="date" className="input" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setGenerated(false) }} />
-            </div>
-            <div>
-              <label className="label">Date To</label>
-              <input type="date" className="input" value={dateTo} onChange={e => { setDateTo(e.target.value); setGenerated(false) }} />
             </div>
             <div>
               <label className="label">Contractor</label>
@@ -1316,6 +1309,7 @@ export default function ReportPage() {
                 value={contractorIds}
                 onChange={v => { setContractorIds(v as number[]); setGenerated(false) }}
                 placeholder="All Contractors"
+                className="w-full"
               />
             </div>
             <div>
@@ -1325,25 +1319,34 @@ export default function ReportPage() {
                 value={riskLevels}
                 onChange={v => { setRiskLevels(v as string[]); setGenerated(false) }}
                 placeholder="All Priorities"
+                className="w-full"
               />
             </div>
             <div>
+              <label className="label">Date From</label>
+              <input type="date" className="input w-full" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setGenerated(false) }} />
+            </div>
+            <div>
+              <label className="label">Date To</label>
+              <input type="date" className="input w-full" value={dateTo} onChange={e => { setDateTo(e.target.value); setGenerated(false) }} />
+            </div>
+            <div>
               <label className="label">Report Date</label>
-              <input type="date" className="input" value={reportDate} onChange={e => setReportDate(e.target.value)} />
+              <input type="date" className="input w-full" value={reportDate} onChange={e => setReportDate(e.target.value)} />
             </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button onClick={() => setGenerated(true)} disabled={isFetching} className="btn-primary">
+            <button onClick={() => setGenerated(true)} disabled={isFetching} className="btn-primary w-full sm:w-auto justify-center">
               {isFetching
                 ? <><span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Generating…</>
                 : <><FileText className="w-4 h-4" /> Generate {activeTab === 'tracker' ? 'Tracker' : 'Report'}</>}
             </button>
-            <button onClick={reset} className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 transition">
+            <button onClick={reset} className="px-3 py-2 rounded-lg border border-gray-200 text-sm text-gray-500 hover:bg-gray-50 transition w-full sm:w-auto justify-center flex items-center">
               Reset
             </button>
             {generated && !isFetching && (
-              <span className="text-sm text-gray-500">{observations.length} observation{observations.length !== 1 ? 's' : ''} found</span>
+              <span className="text-sm text-gray-500 w-full sm:w-auto">{observations.length} observation{observations.length !== 1 ? 's' : ''} found</span>
             )}
             {generated && !isFetching && observations.length > 0 && activeTab === 'inspection' && (
               <div className="flex gap-2 sm:ml-auto w-full sm:w-auto">

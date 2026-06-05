@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import get_db
 import models
-from auth import get_current_user, require_admin
+from auth import get_current_user, require_admin, require_super_admin
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -14,7 +14,7 @@ class ProjectBody(BaseModel):
 
 @router.get("/")
 def list_projects(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
-    if user.role in ("Admin", "PC"):
+    if user.role in ("SuperAdmin", "Admin", "PC"):
         projects = db.query(models.Project).order_by(models.Project.name).all()
     else:
         project_ids = [up.project_id for up in user.user_projects]
@@ -52,7 +52,7 @@ def update_project(project_id: int, body: ProjectBody, db: Session = Depends(get
 
 
 @router.delete("/{project_id}")
-def delete_project(project_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_project(project_id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     p = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not p:
         raise HTTPException(404, "Not found")

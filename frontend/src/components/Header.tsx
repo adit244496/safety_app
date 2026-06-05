@@ -91,7 +91,7 @@ export default function Header({ onMenu }: { onMenu: () => void }) {
         <button onClick={onMenu} className="btn-icon lg:hidden">
           <Menu className="w-5 h-5" />
         </button>
-        <div className="hidden sm:block">
+        <div>
           <p className="text-sm font-semibold text-gray-800 leading-tight">Neo SHE</p>
           <p className="text-xs text-gray-400">Safety App</p>
         </div>

@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from database import get_db
 import models
-from auth import get_current_user, require_admin
+from auth import get_current_user, require_admin, require_super_admin
 
 router = APIRouter(prefix="/api/ease-score", tags=["ease-score"])
 
@@ -178,7 +178,7 @@ def update_topic(topic_id: int, body: TopicUpdate, db: Session = Depends(get_db)
     return {"id": t.id, "name": t.name, "sort_order": t.sort_order}
 
 
-@router.delete("/criteria/topics/{topic_id}", dependencies=[Depends(require_admin)])
+@router.delete("/criteria/topics/{topic_id}", dependencies=[Depends(require_super_admin)])
 def delete_topic(topic_id: int, db: Session = Depends(get_db)):
     t = db.query(models.EaseTopic).get(topic_id)
     if not t:
@@ -221,7 +221,7 @@ def update_element(element_id: int, body: ElementUpdate, db: Session = Depends(g
             "assessment_value": e.assessment_value, "sort_order": e.sort_order}
 
 
-@router.delete("/criteria/elements/{element_id}", dependencies=[Depends(require_admin)])
+@router.delete("/criteria/elements/{element_id}", dependencies=[Depends(require_super_admin)])
 def delete_element(element_id: int, db: Session = Depends(get_db)):
     e = db.query(models.EaseEvaluationElement).get(element_id)
     if not e:

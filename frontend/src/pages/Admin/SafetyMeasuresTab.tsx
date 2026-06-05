@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Edit2, Trash2, Save, X, ChevronDown, ChevronRight } from 'lucide-react'
 import api from '../../lib/api'
+import { useAuth } from '../../store/authStore'
 
 // ─── Generic inline-editable list ────────────────────────────────────────────
 function EditableList({
-  title, items, onAdd, onEdit, onDelete, loading,
+  title, items, onAdd, onEdit, onDelete, loading, canDelete,
 }: {
   title: string
   items: { id: number; name: string; sub?: string }[]
@@ -13,6 +14,7 @@ function EditableList({
   onEdit: (id: number, name: string) => Promise<void>
   onDelete: (id: number) => Promise<void>
   loading?: boolean
+  canDelete?: boolean
 }) {
   const [adding, setAdding] = useState(false)
   const [newName, setNewName] = useState('')
@@ -88,10 +90,12 @@ function EditableList({
                     className="p-0.5 text-gray-400 hover:text-indigo-600 rounded transition-colors">
                     <Edit2 className="w-3 h-3" />
                   </button>
-                  <button onClick={() => doDelete(item.id)}
-                    className="p-0.5 text-gray-400 hover:text-red-600 rounded transition-colors">
-                    <Trash2 className="w-3 h-3" />
-                  </button>
+                  {canDelete && (
+                    <button onClick={() => doDelete(item.id)}
+                      className="p-0.5 text-gray-400 hover:text-red-600 rounded transition-colors">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -105,7 +109,7 @@ function EditableList({
 // ─── Hierarchical list (e.g. Core Concern → Specific Concerns) ────────────────
 function HierarchicalList({
   title, parents, children, parentField, onAddParent, onEditParent, onDeleteParent,
-  onAddChild, onEditChild, onDeleteChild, loadingParents,
+  onAddChild, onEditChild, onDeleteChild, loadingParents, canDelete,
 }: {
   title: string
   parents: { id: number; name: string }[]
@@ -118,6 +122,7 @@ function HierarchicalList({
   onEditChild: (id: number, name: string, parentId: number) => Promise<void>
   onDeleteChild: (id: number) => Promise<void>
   loadingParents?: boolean
+  canDelete?: boolean
 }) {
   // empty = all collapsed; add id to expand it
   const [expanded, setExpanded] = useState<Set<number>>(new Set())
@@ -196,8 +201,10 @@ function HierarchicalList({
                       className="p-0.5 text-indigo-400 hover:text-indigo-600 rounded"><Plus className="w-3 h-3" /></button>
                     <button onClick={() => { setEditParentId(parent.id); setEditParentName(parent.name) }}
                       className="p-0.5 text-gray-400 hover:text-indigo-600 rounded"><Edit2 className="w-3 h-3" /></button>
-                    <button onClick={() => onDeleteParent(parent.id)}
-                      className="p-0.5 text-gray-400 hover:text-red-600 rounded"><Trash2 className="w-3 h-3" /></button>
+                    {canDelete && (
+                      <button onClick={() => onDeleteParent(parent.id)}
+                        className="p-0.5 text-gray-400 hover:text-red-600 rounded"><Trash2 className="w-3 h-3" /></button>
+                    )}
                   </div>
                 </>
               )}
@@ -241,8 +248,10 @@ function HierarchicalList({
                         <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                           <button onClick={() => { setEditChildId(child.id); setEditChildName(child.name) }}
                             className="p-0.5 text-gray-400 hover:text-indigo-600 rounded"><Edit2 className="w-3 h-3" /></button>
-                          <button onClick={() => onDeleteChild(child.id)}
-                            className="p-0.5 text-gray-400 hover:text-red-600 rounded"><Trash2 className="w-3 h-3" /></button>
+                          {canDelete && (
+                            <button onClick={() => onDeleteChild(child.id)}
+                              className="p-0.5 text-gray-400 hover:text-red-600 rounded"><Trash2 className="w-3 h-3" /></button>
+                          )}
                         </div>
                       </>
                     )}
@@ -263,6 +272,8 @@ function HierarchicalList({
 // ─── Main Safety Measures Tab ────────────────────────────────────────────────
 export default function SafetyMeasuresTab() {
   const qc = useQueryClient()
+  const { isSuperAdmin } = useAuth()
+  const canDelete = isSuperAdmin()
 
   // Fetches
   const { data: coreConcerns = [], isLoading: loadingCC } = useQuery({ queryKey: ['core-concerns'], queryFn: () => api.get('/admin/core-concerns').then(r => r.data) })
@@ -352,7 +363,7 @@ export default function SafetyMeasuresTab() {
               onEditChild={editSC}
               onDeleteChild={deleteSC}
               loadingParents={loadingCC}
-
+              canDelete={canDelete}
             />
           </div>
 
@@ -365,6 +376,7 @@ export default function SafetyMeasuresTab() {
               onEdit={editOut}
               onDelete={deleteOut}
               loading={loadingOut}
+              canDelete={canDelete}
             />
           </div>
 
@@ -377,6 +389,7 @@ export default function SafetyMeasuresTab() {
               onEdit={editTD}
               onDelete={deleteTD}
               loading={loadingTD}
+              canDelete={canDelete}
             />
           </div>
 
@@ -389,6 +402,7 @@ export default function SafetyMeasuresTab() {
               onEdit={editVio}
               onDelete={deleteVio}
               loading={loadingVio}
+              canDelete={canDelete}
             />
           </div>
 
@@ -406,6 +420,7 @@ export default function SafetyMeasuresTab() {
               onEditChild={editRCS}
               onDeleteChild={deleteRCS}
               loadingParents={loadingRCC}
+              canDelete={canDelete}
             />
           </div>
         </div>

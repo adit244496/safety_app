@@ -9,6 +9,7 @@ interface AuthState {
   setAuth: (user: AuthUser, token: string) => void
   logout: () => void
   isAdminOrPC: () => boolean
+  isSuperAdmin: () => boolean
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
@@ -16,5 +17,6 @@ export const useAuth = create<AuthState>((set, get) => ({
   token: localStorage.getItem('token'),
   setAuth: (user, token) => { localStorage.setItem('token', token); set({ user, token }) },
   logout: () => { localStorage.removeItem('token'); set({ user: null, token: null }) },
-  isAdminOrPC: () => ['Admin', 'PC'].includes(get().user?.role || ''),
+  isAdminOrPC: () => ['SuperAdmin', 'Admin', 'PC'].includes(get().user?.role || ''),
+  isSuperAdmin: () => get().user?.role === 'SuperAdmin',
 }))

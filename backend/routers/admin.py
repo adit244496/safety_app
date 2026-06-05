@@ -4,7 +4,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from database import get_db
 import models
-from auth import get_current_user, require_admin
+from auth import get_current_user, require_admin, require_super_admin
 from email_service import send_observation_email
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -65,7 +65,7 @@ def update_category(id: int, body: NameBody, db: Session = Depends(get_db), _=De
     return {"success": True}
 
 @router.delete("/categories/{id}")
-def delete_category(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_category(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.Category).filter(models.Category.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()
@@ -93,7 +93,7 @@ def update_core_concern(id: int, body: CCBody, db: Session = Depends(get_db), _=
     return {"success": True}
 
 @router.delete("/core-concerns/{id}")
-def delete_core_concern(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_core_concern(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.CoreConcern).filter(models.CoreConcern.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()
@@ -124,7 +124,7 @@ def update_specific_concern(id: int, body: SCBody, db: Session = Depends(get_db)
     return {"success": True}
 
 @router.delete("/specific-concerns/{id}")
-def delete_specific_concern(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_specific_concern(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.SpecificConcern).filter(models.SpecificConcern.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()
@@ -149,7 +149,7 @@ def update_violation(id: int, body: NameBody, db: Session = Depends(get_db), _=D
     return {"success": True}
 
 @router.delete("/violations/{id}")
-def delete_violation(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_violation(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.Violation).filter(models.Violation.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()
@@ -174,7 +174,7 @@ def update_rcc(id: int, body: NameBody, db: Session = Depends(get_db), _=Depends
     return {"success": True}
 
 @router.delete("/root-cause-categories/{id}")
-def delete_rcc(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_rcc(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.RootCauseCategory).filter(models.RootCauseCategory.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()
@@ -205,7 +205,7 @@ def update_rcs(id: int, body: RCSBody, db: Session = Depends(get_db), _=Depends(
     return {"success": True}
 
 @router.delete("/root-cause-specifics/{id}")
-def delete_rcs(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_rcs(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.RootCauseSpecific).filter(models.RootCauseSpecific.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()
@@ -230,7 +230,7 @@ def update_outcome(id: int, body: NameBody, db: Session = Depends(get_db), _=Dep
     return {"success": True}
 
 @router.delete("/possible-outcomes/{id}")
-def delete_outcome(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_outcome(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.PossibleOutcome).filter(models.PossibleOutcome.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()
@@ -255,7 +255,7 @@ def update_target_date(id: int, body: NameBody, db: Session = Depends(get_db), _
     return {"success": True}
 
 @router.delete("/target-dates/{id}")
-def delete_target_date(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_target_date(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.TargetDate).filter(models.TargetDate.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()
@@ -286,7 +286,7 @@ def update_building(id: int, body: BuildingBody, db: Session = Depends(get_db), 
     return {"success": True}
 
 @router.delete("/buildings/{id}")
-def delete_building(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_building(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.Building).filter(models.Building.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()
@@ -317,7 +317,7 @@ def update_floor(id: int, body: FloorBody, db: Session = Depends(get_db), _=Depe
     return {"success": True}
 
 @router.delete("/floors/{id}")
-def delete_floor(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_floor(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.Floor).filter(models.Floor.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()
@@ -348,7 +348,7 @@ def update_observer(id: int, body: ObserverBody, db: Session = Depends(get_db), 
     return {"success": True}
 
 @router.delete("/observers/{id}")
-def delete_observer(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_observer(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.Observer).filter(models.Observer.id == id).first()
     if not r: raise HTTPException(404)
     db.delete(r); db.commit()

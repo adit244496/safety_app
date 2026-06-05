@@ -20,6 +20,7 @@ export const getStatusClass = (status?: string) => {
 
 export const getRoleClass = (role?: string) => {
   const map: Record<string, string> = {
+    SuperAdmin: 'bg-red-100 text-red-800',
     Admin: 'bg-purple-100 text-purple-800',
     PC: 'bg-indigo-100 text-indigo-800',
     HO: 'bg-indigo-100 text-indigo-800',
@@ -44,5 +45,5 @@ export const calcRisk = (s: number, p: number) => {
   return { factor: f, level: f <= 4 ? 'Low' : f <= 12 ? 'Medium' : 'High' }
 }
 
-export const STATUSES = ['Draft', 'Open', 'Pending', 'Under Review', 'Closed']
-export const ROLES = ['Admin', 'PC', 'HO', 'Contractor', 'Observer']
+export const STATUSES = ['Draft', 'Open', 'Pending', 'Closed']
+export const ROLES = ['SuperAdmin', 'Admin', 'PC', 'HO', 'Contractor', 'Observer']
