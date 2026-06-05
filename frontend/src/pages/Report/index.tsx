@@ -114,7 +114,6 @@ async function exportTrackerExcel(
     right: { style: 'thin', color: { argb: 'FFb0b0b0' } },
   }
   const aCenter: Partial<ExcelJS.Alignment> = { horizontal: 'center', vertical: 'middle', wrapText: true }
-  const aLeft:   Partial<ExcelJS.Alignment> = { horizontal: 'left',   vertical: 'top',    wrapText: true }
 
   const NCOLS = 23
 
@@ -459,7 +458,7 @@ async function exportInspectionExcel(
       const ext = initB64.startsWith('data:image/png') ? 'png' : 'jpeg'
       try {
         const imgId = wb.addImage({ base64: initB64.split(',')[1], extension: ext })
-        ws.addImage(imgId, { tl: { col: 5, row: contentRn - 1 }, br: { col: 8, row: contentRn }, editAs: 'oneCell' })
+        ws.addImage(imgId, { tl: { col: 5, row: contentRn - 1 } as any, br: { col: 8, row: contentRn } as any, editAs: 'oneCell' })
       } catch { /* skip broken image */ }
     }
 
@@ -468,7 +467,7 @@ async function exportInspectionExcel(
       const ext = compB64.startsWith('data:image/png') ? 'png' : 'jpeg'
       try {
         const imgId = wb.addImage({ base64: compB64.split(',')[1], extension: ext })
-        ws.addImage(imgId, { tl: { col: 13, row: contentRn - 1 }, br: { col: 14, row: contentRn }, editAs: 'oneCell' })
+        ws.addImage(imgId, { tl: { col: 13, row: contentRn - 1 } as any, br: { col: 14, row: contentRn } as any, editAs: 'oneCell' })
       } catch { /* skip broken image */ }
     }
     rn++

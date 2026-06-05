@@ -10,14 +10,6 @@ import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilte
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-function rolling12Months() {
-  const to = new Date()
-  const from = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000)
-  return {
-    dateFrom: from.toISOString().slice(0, 10),
-    dateTo: to.toISOString().slice(0, 10),
-  }
-}
 
 function sortRows(rows: any[], key: string, asc: boolean) {
   return [...rows].sort((a, b) => {
