@@ -325,7 +325,8 @@ export default function SafetyMeasuresTab() {
       </div>
 
       {/* Column legend matching Excel sheet */}
-      <div className="card !p-0 overflow-hidden border border-gray-200 rounded-xl">
+      <div className="card !p-0 overflow-x-auto border border-gray-200 rounded-xl">
+        <div className="min-w-[700px]">
         {/* Header row matching Excel */}
         <div className="grid grid-cols-5 border-b border-indigo-800">
           <div className={HDR}>Core Concern<br /><span className="font-normal text-indigo-200 text-xs">→ Specific Concern</span></div>
@@ -408,6 +409,7 @@ export default function SafetyMeasuresTab() {
             />
           </div>
         </div>
+        </div>{/* /min-w wrapper */}
       </div>
 
       {/* Count summary bar */}

@@ -126,7 +126,7 @@ function ElementModal({
               onChange={e => setQuestion(e.target.value)}
               placeholder="Are Safety meetings conducted at least once monthly?" />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">Assessment Value (max marks) *</label>
               <input className="input" type="number" min={1} max={10} value={value}

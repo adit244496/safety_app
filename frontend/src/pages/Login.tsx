@@ -36,14 +36,11 @@ export default function Login() {
           style={{ backgroundImage: 'radial-gradient(circle at 20% 80%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)', backgroundSize: '60px 60px' }}
         />
         <div className="relative">
-          <div className="flex items-center justify-between mb-16">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-                <Shield className="w-6 h-6 text-white" />
-              </div>
-              <span className="text-white font-bold text-lg">Neo SHE</span>
+          <div className="flex items-center gap-3 mb-16">
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
+              <Shield className="w-6 h-6 text-white" />
             </div>
-            <img src="/ambuja-logo.png" alt="Ambuja" className="h-10 w-auto object-contain" />
+            <span className="text-white font-bold text-lg">Neo SHE</span>
           </div>
           <h1 className="text-4xl font-bold text-white leading-tight mb-4">
             Neo SHE<br />Safety App
@@ -146,9 +143,9 @@ export default function Login() {
           {/* Spacer pushes logo to bottom on mobile */}
           <div className="flex-1 lg:hidden" />
 
-          {/* Ambuja logo — smaller and near the very bottom */}
+          {/* Ambuja logo — below sign-in, pushed to bottom */}
           <div className="flex justify-center pt-2 pb-8 lg:mt-8">
-            <img src="/ambuja-logo.png" alt="Ambuja" className="h-4 w-auto object-contain opacity-45" />
+            <img src="/ambuja-logo.png" alt="Ambuja" className="h-8 lg:h-9 w-auto object-contain opacity-75" />
           </div>
         </div>
       </div>

@@ -165,13 +165,15 @@ export default function DataInputTab() {
   return (
     <div className="space-y-5">
       {/* Section tabs */}
-      <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg w-fit">
-        {SECTIONS.map(s => (
-          <button key={s.key} onClick={() => setSection(s.key)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
-              section === s.key ? 'bg-white shadow-xs text-indigo-600' : 'text-gray-600 hover:text-gray-900'
-            }`}>{s.label}</button>
-        ))}
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg w-fit min-w-max">
+          {SECTIONS.map(s => (
+            <button key={s.key} onClick={() => setSection(s.key)}
+              className={`px-3 sm:px-4 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                section === s.key ? 'bg-white shadow-xs text-indigo-600' : 'text-gray-600 hover:text-gray-900'
+              }`}>{s.label}</button>
+          ))}
+        </div>
       </div>
 
       <div className="card">
@@ -182,16 +184,17 @@ export default function DataInputTab() {
           </div>
           <button
             onClick={() => setModal({ open: true, section })}
-            className="btn-primary"
+            className="btn-primary btn-sm sm:text-sm sm:px-4 sm:py-2"
           >
             <Plus className="w-4 h-4" />
-            Add {section === 'projects' ? 'Project' : section === 'buildings' ? 'Building / Tower' : 'Floor'}
+            <span className="hidden sm:inline">Add </span>
+            {section === 'projects' ? 'Project' : section === 'buildings' ? 'Building' : 'Floor'}
           </button>
         </div>
 
         {/* Table */}
-        <div className="overflow-hidden border border-gray-200 rounded-xl">
-          <table className="w-full">
+        <div className="overflow-x-auto overflow-hidden border border-gray-200 rounded-xl">
+          <table className="w-full min-w-[360px]">
             <thead>
               <tr>
                 <th className="th w-8">#</th>

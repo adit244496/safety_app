@@ -73,8 +73,8 @@ export default function UsersTab() {
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-gray-100 shadow-sm">
-        <table className="w-full bg-white">
+      <div className="overflow-hidden rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
+        <table className="w-full bg-white min-w-[560px]">
           <thead>
             <tr className="border-b border-gray-100">
               <th className="th">Name</th>
@@ -158,7 +158,7 @@ export default function UsersTab() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="label">Full Name *</label>
                   <input className="input" placeholder="Jane Smith" value={form.name} onChange={e => set('name', e.target.value)} />

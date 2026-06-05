@@ -201,18 +201,18 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             {/* Monthly trend — stacked by status */}
             <div className="card lg:col-span-2">
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex items-start justify-between gap-2 mb-4 flex-wrap">
                 <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center">
+                  <div className="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0">
                     <TrendingUp className="w-4 h-4 text-indigo-600" />
                   </div>
                   <h2 className="font-semibold text-gray-900">Monthly Trend</h2>
                 </div>
-                <div className="flex gap-3">
+                <div className="flex gap-2 flex-wrap">
                   {STATUSES_LIST.map(s => (
                     <div key={s} className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full" style={{ background: STATUS_COLORS[s] }} />
-                      <span className="text-[10px] text-gray-500">{s}</span>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLORS[s] }} />
+                      <span className="text-[10px] text-gray-500 whitespace-nowrap">{s}</span>
                     </div>
                   ))}
                 </div>

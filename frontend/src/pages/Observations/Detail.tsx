@@ -182,7 +182,7 @@ function Section({ title, icon, children, defaultOpen = true, extra }: {
   const [open, setOpen] = useState(defaultOpen)
   return (
     <div className="section-card">
-      <div className="section-card-header">
+      <div className={`section-card-header ${extra ? 'flex-wrap gap-y-2' : ''}`}>
         {icon && <span className="text-indigo-500 flex-shrink-0">{icon}</span>}
         <button
           className="flex items-center gap-2 flex-1 text-left min-w-0 group"
@@ -195,7 +195,10 @@ function Section({ title, icon, children, defaultOpen = true, extra }: {
           }
         </button>
         {extra && (
-          <div className="flex items-center gap-2 pl-3 border-l border-indigo-100 flex-shrink-0" onClick={e => e.stopPropagation()}>
+          <div
+            className="flex items-center gap-2 w-full sm:w-auto sm:pl-3 sm:border-l sm:border-indigo-100 flex-shrink-0"
+            onClick={e => e.stopPropagation()}
+          >
             {extra}
           </div>
         )}
@@ -520,30 +523,31 @@ export default function ObservationDetail() {
       )}
 
       {/* ── Page header ── */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="btn-ghost btn-sm flex-shrink-0">
-            <ArrowLeft className="w-4 h-4" /> Back
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex items-start gap-3">
+          <button onClick={() => navigate(-1)} className="btn-ghost btn-sm flex-shrink-0 mt-0.5">
+            <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <span className="font-mono text-base font-bold text-indigo-700 bg-indigo-50 px-3 py-1 rounded-lg tracking-wide">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-sm font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg tracking-wide">
                 {obs.observation_id}
               </span>
               <span className={getStatusClass(obs.status)}>{obs.status}</span>
               {obs.risk_level && (
-                <span className={`badge border ${riskBg}`}>{obs.risk_level} Risk · {obs.risk_factor}</span>
+                <span className={`badge border ${riskBg}`}>{obs.risk_level} · {obs.risk_factor}</span>
               )}
             </div>
             <p className="text-xs text-gray-500 mt-1">
-              Created by <span className="font-medium text-gray-700">{obs.created_by_name}</span>
-              &nbsp;·&nbsp;{fmtDateTime(obs.created_at)}
+              {obs.created_by_name} &nbsp;·&nbsp; {fmtDateTime(obs.created_at)}
             </p>
           </div>
         </div>
         {canEdit && !isContractor && (
-          <button onClick={() => navigate(`/observations/${obs.id}/edit`)} className="btn-secondary btn-sm flex-shrink-0">
-            <Edit className="w-4 h-4" /> Edit Observation
+          <button onClick={() => navigate(`/observations/${obs.id}/edit`)} className="btn-secondary btn-sm self-start sm:self-auto flex-shrink-0 ml-9 sm:ml-0">
+            <Edit className="w-4 h-4" />
+            <span className="hidden sm:inline">Edit Observation</span>
+            <span className="sm:hidden">Edit</span>
           </button>
         )}
       </div>
@@ -559,7 +563,7 @@ export default function ObservationDetail() {
 
           {/* Site & key information */}
           <Section title="Site Information" icon={<MapPin className="w-3.5 h-3.5" />} defaultOpen>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
               <InfoField label="Project" value={obs.project_name} />
               <InfoField label="Contractor" value={obs.contractor_name} />
               <InfoField label="Observer" value={obs.observer_name} />
@@ -569,7 +573,7 @@ export default function ObservationDetail() {
               <InfoField label="Time" value={obs.obs_time} />
               <InfoField label="To Be Rectified By" value={obs.to_be_rectified_by} />
               {obs.exact_location && (
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <InfoField label="Exact Location" value={obs.exact_location} />
                 </div>
               )}
@@ -579,7 +583,7 @@ export default function ObservationDetail() {
           {/* Observation details */}
           <Section title="Observation Details" icon={<AlertTriangle className="w-3.5 h-3.5" />} defaultOpen>
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
                 <InfoField label="Core Concern" value={obs.core_concern_name} />
                 <InfoField label="Specific Concern" value={obs.specific_concern_name} />
                 <InfoField label="Possible Outcome" value={obs.possible_outcome} />
@@ -596,10 +600,10 @@ export default function ObservationDetail() {
 
           {/* Root cause & violation */}
           <Section title="Root Cause & Violation" icon={<Target className="w-3.5 h-3.5" />} defaultOpen={false}>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
               <InfoField label="Root Cause Category" value={obs.root_cause_category_name} />
               <InfoField label="Specific Root Cause" value={obs.root_cause_specific_name} />
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <InfoField label="Violation Caused Due To" value={obs.violation_name} />
               </div>
             </div>
@@ -614,7 +618,7 @@ export default function ObservationDetail() {
               canUpload ? (
                 <>
                   <select
-                    className="text-xs border border-indigo-200 rounded-md px-2 py-1 text-indigo-700 bg-white focus:outline-none"
+                    className="flex-1 sm:flex-none text-xs border border-indigo-200 rounded-md px-2 py-1 text-indigo-700 bg-white focus:outline-none"
                     value={imageType}
                     onChange={e => setImageType(e.target.value)}
                   >
@@ -622,8 +626,9 @@ export default function ObservationDetail() {
                     <option value="followup">Follow-up</option>
                     <option value="closure">Closure</option>
                   </select>
-                  <button onClick={() => fileRef.current?.click()} className="btn-secondary btn-sm">
-                    <Camera className="w-3.5 h-3.5" /> Add Photo
+                  <button onClick={() => fileRef.current?.click()} className="btn-secondary btn-sm flex-shrink-0">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Add Photo</span>
                   </button>
                   <input ref={fileRef} type="file" multiple accept="image/*" className="hidden" onChange={e => uploadImages(e.target.files)} />
                 </>
@@ -671,7 +676,7 @@ export default function ObservationDetail() {
         </div>
 
         {/* ─── RIGHT: sticky conversation panel ─── */}
-        <div ref={chatPanelRef} id="conversation" className="h-[80vh] xl:sticky xl:top-6 xl:h-[calc(100vh-3.5rem)] flex flex-col rounded-2xl border border-slate-200 shadow-sm overflow-hidden bg-white">
+        <div ref={chatPanelRef} id="conversation" className="h-[60vh] sm:h-[72vh] xl:sticky xl:top-6 xl:h-[calc(100vh-3.5rem)] flex flex-col rounded-2xl border border-slate-200 shadow-sm overflow-hidden bg-white">
 
           {/* Chat header — gradient */}
           <div

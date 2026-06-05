@@ -275,36 +275,39 @@ export default function ObservationForm() {
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
+      {/* Page header — stacks on mobile, inline on desktop */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => navigate(-1)} className="btn-ghost btn-sm !p-1.5">
+          <button type="button" onClick={() => navigate(-1)} className="btn-ghost btn-sm !p-1.5 flex-shrink-0">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
             <h1 className="text-xl font-bold text-gray-900">{isEdit ? 'Edit Observation' : 'New Observation'}</h1>
             {isEdit
               ? <p className="text-xs text-gray-400 mt-0.5">ID: <span className="font-mono font-semibold text-indigo-600">{existing?.observation_id}</span></p>
-              : <p className="text-xs text-gray-400 mt-0.5">Observation ID will be auto-generated on submit</p>
+              : <p className="text-xs text-gray-400 mt-0.5">ID auto-generated on submit</p>
             }
           </div>
         </div>
-        {/* Sticky action buttons at top too */}
-        <div className="flex gap-2 flex-wrap">
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-2">
           {isEdit && (
-            <select className="select w-auto text-sm py-1.5" value={form.status} onChange={e => set('status', e.target.value)}>
+            <select className="select flex-1 sm:flex-none sm:w-auto text-sm py-1.5" value={form.status} onChange={e => set('status', e.target.value)}>
               {STATUSES.map(s => <option key={s}>{s}</option>)}
             </select>
           )}
-          <button type="button" onClick={() => navigate(-1)} className="btn-secondary btn-sm">Cancel</button>
+          <button type="button" onClick={() => navigate(-1)} className="btn-secondary btn-sm flex-1 sm:flex-none justify-center">
+            Cancel
+          </button>
           {!isEdit && (
-            <button type="button" onClick={handleSaveDraft} disabled={savingDraft || saving} className="btn-secondary btn-sm">
+            <button type="button" onClick={handleSaveDraft} disabled={savingDraft || saving} className="btn-secondary btn-sm flex-1 sm:flex-none justify-center">
               {savingDraft
                 ? <><span className="animate-spin w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full" /> Saving…</>
-                : <><FileEdit className="w-3.5 h-3.5" /> Save as Draft</>}
+                : <><FileEdit className="w-3.5 h-3.5" /><span className="sm:hidden">Draft</span><span className="hidden sm:inline">Save as Draft</span></>}
             </button>
           )}
-          <button type="submit" disabled={saving || savingDraft} className="btn-primary btn-sm">
+          <button type="submit" disabled={saving || savingDraft} className="btn-primary btn-sm flex-1 sm:flex-none justify-center">
             {saving
               ? <><span className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" /> Saving…</>
               : <><Save className="w-3.5 h-3.5" /> {isEdit ? 'Update' : 'Submit'}</>}

@@ -173,7 +173,7 @@ export default function EmailSettingsTab() {
       </div>
 
       {/* Two-column main config */}
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 
         {/* Left: SMTP Server */}
         <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">

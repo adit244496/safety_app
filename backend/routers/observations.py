@@ -308,8 +308,8 @@ def stats_details(
 
     category_month_rows = db.query(
         models.CoreConcern.name.label("category"),
-        func.strftime("%Y", models.Observation.obs_date).label("year"),
-        func.strftime("%m", models.Observation.obs_date).label("month"),
+        func.to_char(models.Observation.obs_date, "YYYY").label("year"),
+        func.to_char(models.Observation.obs_date, "MM").label("month"),
         func.sum(case((models.Observation.risk_level == "Low", 1), else_=0)).label("low"),
         func.sum(case((models.Observation.risk_level == "Medium", 1), else_=0)).label("medium"),
         func.sum(case((models.Observation.risk_level == "High", 1), else_=0)).label("high"),
@@ -319,11 +319,11 @@ def stats_details(
         category_month_rows = category_month_rows.filter(*conditions)
     category_month_rows = category_month_rows.group_by(
         models.CoreConcern.name,
-        func.strftime("%Y", models.Observation.obs_date),
-        func.strftime("%m", models.Observation.obs_date),
+        func.to_char(models.Observation.obs_date, "YYYY"),
+        func.to_char(models.Observation.obs_date, "MM"),
     ).order_by(
-        func.strftime("%Y", models.Observation.obs_date),
-        func.strftime("%m", models.Observation.obs_date),
+        func.to_char(models.Observation.obs_date, "YYYY"),
+        func.to_char(models.Observation.obs_date, "MM"),
         models.CoreConcern.name,
     ).all()
 

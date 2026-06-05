@@ -33,7 +33,7 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="absolute right-0 top-full mt-1.5 w-80 bg-white rounded-2xl shadow-xl border border-gray-100 z-20 overflow-hidden">
+    <div className="absolute right-0 top-full mt-1.5 w-[min(20rem,calc(100vw-1rem))] bg-white rounded-2xl shadow-xl border border-gray-100 z-20 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <p className="font-semibold text-gray-900 text-sm">Notifications</p>
         {notifs.some(n => !n.is_read) && (
