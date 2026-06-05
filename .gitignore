@@ -42,6 +42,12 @@ npm-debug.log*
 backend/uploads/
 frontend/dist/
 
+# Local startup scripts and temporary Excel files
+start_backend.bat
+start_frontend.bat
+*.xlsx
+~$*
+
 # Temporary editors files
 *.swp
 *.swo

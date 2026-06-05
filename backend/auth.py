@@ -7,8 +7,9 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from database import get_db
 import models
+import os
 
-SECRET_KEY = "safety-app-secret-key-2024-secure"
+SECRET_KEY = os.getenv("SECRET_KEY", "safety-app-secret-key-2024-secure")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 8
 
