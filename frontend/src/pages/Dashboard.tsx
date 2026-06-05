@@ -7,7 +7,7 @@ import {
 } from 'recharts'
 import {
   ClipboardList, AlertTriangle, CheckCircle,
-  TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X,
+  TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown,
 } from 'lucide-react'
 import api from '../lib/api'
 import { fmtDate, getRiskClass, getStatusClass } from '../lib/utils'
@@ -26,6 +26,7 @@ const PRIORITY_OPTIONS: MSOption[] = [
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [showFilters, setShowFilters] = useState(false)
 
   // ── Filter state (arrays for multi-select) ──────────────────────────────
   const [projectIds,     setProjectIds]     = useState<number[]>([])
@@ -122,47 +123,54 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Inline filter bar — same style as Observations */}
+      {/* Inline filter bar */}
       <div className="card-sm">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 text-gray-400 flex-shrink-0">
-            <SlidersHorizontal className="w-4 h-4" />
-            <span className="text-xs font-medium uppercase tracking-wide">Filters</span>
-            {activeFilterCount > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{activeFilterCount}</span>
-            )}
-          </div>
-          <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+        {/* Header row: always visible */}
+        <div
+          className="flex items-center gap-2 sm:pointer-events-none cursor-pointer sm:cursor-default"
+          onClick={() => setShowFilters(v => !v)}
+        >
+          <SlidersHorizontal className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-400">Filters</span>
+          {activeFilterCount > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{activeFilterCount}</span>
+          )}
+          <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+        </div>
+
+        {/* Filter controls: hidden on mobile until toggled, always visible on sm+ */}
+        <div className={`gap-2 mt-3 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${showFilters ? 'grid grid-cols-2' : 'hidden'}`}>
+          <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
           <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
             onChange={v => { setProjectIds(v as number[]); setBuildingId('') }}
-            placeholder="Project" className="min-w-[110px]" />
+            placeholder="Project" className="w-full sm:w-auto sm:min-w-[110px]" />
           {singleProjectId && (
             <select
               value={buildingId}
               onChange={e => setBuildingId(Number(e.target.value) || '')}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              className="w-full sm:w-auto text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
             >
               <option value="">Tower / Block</option>
               {buildingOptions.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
             </select>
           )}
           <MultiSelectFilter size="sm" options={contractorOptions} value={contractorIds}
-            onChange={v => setContractorIds(v as number[])} placeholder="Contractor" className="min-w-[120px]" />
+            onChange={v => setContractorIds(v as number[])} placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
           <MultiSelectFilter size="sm" options={PRIORITY_OPTIONS} value={riskLevels}
-            onChange={v => setRiskLevels(v as string[])} placeholder="Risk Level" className="min-w-[110px]" />
+            onChange={v => setRiskLevels(v as string[])} placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
           <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}
-            onChange={v => setCoreConcernIds(v as number[])} placeholder="Core Concern" className="min-w-[130px]" />
-          <div className="flex items-center gap-1.5">
+            onChange={v => setCoreConcernIds(v as number[])} placeholder="Core Concern" className="w-full sm:w-auto sm:min-w-[130px]" />
+          <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 w-[130px]" title="Date from" />
-            <span className="text-gray-300 text-xs">–</span>
+              className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date from" />
+            <span className="text-gray-300 text-xs flex-shrink-0">–</span>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 w-[130px]" title="Date to" />
+              className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date to" />
           </div>
           {activeFilterCount > 0 && (
             <button onClick={resetFilters}
-              className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
-              <X className="w-3 h-3" /> Clear
+              className="col-span-2 sm:col-auto flex items-center justify-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors border border-red-100 sm:border-0 sm:px-2 sm:py-1">
+              <X className="w-3 h-3" /> Clear filters
             </button>
           )}
         </div>

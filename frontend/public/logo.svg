@@ -1,10 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" shape-rendering="geometricPrecision">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#6366f1"/>
-      <stop offset="100%" stop-color="#4f46e5"/>
+      <stop offset="100%" stop-color="#4338ca"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
     </linearGradient>
   </defs>
-  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
-  <path d="M16 26.5s9-4.5 9-11.25V7.5L16 5 7 7.5v7.75C7 22 16 26.5 16 26.5z" fill="white"/>
+  <!-- Background rounded rect -->
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- Subtle top shine -->
+  <rect width="512" height="256" rx="112" fill="url(#shine)"/>
+  <!-- Shield body -->
+  <path d="M256 432 C256 432 112 360 112 248 L112 144 L256 96 L400 144 L400 248 C400 360 256 432 256 432 Z" fill="white" opacity="0.95"/>
+  <!-- Shield inner accent -->
+  <path d="M256 400 C256 400 144 338 144 240 L144 163 L256 122 L368 163 L368 240 C368 338 256 400 256 400 Z" fill="#6366f1" opacity="0.15"/>
+  <!-- Checkmark / tick inside shield -->
+  <path d="M196 256 L234 296 L320 210" stroke="white" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9"/>
 </svg>

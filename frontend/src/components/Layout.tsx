@@ -34,8 +34,8 @@ export default function Layout() {
       </div>
 
       {/* Ambuja logo — mobile only, pinned to bottom */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-gray-100 shadow-[0_-1px_4px_rgba(0,0,0,0.06)] flex items-center justify-center py-2.5">
-        <img src="/ambuja-logo.png" alt="Ambuja" className="h-7 w-auto object-contain opacity-90" />
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-sm border-t border-gray-100 shadow-[0_-1px_4px_rgba(0,0,0,0.05)] flex items-center justify-center py-1.5">
+        <img src="/ambuja-logo.png" alt="Ambuja" className="h-5 w-auto object-contain opacity-70" />
       </div>
     </div>
   )

@@ -1255,33 +1255,35 @@ export default function ReportPage() {
         <style dangerouslySetInnerHTML={{ __html: STYLE }} />
 
         {/* Page header with tabs on the right */}
-        <div className="flex items-center justify-between gap-4 mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
             <h1 className="page-title flex items-center gap-2">
               <FileText className="w-6 h-6 text-indigo-600" /> SHE Reports
             </h1>
             <p className="text-sm text-gray-400 mt-1">Surveillance Safety, Health &amp; Environment report generator</p>
           </div>
-          <div className="flex gap-1 bg-slate-100 rounded-xl p-1 flex-shrink-0">
+          <div className="flex gap-1 bg-slate-100 rounded-xl p-1 self-start sm:self-auto flex-shrink-0">
             <button
               onClick={() => setActiveTab('inspection')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
                 activeTab === 'inspection'
                   ? 'bg-white text-indigo-700 shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <FileText className="w-4 h-4" /> SHE Inspection Report
+              <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">SHE </span>Inspection
             </button>
             <button
               onClick={() => setActiveTab('tracker')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
                 activeTab === 'tracker'
                   ? 'bg-white text-indigo-700 shadow-sm'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              <LayoutList className="w-4 h-4" /> SHE Tracker
+              <LayoutList className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">SHE </span>Tracker
             </button>
           </div>
         </div>
@@ -1289,7 +1291,7 @@ export default function ReportPage() {
         {/* Shared filter panel */}
         <div className="card">
           <h2 className="font-semibold text-gray-800 mb-4">Report Parameters</h2>
-          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(6, 1fr)' }}>
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-6">
             <div>
               <label className="label">Project</label>
               <MultiSelectFilter
@@ -1331,7 +1333,7 @@ export default function ReportPage() {
             </div>
           </div>
 
-          <div className="mt-4 flex items-center gap-3 flex-wrap">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <button onClick={() => setGenerated(true)} disabled={isFetching} className="btn-primary">
               {isFetching
                 ? <><span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Generating…</>
@@ -1344,7 +1346,7 @@ export default function ReportPage() {
               <span className="text-sm text-gray-500">{observations.length} observation{observations.length !== 1 ? 's' : ''} found</span>
             )}
             {generated && !isFetching && observations.length > 0 && activeTab === 'inspection' && (
-              <div className="ml-auto flex gap-2">
+              <div className="flex gap-2 sm:ml-auto w-full sm:w-auto">
                 <button
                   onClick={async () => {
                     setExportingExcel(true)
@@ -1352,14 +1354,14 @@ export default function ReportPage() {
                     finally { setExportingExcel(false) }
                   }}
                   disabled={exportingExcel}
-                  className="btn-secondary btn-sm"
+                  className="btn-secondary btn-sm flex-1 sm:flex-none justify-center"
                 >
                   {exportingExcel
                     ? <><span className="animate-spin w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full" /> Exporting…</>
-                    : <><Download className="w-4 h-4" /> Download Excel</>}
+                    : <><Download className="w-4 h-4" /> Excel</>}
                 </button>
-                <button onClick={() => window.print()} className="btn-primary btn-sm">
-                  <Download className="w-4 h-4" /> Download PDF
+                <button onClick={() => window.print()} className="btn-primary btn-sm flex-1 sm:flex-none justify-center">
+                  <Download className="w-4 h-4" /> PDF
                 </button>
               </div>
             )}

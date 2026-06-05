@@ -44,6 +44,7 @@ function EaseScoreView() {
   const [projectFilter, setProjectFilter] = useState('')
   const [dateFrom, setDateFrom] = useState(last30)
   const [dateTo, setDateTo]     = useState(today)
+  const [showFilters, setShowFilters] = useState(false)
 
   const { data: easeProjects } = useQuery({
     queryKey: ['ease-projects'],
@@ -149,36 +150,40 @@ function EaseScoreView() {
 
   return (
     <div className="space-y-5">
-      {/* Inline filter bar */}
+      {/* Filter bar */}
       <div className="card-sm">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 text-gray-400 flex-shrink-0">
-            <SlidersHorizontal className="w-4 h-4" />
-            <span className="text-xs font-medium uppercase tracking-wide">Filters</span>
-            {easeActiveCount > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{easeActiveCount}</span>
-            )}
-          </div>
-          <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+        <div
+          className="flex items-center gap-2 sm:pointer-events-none cursor-pointer sm:cursor-default"
+          onClick={() => setShowFilters(v => !v)}
+        >
+          <SlidersHorizontal className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-400">Filters</span>
+          {easeActiveCount > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{easeActiveCount}</span>
+          )}
+          <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+        </div>
+        <div className={`gap-2 mt-3 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${showFilters ? 'grid grid-cols-2' : 'hidden'}`}>
+          <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
           <MultiSelectFilter
             size="sm"
             options={(easeProjects || []).map((p: string) => ({ value: p, label: p }))}
             value={projectFilter ? [projectFilter] : []}
             onChange={v => setProjectFilter((v as string[])[0] ?? '')}
             placeholder="Project"
-            className="min-w-[130px]"
+            className="w-full sm:w-auto sm:min-w-[130px]"
           />
-          <div className="flex items-center gap-1.5">
+          <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 w-[130px]" title="Date from" />
-            <span className="text-gray-300 text-xs">–</span>
+              className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date from" />
+            <span className="text-gray-300 text-xs flex-shrink-0">–</span>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 w-[130px]" title="Date to" />
+              className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date to" />
           </div>
           {easeActiveCount > 0 && (
             <button onClick={() => { setProjectFilter(''); setDateFrom(last30); setDateTo(today) }}
-              className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
-              <X className="w-3 h-3" /> Clear
+              className="col-span-2 sm:col-auto flex items-center justify-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors border border-red-100 sm:border-0">
+              <X className="w-3 h-3" /> Clear filters
             </button>
           )}
         </div>
@@ -329,6 +334,7 @@ function ComplianceAnalysis() {
   const _today  = new Date().toISOString().slice(0, 10)
   const [dateFrom,      setDateFrom]      = useState(_last30)
   const [dateTo,        setDateTo]        = useState(_today)
+  const [showFilters,   setShowFilters]   = useState(false)
   const [projectSort,   setProjectSort]   = useState({ key: 'priority', asc: true })
   const [contractorSort,setContractorSort]= useState({ key: 'priority', asc: true })
 
@@ -417,32 +423,36 @@ function ComplianceAnalysis() {
 
   return (
     <div className="space-y-5">
-      {/* Inline filter bar */}
+      {/* Filter bar */}
       <div className="card-sm">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 text-gray-400 flex-shrink-0">
-            <SlidersHorizontal className="w-4 h-4" />
-            <span className="text-xs font-medium uppercase tracking-wide">Filters</span>
-            {compActiveCount > 0 && (
-              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{compActiveCount}</span>
-            )}
-          </div>
-          <div className="w-px h-4 bg-gray-200 flex-shrink-0" />
+        <div
+          className="flex items-center gap-2 sm:pointer-events-none cursor-pointer sm:cursor-default"
+          onClick={() => setShowFilters(v => !v)}
+        >
+          <SlidersHorizontal className="w-4 h-4 text-gray-400 flex-shrink-0" />
+          <span className="text-xs font-medium uppercase tracking-wide text-gray-400">Filters</span>
+          {compActiveCount > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{compActiveCount}</span>
+          )}
+          <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+        </div>
+        <div className={`gap-2 mt-3 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${showFilters ? 'grid grid-cols-2' : 'hidden'}`}>
+          <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
           <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
-            onChange={v => setProjectIds(v as number[])} placeholder="Project" className="min-w-[120px]" />
+            onChange={v => setProjectIds(v as number[])} placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
           <MultiSelectFilter size="sm" options={contractorOptions} value={contractorIds}
-            onChange={v => setContractorIds(v as number[])} placeholder="Contractor" className="min-w-[130px]" />
-          <div className="flex items-center gap-1.5">
+            onChange={v => setContractorIds(v as number[])} placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[130px]" />
+          <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 w-[130px]" title="Date from" />
-            <span className="text-gray-300 text-xs">–</span>
+              className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date from" />
+            <span className="text-gray-300 text-xs flex-shrink-0">–</span>
             <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-              className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400 w-[130px]" title="Date to" />
+              className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date to" />
           </div>
           {compActiveCount > 0 && (
             <button onClick={() => { setProjectIds([]); setContractorIds([]); setDateFrom(_last30); setDateTo(_today) }}
-              className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded-lg hover:bg-red-50 transition-colors flex-shrink-0">
-              <X className="w-3 h-3" /> Clear
+              className="col-span-2 sm:col-auto flex items-center justify-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors border border-red-100 sm:border-0">
+              <X className="w-3 h-3" /> Clear filters
             </button>
           )}
         </div>
@@ -940,19 +950,19 @@ export default function Summary() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="page-title">Summary</h1>
           <p className="text-sm text-gray-400 mt-1">EASE scores and compliance analysis across projects and contractors.</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-1.5 bg-slate-100 rounded-xl p-1 self-start sm:self-auto">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold transition ${activeTab === tab.id
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-semibold transition whitespace-nowrap ${activeTab === tab.id
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
                 }`}
             >
               {tab.label}

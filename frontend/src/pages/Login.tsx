@@ -146,9 +146,9 @@ export default function Login() {
           {/* Spacer pushes logo to bottom on mobile */}
           <div className="flex-1 lg:hidden" />
 
-          {/* Ambuja logo */}
-          <div className="flex justify-center py-4 lg:mt-6">
-            <img src="/ambuja-logo.png" alt="Ambuja" className="h-6 w-auto object-contain opacity-60" />
+          {/* Ambuja logo — smaller and near the very bottom */}
+          <div className="flex justify-center pt-2 pb-8 lg:mt-8">
+            <img src="/ambuja-logo.png" alt="Ambuja" className="h-4 w-auto object-contain opacity-45" />
           </div>
         </div>
       </div>
