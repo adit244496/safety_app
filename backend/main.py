@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
-from database import init_db, SessionLocal
+from database import init_db, SessionLocal, DATABASE_URL
 from seed import seed_data
 from seed_ease import seed_ease_scores
 from seed_dummy import seed_dummy_data, seed_ease_dummy_data, seed_recent_observations
@@ -36,17 +36,21 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
+_IS_PROD = DATABASE_URL.startswith("postgresql")
+
 @app.on_event("startup")
 def startup():
     init_db()
     db = SessionLocal()
     try:
         seed_data(db)
-        seed_ease_scores(db)
-        seed_dummy_data(db)
         seed_ease_criteria(db)
-        seed_ease_dummy_data(db)
-        seed_recent_observations(db)
+        if not _IS_PROD:
+            # Dev/demo only — skip on production PostgreSQL
+            seed_ease_scores(db)
+            seed_dummy_data(db)
+            seed_ease_dummy_data(db)
+            seed_recent_observations(db)
     finally:
         db.close()
 

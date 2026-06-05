@@ -28,7 +28,12 @@ def get_db():
 
 def init_db():
     from models import Base as ModelBase
-    ModelBase.metadata.create_all(bind=engine)
+    from sqlalchemy.exc import ProgrammingError, IntegrityError
+    try:
+        ModelBase.metadata.create_all(bind=engine)
+    except (ProgrammingError, IntegrityError):
+        # Another worker already created the tables (race condition with --workers 2)
+        pass
     if DATABASE_URL.startswith("sqlite"):
         with engine.connect() as conn:
             conn.execute(text("PRAGMA foreign_keys = ON"))
