@@ -261,7 +261,7 @@ export default function Dashboard() {
                           <LabelList
                             dataKey="_total"
                             position="top"
-                            formatter={(v: number) => v > 0 ? v : ''}
+                            formatter={(v: unknown) => (v as number) > 0 ? (v as number) : ''}
                             style={{ fontSize: 10, fontWeight: 700, fill: '#374151' }}
                           />
                         )}
