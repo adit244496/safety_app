@@ -27,7 +27,7 @@ def generate_obs_id(db: Session, project_id: int) -> str:
 
 
 def get_allowed_project_ids(user: models.User) -> Optional[List[int]]:
-    if user.role in ("Admin", "PIC", "AIC"):
+    if user.role in ("SuperAdmin", "Admin", "PIC", "AIC"):
         return None
     return [up.project_id for up in user.user_projects]
 
