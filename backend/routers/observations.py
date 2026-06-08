@@ -196,13 +196,13 @@ def stats(
         .order_by(month_expr)
         .all()
     )
-    # Pivot into { month, Open, Pending, Under Review, Closed }
+    # Pivot into { month, Open, Pending, Under Review, Partially Closed, Closed }
     month_status_map: dict = {}
     for m, s, c in by_month_status_rows:
         if not m:
             continue
         if m not in month_status_map:
-            month_status_map[m] = {"month": m, "Open": 0, "Pending": 0, "Under Review": 0, "Closed": 0}
+            month_status_map[m] = {"month": m, "Open": 0, "Pending": 0, "Under Review": 0, "Partially Closed": 0, "Closed": 0}
         if s in month_status_map[m]:
             month_status_map[m][s] = c
     by_month_status = sorted(month_status_map.values(), key=lambda x: x["month"])

@@ -7,14 +7,15 @@ import {
 } from 'recharts'
 import {
   ClipboardList, AlertTriangle, CheckCircle,
-  TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown,
+  TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, Clock,
 } from 'lucide-react'
 import api from '../lib/api'
 import { fmtDate, getRiskClass, getStatusClass } from '../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
 
 const STATUS_COLORS: Record<string, string> = {
-  Open: '#6366f1', Pending: '#f59e0b', Closed: '#10b981',
+  Open: '#6366f1', Pending: '#f59e0b', 'Under Review': '#3b82f6',
+  'Partially Closed': '#8b5cf6', Closed: '#10b981',
 }
 const RISK_COLORS: Record<string, string> = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e' }
 
@@ -91,17 +92,18 @@ export default function Dashboard() {
   data?.byStatus?.forEach((s: any) => { statusCounts[s.status] = s.count })
   const statusPie     = data?.byStatus?.map((s: any) => ({ name: s.status, value: s.count })) || []
   const riskBars      = (data?.byRisk  || []).filter((r: any) => r.risk_level)
-  const STATUSES_LIST = ['Open', 'Pending', 'Closed'] as const
+  const STATUSES_LIST = ['Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed'] as const
   const monthData     = ((data?.byMonthStatus || []) as any[]).map((d: any) => ({
     ...d,
     _total: STATUSES_LIST.reduce((sum, s) => sum + (d[s] || 0), 0),
   }))
 
   const cards = [
-    { label: 'Total Observations', value: data?.total ?? 0,          icon: ClipboardList, bg: 'bg-indigo-50',  color: 'text-indigo-600',  border: 'border-indigo-100'  },
-    { label: 'Open',               value: statusCounts['Open'] ?? 0, icon: AlertTriangle, bg: 'bg-rose-50',    color: 'text-rose-600',    border: 'border-rose-100'    },
-    { label: 'Pending',            value: statusCounts['Pending'] ?? 0, icon: Hourglass, bg: 'bg-amber-50',  color: 'text-amber-600',  border: 'border-amber-100'  },
-    { label: 'Closed',             value: statusCounts['Closed'] ?? 0,  icon: CheckCircle, bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-100' },
+    { label: 'Total Observations', value: data?.total ?? 0,                          icon: ClipboardList, bg: 'bg-indigo-50',  color: 'text-indigo-600',  border: 'border-indigo-100'  },
+    { label: 'Open',               value: statusCounts['Open'] ?? 0,                 icon: AlertTriangle, bg: 'bg-rose-50',    color: 'text-rose-600',    border: 'border-rose-100'    },
+    { label: 'Pending',            value: statusCounts['Pending'] ?? 0,              icon: Hourglass,     bg: 'bg-amber-50',   color: 'text-amber-600',   border: 'border-amber-100'   },
+    { label: 'Partially Closed',   value: statusCounts['Partially Closed'] ?? 0,     icon: Clock,         bg: 'bg-violet-50',  color: 'text-violet-600',  border: 'border-violet-100'  },
+    { label: 'Closed',             value: statusCounts['Closed'] ?? 0,               icon: CheckCircle,   bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-100' },
   ]
 
   const resetFilters = () => {
@@ -186,7 +188,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             {cards.map(({ label, value, icon: Icon, bg, color, border }) => (
               <div key={label} className={`stat-card border ${border}`}>
                 <div className={`${bg} ${color} p-3 rounded-xl flex-shrink-0`}>
