@@ -319,6 +319,17 @@ def update_building(id: int, body: BuildingBody, db: Session = Depends(get_db), 
                 if not has_obs:
                     db.delete(floor)
 
+        # Remove ordinal floors (e.g. "3rd") whose number falls within 1..new_total
+        # (superseded by the canonical "Floor N" that now exists)
+        for f in all_floors:
+            m = re.match(r'^(\d+)(st|nd|rd|th)$', f.name.strip().lower())
+            if m:
+                num = int(m.group(1))
+                if 1 <= num <= new_total:
+                    has_obs = db.query(models.Observation).filter(models.Observation.floor_id == f.id).first()
+                    if not has_obs:
+                        db.delete(f)
+
     db.commit()
     return {"success": True}
 
