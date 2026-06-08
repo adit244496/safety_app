@@ -123,6 +123,7 @@ class ObsCreate(BaseModel):
     root_cause_specific_id: Optional[int] = None
     violation_id: Optional[int] = None
     target_date_id: Optional[int] = None
+    status: Optional[str] = None
 
 
 class ObsUpdate(ObsCreate):
@@ -530,7 +531,7 @@ def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: mod
         root_cause_specific_id=body.root_cause_specific_id,
         violation_id=body.violation_id,
         target_date_id=body.target_date_id,
-        status="Open",
+        status=body.status or "Open",
         created_by=user.id,
     )
     db.add(obs)
