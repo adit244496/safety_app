@@ -122,10 +122,10 @@ export default function Dashboard() {
   const quarterData = useMemo(() => {
     const byQuarter: Record<string, any> = {}
     for (const d of monthData) {
-      const parts = (d.month as string).split(' ')
-      const mIdx  = MONTHS_SHORT.indexOf(parts[0])
-      const year  = parts[1] || ''
-      if (mIdx < 0) continue
+      // d.month is "YYYY-MM" from backend (e.g. "2026-02")
+      const [year, mStr] = (d.month as string).split('-')
+      const mIdx = parseInt(mStr, 10) - 1  // 0-based
+      if (isNaN(mIdx)) continue
       const q   = Math.floor(mIdx / 3) + 1
       const key = `Q${q} ${year}`
       if (!byQuarter[key]) { byQuarter[key] = { month: key }; STATUSES_LIST.forEach(s => { byQuarter[key][s] = 0 }) }
@@ -285,7 +285,20 @@ export default function Dashboard() {
               {trendData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart data={trendData} margin={{ top: 18, right: 8, left: -24, bottom: 0 }}>
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                    <XAxis
+                      dataKey="month"
+                      tick={{ fontSize: 10, fill: '#9ca3af' }}
+                      axisLine={false}
+                      tickLine={false}
+                      tickFormatter={(v: string) => {
+                        // quarterly keys are already "Q1 2026" — pass through
+                        if (v.startsWith('Q')) return v
+                        // monthly keys are "YYYY-MM" — convert to "Feb '26"
+                        const [yr, mo] = v.split('-')
+                        if (!mo) return v
+                        return `${MONTHS_SHORT[parseInt(mo, 10) - 1]} '${yr.slice(2)}`
+                      }}
+                    />
                     <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
                     <Tooltip
                       content={({ active, payload, label }) => active && payload?.length ? (
@@ -350,15 +363,46 @@ export default function Dashboard() {
               <p className="text-[10px] text-gray-400 mb-3">Entire filtered tenure</p>
               {statusPie.length > 0 ? (
                 <>
-                  <ResponsiveContainer width="100%" height={160}>
-                    <PieChart>
-                      <Pie data={statusPie} dataKey="value" nameKey="name"
-                        cx="50%" cy="50%" innerRadius={45} outerRadius={70}>
-                        {statusPie.map((s: any) => <Cell key={s.name} fill={STATUS_COLORS[s.name] || '#94a3b8'} />)}
-                      </Pie>
-                      <Tooltip formatter={(v) => [v, '']} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                  <div className="relative">
+                    <ResponsiveContainer width="100%" height={190}>
+                      <PieChart>
+                        <Pie
+                          data={statusPie}
+                          dataKey="value"
+                          nameKey="name"
+                          cx="50%" cy="50%"
+                          innerRadius={52}
+                          outerRadius={75}
+                          labelLine={false}
+                          label={({ cx, cy, midAngle, innerRadius, outerRadius, value, percent }) => {
+                            if (percent < 0.06) return null
+                            const RADIAN = Math.PI / 180
+                            const r = innerRadius + (outerRadius - innerRadius) * 0.5
+                            const x = (cx as number) + r * Math.cos(-midAngle * RADIAN)
+                            const y = (cy as number) + r * Math.sin(-midAngle * RADIAN)
+                            return (
+                              <text x={x} y={y} fill="white" textAnchor="middle"
+                                dominantBaseline="central" fontSize={11} fontWeight={700}>
+                                {value}
+                              </text>
+                            )
+                          }}
+                        >
+                          {statusPie.map((s: any) => <Cell key={s.name} fill={STATUS_COLORS[s.name] || '#94a3b8'} />)}
+                        </Pie>
+                        <Tooltip formatter={(v) => [v, '']} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    {/* Total in center hole */}
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <div className="text-center">
+                        <p className="text-2xl font-bold text-gray-900">
+                          {statusPie.reduce((s: number, x: any) => s + x.value, 0)}
+                        </p>
+                        <p className="text-[10px] text-gray-400">Total</p>
+                      </div>
+                    </div>
+                  </div>
                   <div className="space-y-1.5 mt-2">
                     {statusPie.map((s: any) => (
                       <div key={s.name} className="flex items-center justify-between text-xs">
