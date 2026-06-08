@@ -249,6 +249,25 @@ export default function ObservationForm() {
   async function doSave(overrideStatus?: string) {
     if (!form.project_id) { setError('Project is required'); return }
     const isDraft = overrideStatus === 'Draft'
+
+    if (!isDraft) {
+      const missing: string[] = []
+      if (!form.building_id)          missing.push('Building / Tower')
+      if (!form.floor_id)             missing.push('Floor')
+      if (!form.contractor_company)   missing.push('Contractor')
+      if (!form.contractor_user_id)   missing.push('To Be Rectified By')
+      if (!form.core_concern_id)      missing.push('Core Concern')
+      if (!form.specific_concern_id)  missing.push('Specific Concern')
+      if (!form.violation_id)         missing.push('Violation Caused Due To')
+      if (!form.target_date_id)       missing.push('Target Date for Rectification')
+      if (!form.severity)             missing.push('Severity')
+      if (!form.probability)          missing.push('Probability')
+      if (missing.length > 0) {
+        setError(`Please fill in the following required fields: ${missing.join(', ')}`)
+        return
+      }
+    }
+
     if (isDraft) setSavingDraft(true); else setSaving(true)
     setError('')
 

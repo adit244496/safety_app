@@ -26,13 +26,13 @@ const roleStyle = (r?: string | null) => ROLE[r || ''] ?? DEF_ROLE
 
 // ── Timeline helpers ──────────────────────────────────────────────────────
 type TLItem =
-  | { kind: 'created'; name: string; role: string; ts: string }
+  | { kind: 'created'; name: string; role: string; ts: string; status: string }
   | { kind: 'comment'; id: number; name: string; role: string; ts: string; text: string }
   | { kind: 'photos';  key: string; name: string; role: string; ts: string; images: any[] }
 
 function buildTimeline(obs: any): TLItem[] {
   const items: TLItem[] = []
-  items.push({ kind: 'created', name: obs.created_by_name || 'Unknown', role: obs.creator_role || '', ts: obs.created_at || '' })
+  items.push({ kind: 'created', name: obs.created_by_name || 'Unknown', role: obs.creator_role || '', ts: obs.created_at || '', status: obs.status || '' })
   for (const c of obs.comments ?? []) {
     items.push({ kind: 'comment', id: c.id, name: c.user_name || 'Unknown', role: c.user_role || '', ts: c.created_at || '', text: c.comment })
   }
@@ -131,7 +131,7 @@ function TLMessage({ item, onOpen }: { item: TLItem; onOpen: (s: string) => void
         <div className={`${bubbleBase} bg-gray-50`} style={{ borderLeftColor: s.borderColor, borderLeftWidth: 3 }}>
           <span className="flex items-center gap-1.5 text-xs text-gray-500">
             <ClipboardCheck className="w-3.5 h-3.5 flex-shrink-0" style={{ color: s.borderColor }} />
-            Observation submitted
+            {item.status === 'Draft' ? 'Draft saved' : 'Observation submitted'}
           </span>
         </div>
       </div>

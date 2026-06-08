@@ -538,6 +538,10 @@ def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: mod
     db.commit()
     db.refresh(obs)
 
+    # In-app notification and email — skipped for drafts
+    if obs.status == 'Draft':
+        return {"id": obs.id, "observation_id": obs.observation_id, "risk_factor": factor, "risk_level": level}
+
     # In-app notification to assigned contractor
     if body.contractor_user_id:
         project_name = obs.project.name if obs.project else ""
