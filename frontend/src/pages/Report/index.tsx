@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { usePageTitle } from '../../store/pageTitleContext'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { FileText, AlertTriangle, ZoomIn, ZoomOut, X, Download, LayoutList } from 'lucide-react'
@@ -1171,6 +1172,7 @@ function SHETrackerTab({
 
 // ── Main page ─────────────────────────────────────────────────────────────
 export default function ReportPage() {
+  usePageTitle('SHE Reports', 'Surveillance Safety, Health & Environment report generator')
   const last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today  = new Date().toISOString().slice(0, 10)
 
@@ -1270,7 +1272,7 @@ export default function ReportPage() {
 
         {/* Page header with tabs on the right */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <div>
+          <div className="lg:hidden">
             <h1 className="page-title flex items-center gap-2">
               <FileText className="w-6 h-6 text-indigo-600" /> SHE Reports
             </h1>

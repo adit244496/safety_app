@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { usePageTitle } from '../store/pageTitleContext'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList,
@@ -955,6 +956,7 @@ type Tab = 'ease' | 'compliance' | 'criteria'
 
 export default function Summary() {
   const [activeTab, setActiveTab] = useState<Tab>('ease')
+  usePageTitle('Summary', 'SHE scores and compliance analysis across projects and contractors.')
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'ease', label: 'SHE Score' },
@@ -965,7 +967,7 @@ export default function Summary() {
   return (
     <div className="space-y-5">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+        <div className="lg:hidden">
           <h1 className="page-title">Summary</h1>
           <p className="text-sm text-gray-400 mt-1">SHE scores and compliance analysis across projects and contractors.</p>
         </div>

@@ -1,4 +1,5 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { usePageTitle } from '../../store/pageTitleContext'
 import { Users, Database, Shield, ClipboardList, Mail } from 'lucide-react'
 import UsersTab from './UsersTab'
 import DataInputTab from './DataInputTab'
@@ -16,9 +17,10 @@ const TABS = [
 
 export default function Admin() {
   const loc = useLocation()
+  usePageTitle('Admin Panel', 'Manage users, projects, reference data, and SHE evaluation criteria')
   return (
     <div className="space-y-6">
-      <div>
+      <div className="lg:hidden">
         <h1 className="page-title">Admin Panel</h1>
         <p className="text-sm text-gray-400 mt-1">Manage users, projects, reference data, and SHE evaluation criteria</p>
       </div>

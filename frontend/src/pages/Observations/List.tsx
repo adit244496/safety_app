@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { usePageTitle } from '../../store/pageTitleContext'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, ChevronRight, ChevronDown, SlidersHorizontal, X, MessageSquare, PencilLine } from 'lucide-react'
@@ -107,6 +108,7 @@ export default function ObservationsList() {
   const obs        = data?.observations || []
   const total      = data?.total ?? 0
   const totalPages = data?.pages || 1
+  usePageTitle('Observations', `${total} total observation${total !== 1 ? 's' : ''}`)
 
   const clearFilters = () => {
     setStatuses([]); setProjectIds([]); setSelectedContractors([])
@@ -116,9 +118,9 @@ export default function ObservationsList() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
+      {/* Header — hidden on desktop (shown in top bar instead) */}
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="lg:hidden">
           <h1 className="page-title">Observations</h1>
           <p className="text-sm text-gray-400 mt-1">{total} total observation{total !== 1 ? 's' : ''}</p>
         </div>

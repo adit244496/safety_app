@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { usePageTitle } from '../store/pageTitleContext'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -28,6 +29,7 @@ const PRIORITY_OPTIONS: MSOption[] = [
 export default function Dashboard() {
   const navigate = useNavigate()
   const [showFilters, setShowFilters] = useState(false)
+  usePageTitle('Dashboard', 'Overview of all safety observations')
 
   // ── Filter state (arrays for multi-select) ──────────────────────────────
   const [projectIds,     setProjectIds]     = useState<number[]>([])
@@ -134,8 +136,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-5">
-      {/* Page header */}
-      <div className="flex items-center justify-between">
+      {/* Page header — hidden on desktop (shown in top bar instead) */}
+      <div className="flex items-center justify-between lg:hidden">
         <div>
           <h1 className="page-title">Dashboard</h1>
           <p className="text-sm text-gray-400 mt-1">Overview of all safety observations</p>

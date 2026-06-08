@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../store/authStore'
+import { useCurrentPageTitle } from '../store/pageTitleContext'
 import { getRoleClass, fmtDateTime } from '../lib/utils'
 import api from '../lib/api'
 
@@ -75,6 +76,7 @@ export default function Header({ onMenu }: { onMenu: () => void }) {
   const navigate = useNavigate()
   const [profileOpen, setProfileOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
+  const { title, subtitle } = useCurrentPageTitle()
 
   const { data: notifData } = useQuery({
     queryKey: ['notifications'],
@@ -91,10 +93,18 @@ export default function Header({ onMenu }: { onMenu: () => void }) {
         <button onClick={onMenu} className="btn-icon lg:hidden">
           <Menu className="w-5 h-5" />
         </button>
-        <div>
+        {/* Mobile: app name */}
+        <div className="lg:hidden">
           <p className="text-sm font-semibold text-gray-800 leading-tight">Neo SHE</p>
           <p className="text-xs text-gray-400">Safety App</p>
         </div>
+        {/* Desktop: current page title */}
+        {title && (
+          <div className="hidden lg:block">
+            <p className="text-base font-bold text-gray-900 leading-tight">{title}</p>
+            {subtitle && <p className="text-xs text-gray-400 mt-0.5">{subtitle}</p>}
+          </div>
+        )}
       </div>
 
       {/* Right */}
