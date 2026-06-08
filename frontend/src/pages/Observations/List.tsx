@@ -232,7 +232,7 @@ export default function ObservationsList() {
             {obs.map((o: any) => (
               <div
                 key={o.id}
-                className={`p-4 cursor-pointer active:bg-indigo-50/50 transition-colors ${o.status === 'Draft' ? 'bg-amber-50/40' : ''}`}
+                className={`p-4 cursor-pointer active:bg-indigo-50/50 transition-colors ${o.status === 'Draft' ? 'bg-amber-50 border-l-4 border-amber-400' : ''}`}
                 onClick={() => navigate(`/observations/${o.observation_id}`)}
               >
                 <div className="flex items-start justify-between gap-2 mb-1.5">
@@ -290,16 +290,16 @@ export default function ObservationsList() {
                 {obs.map((o: any) => (
                   <tr
                     key={o.id}
-                    className={`tr cursor-pointer ${o.status === 'Draft' ? 'bg-amber-50/60 hover:bg-amber-50' : ''}`}
+                    className={`tr cursor-pointer ${o.status === 'Draft' ? 'bg-amber-50 hover:bg-amber-100 shadow-[inset_3px_0_0_#f59e0b]' : ''}`}
                     onClick={() => navigate(`/observations/${o.observation_id}`)}
                   >
                     <td className="td">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md">
+                        <span className={`font-mono text-xs font-bold px-2 py-1 rounded-md ${o.status === 'Draft' ? 'text-amber-700 bg-amber-100' : 'text-indigo-700 bg-indigo-50'}`}>
                           {o.observation_id}
                         </span>
                         {o.status === 'Draft' && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 bg-amber-100 border border-dashed border-amber-300 px-1.5 py-0.5 rounded">
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-700 bg-amber-100 border border-dashed border-amber-400 px-1.5 py-0.5 rounded">
                             <PencilLine className="w-2.5 h-2.5" /> Draft
                           </span>
                         )}

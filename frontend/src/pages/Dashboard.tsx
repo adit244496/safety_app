@@ -110,10 +110,34 @@ export default function Dashboard() {
   const statusPie     = data?.byStatus?.map((s: any) => ({ name: s.status, value: s.count })) || []
   const riskBars      = (data?.byRisk  || []).filter((r: any) => r.risk_level)
   const STATUSES_LIST = ['Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed'] as const
-  const monthData     = ((data?.byMonthStatus || []) as any[]).map((d: any) => ({
+  const MONTHS_SHORT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+  const monthData = ((data?.byMonthStatus || []) as any[]).map((d: any) => ({
     ...d,
     _total: STATUSES_LIST.reduce((sum, s) => sum + (d[s] || 0), 0),
   }))
+
+  const [viewMode, setViewMode] = useState<'monthly' | 'quarterly'>('monthly')
+
+  const quarterData = useMemo(() => {
+    const byQuarter: Record<string, any> = {}
+    for (const d of monthData) {
+      const parts = (d.month as string).split(' ')
+      const mIdx  = MONTHS_SHORT.indexOf(parts[0])
+      const year  = parts[1] || ''
+      if (mIdx < 0) continue
+      const q   = Math.floor(mIdx / 3) + 1
+      const key = `Q${q} ${year}`
+      if (!byQuarter[key]) { byQuarter[key] = { month: key }; STATUSES_LIST.forEach(s => { byQuarter[key][s] = 0 }) }
+      STATUSES_LIST.forEach(s => { byQuarter[key][s] = (byQuarter[key][s] || 0) + (d[s] || 0) })
+    }
+    return Object.values(byQuarter).map(d => ({
+      ...d,
+      _total: STATUSES_LIST.reduce((sum, s) => sum + (d[s] || 0), 0),
+    }))
+  }, [monthData])
+
+  const trendData = viewMode === 'quarterly' ? quarterData : monthData
 
   const cards = [
     { label: 'Total Observations', value: data?.total ?? 0,                          icon: ClipboardList, bg: 'bg-indigo-50',  color: 'text-indigo-600',  border: 'border-indigo-100'  },
@@ -220,34 +244,54 @@ export default function Dashboard() {
 
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            {/* Monthly trend — stacked by status */}
+            {/* Trend chart — Monthly or Quarterly */}
             <div className="card lg:col-span-2">
               <div className="flex items-start justify-between gap-2 mb-4 flex-wrap">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0">
                     <TrendingUp className="w-4 h-4 text-indigo-600" />
                   </div>
-                  <h2 className="font-semibold text-gray-900">Monthly Trend</h2>
+                  <h2 className="font-semibold text-gray-900">
+                    {viewMode === 'monthly' ? 'Monthly' : 'Quarterly'} Trend
+                  </h2>
                 </div>
-                <div className="flex gap-2 flex-wrap">
-                  {STATUSES_LIST.map(s => (
-                    <div key={s} className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLORS[s] }} />
-                      <span className="text-[10px] text-gray-500 whitespace-nowrap">{s}</span>
-                    </div>
-                  ))}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* Monthly / Quarterly toggle */}
+                  <div className="flex gap-0.5 p-0.5 bg-gray-100 rounded-lg">
+                    {(['monthly', 'quarterly'] as const).map(m => (
+                      <button
+                        key={m}
+                        onClick={() => setViewMode(m)}
+                        className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all ${
+                          viewMode === m
+                            ? 'bg-white text-indigo-700 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        {m === 'monthly' ? 'Monthly' : 'Quarterly'}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {STATUSES_LIST.map(s => (
+                      <div key={s} className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLORS[s] }} />
+                        <span className="text-[10px] text-gray-500 whitespace-nowrap">{s}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-              {monthData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={monthData} margin={{ top: 18, right: 8, left: -24, bottom: 0 }}>
+              {trendData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart data={trendData} margin={{ top: 18, right: 8, left: -24, bottom: 0 }}>
                     <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} allowDecimals={false} />
                     <Tooltip
                       content={({ active, payload, label }) => active && payload?.length ? (
                         <div className="bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-lg text-xs">
                           <p className="font-semibold text-gray-700 mb-1.5">{label}</p>
-                          {payload.slice().reverse().map((p: any) => (
+                          {payload.slice().reverse().map((p: any) => p.value > 0 && (
                             <div key={p.dataKey} className="flex items-center justify-between gap-4 mb-0.5">
                               <div className="flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-full" style={{ background: p.fill }} />
@@ -272,9 +316,17 @@ export default function Dashboard() {
                         dataKey={s}
                         stackId="a"
                         fill={STATUS_COLORS[s]}
-                        maxBarSize={48}
+                        maxBarSize={52}
                         radius={idx === STATUSES_LIST.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
                       >
+                        {/* Label inside each segment — only shown when value > 0 */}
+                        <LabelList
+                          dataKey={s}
+                          position="inside"
+                          formatter={(v: unknown) => (v as number) > 0 ? (v as number) : ''}
+                          style={{ fontSize: 9, fontWeight: 700, fill: '#fff' }}
+                        />
+                        {/* Total above bar on the topmost segment */}
                         {idx === STATUSES_LIST.length - 1 && (
                           <LabelList
                             dataKey="_total"

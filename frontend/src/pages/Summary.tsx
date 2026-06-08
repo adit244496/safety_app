@@ -40,10 +40,10 @@ const GRADATION_BG: Record<string, string> = {
 // ─── EASE Score Tab ──────────────────────────────────────────────────────────
 
 function EaseScoreView() {
-  const last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  const last90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today  = new Date().toISOString().slice(0, 10)
   const [projectFilter, setProjectFilter] = useState('')
-  const [dateFrom, setDateFrom] = useState(last30)
+  const [dateFrom, setDateFrom] = useState(last90)
   const [dateTo, setDateTo]     = useState(today)
   const [showFilters, setShowFilters] = useState(false)
 
@@ -76,6 +76,24 @@ function EaseScoreView() {
   const aggregatedGrad = aggregatedOverall != null
     ? aggregatedOverall >= 90 ? 'EXCELLENT' : aggregatedOverall >= 75 ? 'GOOD' : aggregatedOverall >= 60 ? 'AVERAGE' : 'BELOW AVERAGE'
     : 'NA'
+
+  // Project-level chart: average overall score per project across selected period
+  const projectChartData = useMemo(() => {
+    const byProject: Record<string, number[]> = {}
+    for (const p of periods) {
+      if (p.overall_score != null) {
+        if (!byProject[p.project_name]) byProject[p.project_name] = []
+        byProject[p.project_name].push(p.overall_score)
+      }
+    }
+    return Object.entries(byProject)
+      .map(([name, scores]) => {
+        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length * 10) / 10
+        const grad = avg >= 90 ? 'EXCELLENT' : avg >= 75 ? 'GOOD' : avg >= 60 ? 'AVERAGE' : 'BELOW AVERAGE'
+        return { project: name.length > 16 ? name.slice(0, 15) + '…' : name, fullProject: name, score: avg, fill: GRADATION_COLOR[grad] }
+      })
+      .sort((a, b) => b.score - a.score)
+  }, [periods])
 
   // Aggregated bar chart: average score per category across all periods
   const aggregatedChartData = useMemo(() => {
@@ -147,7 +165,7 @@ function EaseScoreView() {
     )
   }
 
-  const easeActiveCount = (projectFilter ? 1 : 0) + (dateFrom !== last30 ? 1 : 0) + (dateTo !== today ? 1 : 0)
+  const easeActiveCount = (projectFilter ? 1 : 0) + (dateFrom !== last90 ? 1 : 0) + (dateTo !== today ? 1 : 0)
 
   return (
     <div className="space-y-5">
@@ -182,7 +200,7 @@ function EaseScoreView() {
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date to" />
           </div>
           {easeActiveCount > 0 && (
-            <button onClick={() => { setProjectFilter(''); setDateFrom(last30); setDateTo(today) }}
+            <button onClick={() => { setProjectFilter(''); setDateFrom(last90); setDateTo(today) }}
               className="col-span-2 sm:col-auto flex items-center justify-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors border border-red-100 sm:border-0">
               <X className="w-3 h-3" /> Clear filters
             </button>
@@ -216,6 +234,49 @@ function EaseScoreView() {
               {periods.length} period{periods.length !== 1 ? 's' : ''} · {projectFilter || 'All projects'}
             </div>
           </div>
+
+          {/* Project-level SHE Score chart — only when multiple projects present */}
+          {projectChartData.length > 1 && (
+            <div className="card">
+              <div className="flex items-center gap-2 mb-4">
+                <BarChart3 className="w-4 h-4 text-indigo-600" />
+                <h2 className="font-semibold text-gray-900">SHE Score by Project</h2>
+                <span className="ml-auto text-xs text-slate-400">{projectChartData.length} projects</span>
+              </div>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={projectChartData} margin={{ top: 16, right: 10, left: -10, bottom: 60 }}>
+                  <XAxis dataKey="project" angle={-35} textAnchor="end" interval={0} height={75}
+                    tick={{ fontSize: 10, fill: '#6b7280' }} />
+                  <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`}
+                    tick={{ fontSize: 10, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <Tooltip content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null
+                    const d = payload[0]
+                    return (
+                      <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-lg text-xs">
+                        <p className="font-semibold text-slate-800 mb-0.5">{d.payload.fullProject}</p>
+                        <p className="font-bold" style={{ color: d.payload.fill }}>{d.value != null ? `${d.value}%` : 'N/A'}</p>
+                      </div>
+                    )
+                  }} />
+                  <Bar dataKey="score" radius={[4, 4, 0, 0]} maxBarSize={48}>
+                    {projectChartData.map((_: any, i: number) => (
+                      <Cell key={i} fill={projectChartData[i].fill} />
+                    ))}
+                    <LabelList dataKey="score" position="top" formatter={(v: any) => v != null ? `${v}%` : ''} style={{ fontSize: 9, fontWeight: 600 }} />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex flex-wrap gap-3 mt-3">
+                {Object.entries(GRADATION_COLOR).map(([g, c]) => (
+                  <div key={g} className="flex items-center gap-1 text-xs text-slate-500">
+                    <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: c }} />
+                    {g}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Aggregated bar chart */}
           <div className="card">
