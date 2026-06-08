@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract, case
+from sqlalchemy import func, extract, case, nullslast
 from datetime import datetime
 from database import get_db
 import models
@@ -438,7 +438,10 @@ def list_observations(
     )
 
     total = q.count()
-    obs_list = q.order_by(models.Observation.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+    obs_list = q.order_by(
+        nullslast(models.Observation.created_at.desc()),
+        models.Observation.obs_date.desc(),
+    ).offset((page - 1) * limit).limit(limit).all()
 
     return {
         "observations": [obs_to_dict(o, db) for o in obs_list],
