@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Outlet } from 'react-router-dom'
+import { Toaster } from 'sonner'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import { PageTitleProvider } from '../store/pageTitleContext'
@@ -40,6 +41,7 @@ export default function Layout() {
           <img src="/ambuja-logo.png" alt="Ambuja" className="h-5 w-auto object-contain opacity-70" />
         </div>
       </div>
+      <Toaster position="top-right" richColors closeButton duration={4000} />
     </PageTitleProvider>
   )
 }

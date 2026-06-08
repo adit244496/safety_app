@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Save, ArrowLeft, X, Camera, AlertTriangle, CheckCircle2, MapPin, ClipboardList, ShieldAlert, GitBranch, ImagePlus, FileEdit } from 'lucide-react'
+import { toast } from 'sonner'
 import api from '../../lib/api'
 import { calcRisk, STATUSES } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
@@ -309,9 +310,16 @@ export default function ObservationForm() {
 
       qc.invalidateQueries({ queryKey: ['observations'] })
       qc.invalidateQueries({ queryKey: ['stats'] })
+      if (isDraft) {
+        toast.success('Draft saved successfully')
+      } else {
+        toast.success(isEdit ? 'Observation updated successfully' : 'Observation submitted successfully')
+      }
       navigate('/observations')
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to save observation')
+      const msg = err.response?.data?.detail || 'Failed to save observation'
+      setError(msg)
+      toast.error(msg)
     } finally {
       setSaving(false); setSavingDraft(false)
     }
