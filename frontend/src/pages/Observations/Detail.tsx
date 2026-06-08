@@ -402,8 +402,10 @@ export default function ObservationDetail() {
     return () => { document.body.style.overflow = '' }
   }, [convoFullscreen])
 
-  const addCommentMutation = useMutation({
-    mutationFn: async ({ text, files, imgType }: { text: string; files: File[]; imgType: string }) => {
+  type CommentVars = { text: string; files: File[]; imgType: string }
+
+  const addCommentMutation = useMutation<void, unknown, CommentVars>({
+    mutationFn: async ({ text, files, imgType }) => {
       await api.post(`/observations/${obs?.id}/comments`, { comment: text })
       if (files.length > 0) {
         const fd = new FormData()
@@ -412,7 +414,7 @@ export default function ObservationDetail() {
         await api.post(`/observations/${obs!.id}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       }
     },
-    onMutate: async ({ text }: { text: string; files: File[]; imgType: string }) => {
+    onMutate: async ({ text }) => {
       await qc.cancelQueries({ queryKey: ['observation', id] })
       const previous = qc.getQueryData<any>(['observation', id])
       qc.setQueryData(['observation', id], (old: any) => {
@@ -434,7 +436,7 @@ export default function ObservationDetail() {
       })
       return { previous }
     },
-    onError: (_err: unknown, _vars: unknown, context: any) => {
+    onError: (_err, _vars, context: any) => {
       if (context?.previous !== undefined) {
         qc.setQueryData(['observation', id], context.previous)
       }
