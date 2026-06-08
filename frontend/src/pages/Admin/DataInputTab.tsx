@@ -4,12 +4,11 @@ import { Plus, Edit2, Trash2, Save, X, Link2 } from 'lucide-react'
 import api from '../../lib/api'
 import { useAuth } from '../../store/authStore'
 
-type Section = 'projects' | 'buildings' | 'floors'
+type Section = 'projects' | 'buildings'
 
 const SECTIONS: { key: Section; label: string }[] = [
   { key: 'projects', label: 'Projects' },
   { key: 'buildings', label: 'Buildings / Towers' },
-  { key: 'floors', label: 'Floors' },
 ]
 
 // ─── Modal for create / edit ─────────────────────────────────────────────────
@@ -20,45 +19,34 @@ interface ModalState {
 }
 
 function Modal({
-  state, onClose, projects, buildings,
+  state, onClose, projects,
 }: {
   state: ModalState
   onClose: () => void
   projects: any[]
-  buildings: any[]
 }) {
   const qc = useQueryClient()
   const [name, setName] = useState(state.editing?.name ?? '')
   const [projectId, setProjectId] = useState<string>(state.editing?.project_id?.toString() ?? '')
-  const [buildingId, setBuildingId] = useState<string>(state.editing?.building_id?.toString() ?? '')
-  // for floors: filter buildings by selected project
-  const [filterProjectId, setFilterProjectId] = useState<string>(() => {
-    if (state.section === 'floors' && state.editing?.building_id) {
-      const b = buildings.find((b: any) => b.id === state.editing.building_id)
-      return b?.project_id?.toString() ?? ''
-    }
-    return ''
-  })
+  const [totalFloors, setTotalFloors] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const isEdit = !!state.editing
-
-  const filteredBuildings = filterProjectId
-    ? buildings.filter((b: any) => b.project_id?.toString() === filterProjectId)
-    : buildings
 
   async function save() {
     if (!name.trim()) { setError('Name is required'); return }
     setSaving(true); setError('')
     try {
       const body: any = { name: name.trim() }
-      if (state.section === 'buildings') body.project_id = projectId ? Number(projectId) : null
-      if (state.section === 'floors') body.building_id = buildingId ? Number(buildingId) : null
+      if (state.section === 'buildings') {
+        body.project_id = projectId ? Number(projectId) : null
+        if (!isEdit && totalFloors && Number(totalFloors) > 0) {
+          body.total_floors = Number(totalFloors)
+        }
+      }
 
-      const endpoint =
-        state.section === 'projects' ? '/projects/' :
-        state.section === 'buildings' ? '/admin/buildings' : '/admin/floors'
+      const endpoint = state.section === 'projects' ? '/projects/' : '/admin/buildings'
 
       if (isEdit) {
         await api.put(`${endpoint}/${state.editing.id}`, body)
@@ -67,6 +55,7 @@ function Modal({
       }
 
       qc.invalidateQueries({ queryKey: [state.section] })
+      qc.invalidateQueries({ queryKey: ['floors'] })
       onClose()
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to save')
@@ -80,7 +69,7 @@ function Modal({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="font-semibold text-gray-900">
-            {isEdit ? 'Edit' : 'Add'} {SECTIONS.find(s => s.key === state.section)?.label.replace(/s$/, '').trimEnd()}
+            {isEdit ? 'Edit' : 'Add'} {state.section === 'projects' ? 'Project' : 'Building / Tower'}
           </h2>
           <button onClick={onClose} className="btn-icon"><X className="w-4 h-4" /></button>
         </div>
@@ -95,54 +84,39 @@ function Modal({
               onChange={e => setName(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && save()}
               placeholder={
-                state.section === 'projects' ? 'e.g. ECOSPACE RESIDENCIA' :
-                state.section === 'buildings' ? 'e.g. Tower A ~ Block 1' : 'e.g. Floor 5'
+                state.section === 'projects' ? 'e.g. ECOSPACE RESIDENCIA' : 'e.g. Tower A ~ Block 1'
               }
             />
           </div>
 
           {state.section === 'buildings' && (
-            <div>
-              <label className="label flex items-center gap-1.5">
-                <Link2 className="w-3.5 h-3.5 text-blue-500" />
-                Assign to Project
-                <span className="text-gray-400 font-normal text-xs">(optional — can be set later)</span>
-              </label>
-              <select className="select" value={projectId} onChange={e => setProjectId(e.target.value)}>
-                <option value="">— Not assigned —</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-            </div>
-          )}
-
-          {state.section === 'floors' && (
             <>
               <div>
                 <label className="label flex items-center gap-1.5">
                   <Link2 className="w-3.5 h-3.5 text-blue-500" />
-                  Filter by Project
-                  <span className="text-gray-400 font-normal text-xs">(narrows building list)</span>
+                  Assign to Project
+                  <span className="text-gray-400 font-normal text-xs">(optional — can be set later)</span>
                 </label>
-                <select
-                  className="select"
-                  value={filterProjectId}
-                  onChange={e => { setFilterProjectId(e.target.value); setBuildingId('') }}
-                >
-                  <option value="">— All projects —</option>
+                <select className="select" value={projectId} onChange={e => setProjectId(e.target.value)}>
+                  <option value="">— Not assigned —</option>
                   {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="label flex items-center gap-1.5">
-                  <Link2 className="w-3.5 h-3.5 text-indigo-500" />
-                  Assign to Building / Tower
-                  <span className="text-gray-400 font-normal text-xs">(optional)</span>
-                </label>
-                <select className="select" value={buildingId} onChange={e => setBuildingId(e.target.value)}>
-                  <option value="">— Not assigned —</option>
-                  {filteredBuildings.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                </select>
-              </div>
+
+              {!isEdit && (
+                <div>
+                  <label className="label">Total Floors
+                    <span className="text-gray-400 font-normal text-xs ml-1">(auto-creates Floor 1 … Floor N)</span>
+                  </label>
+                  <input
+                    type="number" min="0" max="200"
+                    className="input"
+                    placeholder="e.g. 10"
+                    value={totalFloors}
+                    onChange={e => setTotalFloors(e.target.value)}
+                  />
+                </div>
+              )}
             </>
           )}
         </div>
@@ -173,44 +147,26 @@ export default function DataInputTab() {
     queryKey: ['buildings'],
     queryFn: () => api.get('/admin/buildings').then(r => r.data),
   })
-  const { data: floors = [], isLoading: loadingFloors } = useQuery({
-    queryKey: ['floors'],
-    queryFn: () => api.get('/admin/floors').then(r => r.data),
-  })
 
-  const dataMap = { projects, buildings, floors }
-  const loadingMap = { projects: loadingProjects, buildings: loadingBuildings, floors: loadingFloors }
+  const dataMap = { projects, buildings }
+  const loadingMap = { projects: loadingProjects, buildings: loadingBuildings }
 
   async function deleteItem(section: Section, id: number) {
     if (!confirm('Delete this entry? This cannot be undone.')) return
-    const endpoint =
-      section === 'projects' ? `/projects/${id}` :
-      section === 'buildings' ? `/admin/buildings/${id}` : `/admin/floors/${id}`
+    const endpoint = section === 'projects' ? `/projects/${id}` : `/admin/buildings/${id}`
     await api.delete(endpoint)
     qc.invalidateQueries({ queryKey: [section] })
+    qc.invalidateQueries({ queryKey: ['floors'] })
   }
 
-  let items: any[] = dataMap[section]
+  const items: any[] = dataMap[section]
   const loading = loadingMap[section]
 
-  // Sort floors in descending order
-  if (section === 'floors') {
-    items = [...items].sort((a, b) => {
-      const numA = parseInt(a.name.replace(/\D/g, '')) || 0
-      const numB = parseInt(b.name.replace(/\D/g, '')) || 0
-      return numB - numA
-    })
-  }
-
-  // Build project/building lookup maps for display
   const projectMap: Record<number, string> = {}
   projects.forEach((p: any) => { projectMap[p.id] = p.name })
-  const buildingMap: Record<number, string> = {}
-  buildings.forEach((b: any) => { buildingMap[b.id] = b.name })
 
   const showBuildingCol = section === 'buildings'
-  const showFloorBuildingCol = section === 'floors'
-  const colSpan = showBuildingCol || showFloorBuildingCol ? 4 : 3
+  const colSpan = showBuildingCol ? 5 : 3
 
   return (
     <div className="space-y-5">
@@ -238,7 +194,7 @@ export default function DataInputTab() {
           >
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Add </span>
-            {section === 'projects' ? 'Project' : section === 'buildings' ? 'Building' : 'Floor'}
+            {section === 'projects' ? 'Project' : 'Building'}
           </button>
         </div>
 
@@ -250,7 +206,7 @@ export default function DataInputTab() {
                 <th className="th w-8">#</th>
                 <th className="th">Name</th>
                 {showBuildingCol && <th className="th">Assigned Project</th>}
-                {showFloorBuildingCol && <th className="th">Assigned Building / Tower</th>}
+                {showBuildingCol && <th className="th w-24 text-center">Floors</th>}
                 <th className="th w-20"></th>
               </tr>
             </thead>
@@ -276,11 +232,11 @@ export default function DataInputTab() {
                         : <span className="text-xs text-gray-400 italic">Not assigned</span>}
                     </td>
                   )}
-                  {showFloorBuildingCol && (
-                    <td className="td">
-                      {item.building_id
-                        ? <span className="badge badge-open">{buildingMap[item.building_id] || `Building #${item.building_id}`}</span>
-                        : <span className="text-xs text-gray-400 italic">Not assigned</span>}
+                  {showBuildingCol && (
+                    <td className="td text-center">
+                      {item.floor_count > 0
+                        ? <span className="text-xs font-medium text-gray-700">{item.floor_count}</span>
+                        : <span className="text-xs text-gray-400 italic">—</span>}
                     </td>
                   )}
                   <td className="td">
@@ -308,20 +264,6 @@ export default function DataInputTab() {
             </tbody>
           </table>
         </div>
-
-        {/* Helper notes */}
-        {section === 'buildings' && (
-          <p className="text-xs text-gray-400 mt-2.5 flex items-center gap-1.5">
-            <Link2 className="w-3 h-3" />
-            Click Edit to assign buildings to projects.
-          </p>
-        )}
-        {section === 'floors' && (
-          <p className="text-xs text-gray-400 mt-2.5 flex items-center gap-1.5">
-            <Link2 className="w-3 h-3" />
-            Click Edit to assign floors to buildings. Select a project first to filter the building list.
-          </p>
-        )}
       </div>
 
       {modal?.open && (
@@ -329,7 +271,6 @@ export default function DataInputTab() {
           state={modal}
           onClose={() => setModal(null)}
           projects={projects}
-          buildings={buildings}
         />
       )}
     </div>

@@ -31,7 +31,8 @@ class RCSBody(BaseModel):
 
 class BuildingBody(BaseModel):
     name: str
-    project_id: Optional[int] = None   # optional — link to project later
+    project_id: Optional[int] = None
+    total_floors: Optional[int] = None
 
 
 class FloorBody(BaseModel):
@@ -270,12 +271,17 @@ def get_buildings(project_id: Optional[int] = Query(None), db: Session = Depends
         q = q.filter(models.Building.project_id == project_id)
     rows = q.order_by(models.Building.name).all()
     return [{"id": r.id, "name": r.name, "project_id": r.project_id,
-             "project_name": r.project.name if r.project else None} for r in rows]
+             "project_name": r.project.name if r.project else None,
+             "floor_count": len(r.floors)} for r in rows]
 
 @router.post("/buildings", status_code=201)
 def create_building(body: BuildingBody, db: Session = Depends(get_db), _=Depends(require_admin)):
     r = models.Building(name=body.name.strip(), project_id=body.project_id)
-    db.add(r); db.commit(); db.refresh(r)
+    db.add(r); db.flush()
+    if body.total_floors and body.total_floors > 0:
+        for i in range(1, body.total_floors + 1):
+            db.add(models.Floor(name=f"Floor {i}", building_id=r.id))
+    db.commit(); db.refresh(r)
     return {"id": r.id, "name": r.name, "project_id": r.project_id}
 
 @router.put("/buildings/{id}")
