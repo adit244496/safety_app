@@ -26,6 +26,15 @@ def generate_obs_id(db: Session, project_id: int) -> str:
     return f"{prefix}-{date_str}-{str(count + 1).zfill(4)}"
 
 
+def _assert_obs_access(obs: models.Observation, user: models.User, write_roles: Optional[List[str]] = None):
+    """Raise 403 if user has no access to this observation's project, or lacks required role."""
+    allowed = get_allowed_project_ids(user)
+    if allowed is not None and obs.project_id not in allowed:
+        raise HTTPException(403, "Access denied to this observation")
+    if write_roles and user.role not in write_roles:
+        raise HTTPException(403, "Your role cannot perform this action")
+
+
 def get_allowed_project_ids(user: models.User) -> Optional[List[int]]:
     if user.role in ("SuperAdmin", "Admin", "PIC", "AIC"):
         return None
@@ -484,6 +493,7 @@ def get_observation(obs_id: str, db: Session = Depends(get_db), user: models.Use
         raise HTTPException(404, "Observation not found")
     if obs.status == 'Draft' and obs.created_by != user.id:
         raise HTTPException(404, "Observation not found")
+    _assert_obs_access(obs, user)
     return obs_to_dict(obs, db)
 
 
@@ -594,6 +604,7 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
     obs = db.query(models.Observation).filter(models.Observation.id == obs_id).first()
     if not obs:
         raise HTTPException(404, "Observation not found")
+    _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'Observer'])
 
     factor, level = calc_risk(body.severity or obs.severity or 1, body.probability or obs.probability or 1)
 
@@ -616,6 +627,7 @@ def update_status(obs_id: int, body: StatusBody, db: Session = Depends(get_db), 
     obs = db.query(models.Observation).filter(models.Observation.id == obs_id).first()
     if not obs:
         raise HTTPException(404, "Observation not found")
+    _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'])
     obs.status = body.status
     obs.updated_at = datetime.now()
     db.commit()
@@ -627,6 +639,7 @@ def add_comment(obs_id: int, body: CommentBody, db: Session = Depends(get_db), u
     obs = db.query(models.Observation).filter(models.Observation.id == obs_id).first()
     if not obs:
         raise HTTPException(404)
+    _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'])
     c = models.ObservationComment(observation_id=obs_id, user_id=user.id, comment=body.comment)
     db.add(c)
     obs.updated_at = datetime.now()

@@ -21,6 +21,20 @@ const PROB_LABELS: Record<number, string> = {
   5: '5 – Almost Certain',
 }
 
+function sortFloors(floors: any[]): any[] {
+  return [...floors].sort((a, b) => {
+    const rank = (name: string): [number, number] => {
+      const s = (name || '').toLowerCase().trim()
+      if (s.startsWith('basement')) return [0, parseInt(s.replace(/\D/g, '')) || 0]
+      if (s === 'terrace')          return [1, 0]
+      if (s.startsWith('floor'))    return [2, parseInt(s.replace(/\D/g, '')) || 0]
+      return [3, 0]
+    }
+    const [ra, na] = rank(a.name), [rb, nb] = rank(b.name)
+    return ra !== rb ? ra - rb : na - nb
+  })
+}
+
 function Field({ label, required, children, hint }: { label: string; required?: boolean; children: React.ReactNode; hint?: string }) {
   return (
     <div>
@@ -353,7 +367,7 @@ export default function ObservationForm() {
               <option value="">
                 {!form.building_id ? 'Select building first…' : !(floors?.length) ? 'No floors configured' : 'Select floor…'}
               </option>
-              {(floors || []).map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              {sortFloors(floors || []).map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </Field>
           <Field label="Exact Location">

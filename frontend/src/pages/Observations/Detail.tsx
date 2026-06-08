@@ -488,9 +488,9 @@ export default function ObservationDetail() {
   )
   if (!obs) return <div className="text-center text-gray-500 py-12">Observation not found</div>
 
-  const canEdit      = ['Admin', 'HO', 'Observer'].includes(user?.role || '')
-  const canUpload    = ['Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
-  const canComment   = ['Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
+  const canEdit      = ['SuperAdmin', 'Admin', 'HO', 'Observer'].includes(user?.role || '')
+  const canUpload    = ['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
+  const canComment   = ['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
   const isContractor = user?.role === 'Contractor'
 
   const riskBg = obs.risk_level === 'High'   ? 'bg-rose-100 text-rose-800 border-rose-200'
