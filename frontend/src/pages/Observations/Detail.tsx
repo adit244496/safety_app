@@ -501,7 +501,7 @@ export default function ObservationDetail() {
   const canUpload    = ['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
   const canComment   = ['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
   const isContractor = user?.role === 'Contractor'
-  const canDiscard   = obs.status === 'Draft' && (user?.role === 'SuperAdmin' || obs.created_by === user?.id)
+  const canDiscard   = user?.role === 'SuperAdmin' || (obs.status === 'Draft' && obs.created_by === user?.id)
 
   const riskBg = obs.risk_level === 'High'   ? 'bg-rose-100 text-rose-800 border-rose-200'
     : obs.risk_level === 'Medium' ? 'bg-amber-100 text-amber-800 border-amber-200'
@@ -594,7 +594,7 @@ export default function ObservationDetail() {
           {canDiscard && (
             confirmDiscard ? (
               <div className="flex items-center gap-1.5">
-                <span className="text-xs text-red-600 font-medium">Discard draft?</span>
+                <span className="text-xs text-red-600 font-medium">Delete observation?</span>
                 <button
                   onClick={() => discardDraft.mutate()}
                   disabled={discardDraft.isPending}
@@ -611,8 +611,8 @@ export default function ObservationDetail() {
                 className="btn-sm flex items-center gap-1.5 text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg px-3 py-1.5 transition-colors font-medium"
               >
                 <Trash2 className="w-4 h-4" />
-                <span className="hidden sm:inline">Discard Draft</span>
-                <span className="sm:hidden">Discard</span>
+                <span className="hidden sm:inline">{obs.status === 'Draft' ? 'Discard Draft' : 'Delete'}</span>
+                <span className="sm:hidden">{obs.status === 'Draft' ? 'Discard' : 'Delete'}</span>
               </button>
             )
           )}

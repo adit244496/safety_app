@@ -266,10 +266,10 @@ export default function ObservationsList() {
                     <p className="text-gray-400">{o.observer_name || o.created_by_name || '—'}</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    {o.status === 'Draft' && (
+                    {(user?.role === 'SuperAdmin' || o.status === 'Draft') && (
                       confirmDiscard === o.id ? (
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                          <span className="text-[10px] text-red-600 font-medium">Discard?</span>
+                          <span className="text-[10px] text-red-600 font-medium">Delete?</span>
                           <button
                             onClick={e => { e.stopPropagation(); discardDraft.mutate(o.id) }}
                             className="text-[10px] font-semibold text-white bg-red-500 hover:bg-red-600 px-1.5 py-0.5 rounded"
@@ -357,10 +357,10 @@ export default function ObservationsList() {
                     </td>
                     <td className="td">
                       <div className="flex items-center gap-1.5 justify-end">
-                        {o.status === 'Draft' && (
+                        {(user?.role === 'SuperAdmin' || o.status === 'Draft') && (
                           confirmDiscard === o.id ? (
                             <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                              <span className="text-[10px] text-red-600 font-medium">Discard?</span>
+                              <span className="text-[10px] text-red-600 font-medium">Delete?</span>
                               <button
                                 onClick={e => { e.stopPropagation(); discardDraft.mutate(o.id) }}
                                 className="text-[10px] font-semibold text-white bg-red-500 hover:bg-red-600 px-1.5 py-0.5 rounded transition-colors"
@@ -372,7 +372,7 @@ export default function ObservationsList() {
                             </div>
                           ) : (
                             <button
-                              title="Discard draft"
+                              title="Delete observation"
                               onClick={e => { e.stopPropagation(); setConfirmDiscard(o.id) }}
                               className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                             >
