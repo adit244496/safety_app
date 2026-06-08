@@ -21,15 +21,25 @@ const PROB_LABELS: Record<number, string> = {
   5: '5 – Almost Certain',
 }
 
-function sortFloors(floors: any[]): any[] {
-  return [...floors].sort((a, b) => {
+function prepareFloors(floors: any[]): any[] {
+  // Drop ordinal names (e.g. "3rd") when the canonical "Floor N" already exists
+  const numberedSet = new Set<number>()
+  for (const f of floors) {
+    const m = (f.name || '').toLowerCase().trim().match(/^floor\s+(\d+)$/)
+    if (m) numberedSet.add(parseInt(m[1]))
+  }
+  const deduped = floors.filter(f => {
+    const m = (f.name || '').toLowerCase().trim().match(/^(\d+)(st|nd|rd|th)$/)
+    return !(m && numberedSet.has(parseInt(m[1])))
+  })
+
+  return [...deduped].sort((a, b) => {
     const rank = (name: string): [number, number] => {
       const s = (name || '').toLowerCase().trim()
       if (s.startsWith('basement'))  return [0, parseInt(s.replace(/\D/g, '')) || 0]
       if (s === 'terrace')           return [1, 0]
       if (s === 'ground' || s === 'ground floor' || s === 'gf') return [2, 0]
       if (s.startsWith('floor'))     return [3, parseInt(s.replace(/\D/g, '')) || 0]
-      // ordinal names: "1st", "2nd", "3rd", "4th" etc.
       const m = s.match(/^(\d+)(st|nd|rd|th)$/)
       if (m)                         return [3, parseInt(m[1])]
       return [4, 0]
@@ -371,7 +381,7 @@ export default function ObservationForm() {
               <option value="">
                 {!form.building_id ? 'Select building first…' : !(floors?.length) ? 'No floors configured' : 'Select floor…'}
               </option>
-              {sortFloors(floors || []).map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              {prepareFloors(floors || []).map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>
           </Field>
           <Field label="Exact Location">
