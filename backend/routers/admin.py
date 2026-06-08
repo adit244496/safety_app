@@ -288,7 +288,32 @@ def create_building(body: BuildingBody, db: Session = Depends(get_db), _=Depends
 def update_building(id: int, body: BuildingBody, db: Session = Depends(get_db), _=Depends(require_admin)):
     r = db.query(models.Building).filter(models.Building.id == id).first()
     if not r: raise HTTPException(404)
-    r.name = body.name.strip(); r.project_id = body.project_id; db.commit()
+    r.name = body.name.strip(); r.project_id = body.project_id
+
+    if body.total_floors is not None and body.total_floors >= 0:
+        current_count = db.query(models.Floor).filter(models.Floor.building_id == id).count()
+        new_total = body.total_floors
+        if new_total > current_count:
+            for i in range(current_count + 1, new_total + 1):
+                db.add(models.Floor(name=f"Floor {i}", building_id=id))
+        elif new_total < current_count:
+            # Remove from highest floor down, only if not referenced by any observation
+            floors_desc = (
+                db.query(models.Floor)
+                .filter(models.Floor.building_id == id)
+                .order_by(models.Floor.id.desc())
+                .all()
+            )
+            to_remove = current_count - new_total
+            for floor in floors_desc:
+                if to_remove == 0:
+                    break
+                has_obs = db.query(models.Observation).filter(models.Observation.floor_id == floor.id).first()
+                if not has_obs:
+                    db.delete(floor)
+                    to_remove -= 1
+
+    db.commit()
     return {"success": True}
 
 @router.delete("/buildings/{id}")

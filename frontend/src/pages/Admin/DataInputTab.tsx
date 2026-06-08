@@ -28,7 +28,7 @@ function Modal({
   const qc = useQueryClient()
   const [name, setName] = useState(state.editing?.name ?? '')
   const [projectId, setProjectId] = useState<string>(state.editing?.project_id?.toString() ?? '')
-  const [totalFloors, setTotalFloors] = useState<string>('')
+  const [totalFloors, setTotalFloors] = useState<string>(state.editing?.floor_count?.toString() ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -41,7 +41,7 @@ function Modal({
       const body: any = { name: name.trim() }
       if (state.section === 'buildings') {
         body.project_id = projectId ? Number(projectId) : null
-        if (!isEdit && totalFloors && Number(totalFloors) > 0) {
+        if (totalFloors && Number(totalFloors) > 0) {
           body.total_floors = Number(totalFloors)
         }
       }
@@ -103,20 +103,20 @@ function Modal({
                 </select>
               </div>
 
-              {!isEdit && (
-                <div>
-                  <label className="label">Total Floors
-                    <span className="text-gray-400 font-normal text-xs ml-1">(auto-creates Floor 1 … Floor N)</span>
-                  </label>
-                  <input
-                    type="number" min="0" max="200"
-                    className="input"
-                    placeholder="e.g. 10"
-                    value={totalFloors}
-                    onChange={e => setTotalFloors(e.target.value)}
-                  />
-                </div>
-              )}
+              <div>
+                <label className="label">Total Floors
+                  <span className="text-gray-400 font-normal text-xs ml-1">
+                    {isEdit ? '(increase to add more floors)' : '(auto-creates Floor 1 … Floor N)'}
+                  </span>
+                </label>
+                <input
+                  type="number" min="0" max="200"
+                  className="input"
+                  placeholder="e.g. 10"
+                  value={totalFloors}
+                  onChange={e => setTotalFloors(e.target.value)}
+                />
+              </div>
             </>
           )}
         </div>
