@@ -27,6 +27,28 @@ class UserUpdate(BaseModel):
     project_ids: List[int] = []
 
 
+def _check_uniqueness(db: Session, role: str, name: str, email: str, exclude_id: int = None):
+    """
+    Contractor: (name, email) pair must be unique.
+    All other roles: email alone must be unique.
+    """
+    q = db.query(models.User)
+    if exclude_id:
+        q = q.filter(models.User.id != exclude_id)
+
+    if role == "Contractor":
+        conflict = q.filter(
+            models.User.name == name,
+            models.User.email == email,
+        ).first()
+        if conflict:
+            raise HTTPException(409, "A contractor with this company name and email already exists")
+    else:
+        conflict = q.filter(models.User.email == email).first()
+        if conflict:
+            raise HTTPException(409, "Email already in use")
+
+
 def user_to_dict(user: models.User):
     return {
         "id": user.id,
@@ -48,8 +70,7 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
 def create_user(body: UserCreate, db: Session = Depends(get_db), _=Depends(require_admin)):
     if body.role not in VALID_ROLES:
         raise HTTPException(400, "Invalid role")
-    if db.query(models.User).filter(models.User.email == body.email.lower().strip()).first():
-        raise HTTPException(409, "Email already in use")
+    _check_uniqueness(db, body.role, body.name.strip(), body.email.lower().strip())
 
     user = models.User(
         name=body.name.strip(),
@@ -74,6 +95,7 @@ def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db), _
         raise HTTPException(404, "User not found")
     if body.role not in VALID_ROLES:
         raise HTTPException(400, "Invalid role")
+    _check_uniqueness(db, body.role, body.name.strip(), body.email.lower().strip(), exclude_id=user_id)
 
     user.name = body.name.strip()
     user.email = body.email.lower().strip()

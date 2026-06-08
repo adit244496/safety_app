@@ -164,8 +164,8 @@ export default function UsersTab() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="label">Full Name *</label>
-                  <input className="input" placeholder="Jane Smith" value={form.name} onChange={e => set('name', e.target.value)} />
+                  <label className="label">{form.role === 'Contractor' ? 'Contractor Company Name *' : 'Full Name *'}</label>
+                  <input className="input" placeholder={form.role === 'Contractor' ? 'e.g. ABC Construction' : 'Jane Smith'} value={form.name} onChange={e => set('name', e.target.value)} />
                 </div>
                 <div>
                   <label className="label">Email Address *</label>

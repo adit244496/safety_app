@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -32,7 +32,7 @@ export default function Dashboard() {
   // ── Filter state (arrays for multi-select) ──────────────────────────────
   const [projectIds,     setProjectIds]     = useState<number[]>([])
   const [buildingId,     setBuildingId]     = useState<number | ''>('')
-  const [contractorIds,  setContractorIds]  = useState<number[]>([])
+  const [selectedContractors, setSelectedContractors] = useState<string[]>([])
   const [coreConcernIds, setCoreConcernIds] = useState<number[]>([])
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
   const [dateFrom,       setDateFrom]       = useState('')
@@ -41,7 +41,7 @@ export default function Dashboard() {
   const activeFilterCount =
     (projectIds.length    > 0 ? 1 : 0) +
     (buildingId           ? 1 : 0) +
-    (contractorIds.length > 0 ? 1 : 0) +
+    (selectedContractors.length > 0 ? 1 : 0) +
     (coreConcernIds.length > 0 ? 1 : 0) +
     (riskLevels.length    > 0 ? 1 : 0) +
     (dateFrom             ? 1 : 0) +
@@ -71,15 +71,30 @@ export default function Dashboard() {
   })
 
   const contractors: any[] = (users || []).filter((u: any) => u.role === 'Contractor')
+  const contractorOptions: MSOption[] = useMemo(() => {
+    const seen = new Set<string>()
+    return contractors
+      .filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
+      .map((c: any) => ({ value: c.name, label: c.name }))
+  }, [contractors])
+  const companyToUserIds = useMemo(() => {
+    const map = new Map<string, number[]>()
+    for (const c of contractors) { map.set(c.name, [...(map.get(c.name) || []), c.id]) }
+    return map
+  }, [contractors])
+  const expandedContractorIds = useMemo(() =>
+    selectedContractors.flatMap(name => companyToUserIds.get(name) || []),
+    [selectedContractors, companyToUserIds]
+  )
 
   // ── Stats query ─────────────────────────────────────────────────────────
   const { data, isLoading } = useQuery({
-    queryKey: ['stats', projectIds, buildingId, contractorIds, dateFrom, dateTo, coreConcernIds, riskLevels],
+    queryKey: ['stats', projectIds, buildingId, selectedContractors, dateFrom, dateTo, coreConcernIds, riskLevels],
     queryFn: () => api.get('/observations/stats/summary', {
       params: {
-        project_id:         projectIds.length    ? projectIds    : undefined,
-        building_id:        buildingId           || undefined,
-        contractor_user_id: contractorIds.length ? contractorIds : undefined,
+        project_id:         projectIds.length          ? projectIds          : undefined,
+        building_id:        buildingId                 || undefined,
+        contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
         date_from:          dateFrom             || undefined,
         date_to:            dateTo               || undefined,
         core_concern_id:    coreConcernIds.length ? coreConcernIds : undefined,
@@ -107,7 +122,7 @@ export default function Dashboard() {
   ]
 
   const resetFilters = () => {
-    setProjectIds([]); setBuildingId(''); setContractorIds([])
+    setProjectIds([]); setBuildingId(''); setSelectedContractors([])
     setCoreConcernIds([]); setRiskLevels([])
     setDateFrom(''); setDateTo('')
   }
@@ -115,7 +130,6 @@ export default function Dashboard() {
   // Options arrays for MultiSelectFilter
   const projectOptions:     MSOption[] = (projects    || []).map((p: any) => ({ value: p.id,   label: p.name }))
   const buildingOptions:    MSOption[] = (buildings   || []).map((b: any) => ({ value: b.id,   label: b.name }))
-  const contractorOptions:  MSOption[] = contractors.map((c: any)        => ({ value: c.id,   label: c.name }))
   const coreConcernOptions: MSOption[] = (coreConcerns || []).map((c: any) => ({ value: c.id, label: c.name }))
 
   return (
@@ -159,8 +173,8 @@ export default function Dashboard() {
               {buildingOptions.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
             </select>
           )}
-          <MultiSelectFilter size="sm" options={contractorOptions} value={contractorIds}
-            onChange={v => setContractorIds(v as number[])} placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
+          <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
+            onChange={v => setSelectedContractors(v as string[])} placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
           <MultiSelectFilter size="sm" options={PRIORITY_OPTIONS} value={riskLevels}
             onChange={v => setRiskLevels(v as string[])} placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
           <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { FileText, AlertTriangle, ZoomIn, ZoomOut, X, Download, LayoutList } from 'lucide-react'
@@ -1178,7 +1178,7 @@ export default function ReportPage() {
   const [projectIds,      setProjectIds]      = useState<number[]>([])
   const [dateFrom,        setDateFrom]        = useState(last30)
   const [dateTo,          setDateTo]          = useState(today)
-  const [contractorIds,   setContractorIds]   = useState<number[]>([])
+  const [selectedContractors, setSelectedContractors] = useState<string[]>([])
   const [riskLevels,      setRiskLevels]      = useState<string[]>([])
   const [reportDate,      setReportDate]      = useState(new Date().toISOString().slice(0, 10))
   const [trackerNo,       setTrackerNo]       = useState('')
@@ -1195,19 +1195,33 @@ export default function ReportPage() {
   const contractors: any[] = (users || []).filter((u: any) => u.role === 'Contractor')
 
   const projectOptions:    MSOption[] = (projects || []).map((p: any) => ({ value: p.id, label: p.name }))
-  const contractorOptions: MSOption[] = contractors.map((c: any)     => ({ value: c.id, label: c.name }))
+  const contractorOptions: MSOption[] = useMemo(() => {
+    const seen = new Set<string>()
+    return contractors
+      .filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
+      .map((c: any) => ({ value: c.name, label: c.name }))
+  }, [contractors])
+  const companyToUserIds = useMemo(() => {
+    const map = new Map<string, number[]>()
+    for (const c of contractors) { map.set(c.name, [...(map.get(c.name) || []), c.id]) }
+    return map
+  }, [contractors])
+  const expandedContractorIds = useMemo(() =>
+    selectedContractors.flatMap(name => companyToUserIds.get(name) || []),
+    [selectedContractors, companyToUserIds]
+  )
   const priorityOptions:   MSOption[] = [
     { value: 'High', label: 'High' }, { value: 'Medium', label: 'Medium' }, { value: 'Low', label: 'Low' },
   ]
 
   const { data: reportData, isFetching } = useQuery({
-    queryKey: ['report', projectIds, dateFrom, dateTo, contractorIds, riskLevels],
+    queryKey: ['report', projectIds, dateFrom, dateTo, selectedContractors, riskLevels],
     queryFn: () => api.get('/observations/report', {
       params: {
-        project_id:         projectIds.length    ? projectIds    : undefined,
-        date_from:          dateFrom             || undefined,
-        date_to:            dateTo               || undefined,
-        contractor_user_id: contractorIds.length ? contractorIds : undefined,
+        project_id:         projectIds.length            ? projectIds            : undefined,
+        date_from:          dateFrom                     || undefined,
+        date_to:            dateTo                       || undefined,
+        contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
         risk_level:         riskLevels.length    ? riskLevels    : undefined,
       },
     }).then(r => r.data),
@@ -1219,9 +1233,9 @@ export default function ReportPage() {
   const projectLabel    = projectIds.length === 0  ? 'All Projects'
     : projectIds.length === 1 ? ((projects || []).find((p: any) => p.id === projectIds[0])?.name ?? '—')
     : `${projectIds.length} projects`
-  const contractorLabel = contractorIds.length === 0 ? 'All'
-    : contractorIds.length === 1 ? (contractors.find((c: any) => c.id === contractorIds[0])?.name ?? '—')
-    : `${contractorIds.length} contractors`
+  const contractorLabel = selectedContractors.length === 0 ? 'All'
+    : selectedContractors.length === 1 ? selectedContractors[0]
+    : `${selectedContractors.length} contractors`
   const priorityLabel   = riskLevels.length === 0 ? 'All' : riskLevels.join(', ')
 
   const dateRange = dateFrom && dateTo
@@ -1245,7 +1259,7 @@ export default function ReportPage() {
 
   const reset = () => {
     setProjectIds([]); setDateFrom(last30); setDateTo(today)
-    setContractorIds([]); setRiskLevels([]); setGenerated(false); setTrackerNo('')
+    setSelectedContractors([]); setRiskLevels([]); setGenerated(false); setTrackerNo('')
   }
 
   return (
@@ -1306,8 +1320,8 @@ export default function ReportPage() {
               <label className="label">Contractor</label>
               <MultiSelectFilter
                 options={contractorOptions}
-                value={contractorIds}
-                onChange={v => { setContractorIds(v as number[]); setGenerated(false) }}
+                value={selectedContractors}
+                onChange={v => { setSelectedContractors(v as string[]); setGenerated(false) }}
                 placeholder="All Contractors"
                 className="w-full"
               />

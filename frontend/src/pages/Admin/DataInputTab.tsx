@@ -20,19 +20,33 @@ interface ModalState {
 }
 
 function Modal({
-  state, onClose, projects,
+  state, onClose, projects, buildings,
 }: {
   state: ModalState
   onClose: () => void
   projects: any[]
+  buildings: any[]
 }) {
   const qc = useQueryClient()
   const [name, setName] = useState(state.editing?.name ?? '')
   const [projectId, setProjectId] = useState<string>(state.editing?.project_id?.toString() ?? '')
+  const [buildingId, setBuildingId] = useState<string>(state.editing?.building_id?.toString() ?? '')
+  // for floors: filter buildings by selected project
+  const [filterProjectId, setFilterProjectId] = useState<string>(() => {
+    if (state.section === 'floors' && state.editing?.building_id) {
+      const b = buildings.find((b: any) => b.id === state.editing.building_id)
+      return b?.project_id?.toString() ?? ''
+    }
+    return ''
+  })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
   const isEdit = !!state.editing
+
+  const filteredBuildings = filterProjectId
+    ? buildings.filter((b: any) => b.project_id?.toString() === filterProjectId)
+    : buildings
 
   async function save() {
     if (!name.trim()) { setError('Name is required'); return }
@@ -40,6 +54,7 @@ function Modal({
     try {
       const body: any = { name: name.trim() }
       if (state.section === 'buildings') body.project_id = projectId ? Number(projectId) : null
+      if (state.section === 'floors') body.building_id = buildingId ? Number(buildingId) : null
 
       const endpoint =
         state.section === 'projects' ? '/projects/' :
@@ -65,7 +80,7 @@ function Modal({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b">
           <h2 className="font-semibold text-gray-900">
-            {isEdit ? 'Edit' : 'Add'} {SECTIONS.find(s => s.key === state.section)?.label.replace('s', '').trimEnd()}
+            {isEdit ? 'Edit' : 'Add'} {SECTIONS.find(s => s.key === state.section)?.label.replace(/s$/, '').trimEnd()}
           </h2>
           <button onClick={onClose} className="btn-icon"><X className="w-4 h-4" /></button>
         </div>
@@ -100,7 +115,36 @@ function Modal({
             </div>
           )}
 
-
+          {state.section === 'floors' && (
+            <>
+              <div>
+                <label className="label flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-blue-500" />
+                  Filter by Project
+                  <span className="text-gray-400 font-normal text-xs">(narrows building list)</span>
+                </label>
+                <select
+                  className="select"
+                  value={filterProjectId}
+                  onChange={e => { setFilterProjectId(e.target.value); setBuildingId('') }}
+                >
+                  <option value="">— All projects —</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-indigo-500" />
+                  Assign to Building / Tower
+                  <span className="text-gray-400 font-normal text-xs">(optional)</span>
+                </label>
+                <select className="select" value={buildingId} onChange={e => setBuildingId(e.target.value)}>
+                  <option value="">— Not assigned —</option>
+                  {filteredBuildings.map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex gap-3 px-6 py-4 border-t bg-gray-50 justify-end">
@@ -148,7 +192,7 @@ export default function DataInputTab() {
 
   let items: any[] = dataMap[section]
   const loading = loadingMap[section]
-  
+
   // Sort floors in descending order
   if (section === 'floors') {
     items = [...items].sort((a, b) => {
@@ -163,6 +207,10 @@ export default function DataInputTab() {
   projects.forEach((p: any) => { projectMap[p.id] = p.name })
   const buildingMap: Record<number, string> = {}
   buildings.forEach((b: any) => { buildingMap[b.id] = b.name })
+
+  const showBuildingCol = section === 'buildings'
+  const showFloorBuildingCol = section === 'floors'
+  const colSpan = showBuildingCol || showFloorBuildingCol ? 4 : 3
 
   return (
     <div className="space-y-5">
@@ -201,18 +249,19 @@ export default function DataInputTab() {
               <tr>
                 <th className="th w-8">#</th>
                 <th className="th">Name</th>
-                {section === 'buildings' && <th className="th">Assigned Project</th>}
+                {showBuildingCol && <th className="th">Assigned Project</th>}
+                {showFloorBuildingCol && <th className="th">Assigned Building / Tower</th>}
                 <th className="th w-20"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading && (
-                <tr><td colSpan={4} className="td text-center py-10">
+                <tr><td colSpan={colSpan} className="td text-center py-10">
                   <div className="animate-spin w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto" />
                 </td></tr>
               )}
               {!loading && items.length === 0 && (
-                <tr><td colSpan={4} className="td text-center py-10 text-gray-400 italic">
+                <tr><td colSpan={colSpan} className="td text-center py-10 text-gray-400 italic">
                   No entries yet — click "Add" to get started
                 </td></tr>
               )}
@@ -220,10 +269,17 @@ export default function DataInputTab() {
                 <tr key={item.id} className="tr">
                   <td className="td text-gray-400 text-xs">{idx + 1}</td>
                   <td className="td font-medium text-gray-900">{item.name}</td>
-                  {section === 'buildings' && (
+                  {showBuildingCol && (
                     <td className="td">
                       {item.project_id
                         ? <span className="badge badge-open">{projectMap[item.project_id] || `Project #${item.project_id}`}</span>
+                        : <span className="text-xs text-gray-400 italic">Not assigned</span>}
+                    </td>
+                  )}
+                  {showFloorBuildingCol && (
+                    <td className="td">
+                      {item.building_id
+                        ? <span className="badge badge-open">{buildingMap[item.building_id] || `Building #${item.building_id}`}</span>
                         : <span className="text-xs text-gray-400 italic">Not assigned</span>}
                     </td>
                   )}
@@ -253,11 +309,17 @@ export default function DataInputTab() {
           </table>
         </div>
 
-        {/* Helper note for buildings */}
+        {/* Helper notes */}
         {section === 'buildings' && (
           <p className="text-xs text-gray-400 mt-2.5 flex items-center gap-1.5">
             <Link2 className="w-3 h-3" />
             Click Edit to assign buildings to projects.
+          </p>
+        )}
+        {section === 'floors' && (
+          <p className="text-xs text-gray-400 mt-2.5 flex items-center gap-1.5">
+            <Link2 className="w-3 h-3" />
+            Click Edit to assign floors to buildings. Select a project first to filter the building list.
           </p>
         )}
       </div>
@@ -267,6 +329,7 @@ export default function DataInputTab() {
           state={modal}
           onClose={() => setModal(null)}
           projects={projects}
+          buildings={buildings}
         />
       )}
     </div>

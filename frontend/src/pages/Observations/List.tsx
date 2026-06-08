@@ -20,7 +20,7 @@ export default function ObservationsList() {
 
   const [statuses,       setStatuses]       = useState<string[]>([])
   const [projectIds,     setProjectIds]     = useState<number[]>([])
-  const [contractorIds,  setContractorIds]  = useState<number[]>([])
+  const [selectedContractors, setSelectedContractors] = useState<string[]>([])
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
   const [coreConcernIds,    setCoreConcernIds]    = useState<number[]>([])
   const [specificConcernIds, setSpecificConcernIds] = useState<number[]>([])
@@ -31,7 +31,7 @@ export default function ObservationsList() {
   const activeCount =
     (statuses.length          > 0 ? 1 : 0) +
     (projectIds.length        > 0 ? 1 : 0) +
-    (contractorIds.length     > 0 ? 1 : 0) +
+    (selectedContractors.length > 0 ? 1 : 0) +
     (riskLevels.length        > 0 ? 1 : 0) +
     (coreConcernIds.length    > 0 ? 1 : 0) +
     (specificConcernIds.length > 0 ? 1 : 0) +
@@ -39,12 +39,12 @@ export default function ObservationsList() {
     (dateTo                   ? 1 : 0)
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['observations', statuses, projectIds, contractorIds, riskLevels, coreConcernIds, specificConcernIds, dateFrom, dateTo, page],
+    queryKey: ['observations', statuses, projectIds, selectedContractors, riskLevels, coreConcernIds, specificConcernIds, dateFrom, dateTo, page],
     queryFn: () => api.get('/observations/', {
       params: {
-        status:               statuses.length          ? statuses          : undefined,
-        project_id:           projectIds.length        ? projectIds        : undefined,
-        contractor_user_id:   contractorIds.length     ? contractorIds     : undefined,
+        status:               statuses.length              ? statuses              : undefined,
+        project_id:           projectIds.length            ? projectIds            : undefined,
+        contractor_user_id:   expandedContractorIds.length ? expandedContractorIds : undefined,
         risk_level:           riskLevels.length        ? riskLevels        : undefined,
         core_concern_id:      coreConcernIds.length    ? coreConcernIds    : undefined,
         specific_concern_id:  specificConcernIds.length ? specificConcernIds : undefined,
@@ -79,10 +79,24 @@ export default function ObservationsList() {
     ...STABLE,
   })
 
-  const contractors: any[]    = (users || []).filter((u: any) => u.role === 'Contractor')
-  const projectOptions:     MSOption[] = (projects    || []).map((p: any) => ({ value: p.id,   label: p.name }))
-  const contractorOptions:  MSOption[] = contractors.map((c: any)          => ({ value: c.id,   label: c.name }))
-  const coreConcernOptions: MSOption[] = (concerns    || []).map((c: any)  => ({ value: c.id,   label: c.name }))
+  const contractors: any[] = (users || []).filter((u: any) => u.role === 'Contractor')
+  const contractorOptions: MSOption[] = useMemo(() => {
+    const seen = new Set<string>()
+    return contractors
+      .filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
+      .map((c: any) => ({ value: c.name, label: c.name }))
+  }, [contractors])
+  const companyToUserIds = useMemo(() => {
+    const map = new Map<string, number[]>()
+    for (const c of contractors) { map.set(c.name, [...(map.get(c.name) || []), c.id]) }
+    return map
+  }, [contractors])
+  const expandedContractorIds = useMemo(() =>
+    selectedContractors.flatMap(name => companyToUserIds.get(name) || []),
+    [selectedContractors, companyToUserIds]
+  )
+  const projectOptions:     MSOption[] = (projects || []).map((p: any) => ({ value: p.id, label: p.name }))
+  const coreConcernOptions: MSOption[] = (concerns  || []).map((c: any) => ({ value: c.id, label: c.name }))
   const filteredSpecificConcerns = useMemo(() => {
     const all: any[] = allSpecificConcerns || []
     if (coreConcernIds.length === 0) return all
@@ -95,7 +109,7 @@ export default function ObservationsList() {
   const totalPages = data?.pages || 1
 
   const clearFilters = () => {
-    setStatuses([]); setProjectIds([]); setContractorIds([])
+    setStatuses([]); setProjectIds([]); setSelectedContractors([])
     setRiskLevels([]); setCoreConcernIds([]); setSpecificConcernIds([]); setDateFrom(''); setDateTo(''); setPage(1)
   }
   const resetPage = () => setPage(1)
@@ -142,8 +156,8 @@ export default function ObservationsList() {
             onChange={v => { setProjectIds(v as number[]); resetPage() }}
             placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
 
-          <MultiSelectFilter size="sm" options={contractorOptions} value={contractorIds}
-            onChange={v => { setContractorIds(v as number[]); resetPage() }}
+          <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
+            onChange={v => { setSelectedContractors(v as string[]); resetPage() }}
             placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
 
           <MultiSelectFilter size="sm" options={RISK_OPTIONS} value={riskLevels}

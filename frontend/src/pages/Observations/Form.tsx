@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { Save, ArrowLeft, X, Camera, AlertTriangle, CheckCircle2, MapPin, ClipboardList, ShieldAlert, GitBranch, ImagePlus, FileEdit } from 'lucide-react'
@@ -27,6 +27,18 @@ function Field({ label, required, children, hint }: { label: string; required?: 
       <label className="label">{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>
       {children}
       {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+    </div>
+  )
+}
+
+function SectionCard({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="section-card">
+      <div className="section-card-header">
+        {icon && <span className="text-indigo-500">{icon}</span>}
+        <h2>{title}</h2>
+      </div>
+      <div className="section-card-body">{children}</div>
     </div>
   )
 }
@@ -100,7 +112,7 @@ export default function ObservationForm() {
     exact_location: '',
     obs_time: now.toTimeString().slice(0, 5),          // auto HH:MM
     obs_date: now.toISOString().slice(0, 10),           // auto today
-    contractor_user_id: '', to_be_rectified_by: '', observer_name: user?.name || '',
+    contractor_user_id: '', contractor_company: '', to_be_rectified_by: '', observer_name: user?.name || '',
     core_concern_id: '', specific_concern_id: '', specific_concern_text: '',
     possible_outcome: '', severity: '', probability: '',
     root_cause_category_id: '', root_cause_specific_id: '',
@@ -126,6 +138,15 @@ export default function ObservationForm() {
   const { data: targetDates } = useQuery({ queryKey: ['target-dates'],         queryFn: () => api.get('/admin/target-dates').then(r => r.data), ...STABLE })
   const { data: outcomes }    = useQuery({ queryKey: ['possible-outcomes'],    queryFn: () => api.get('/admin/possible-outcomes').then(r => r.data), ...STABLE })
   const { data: contractors } = useQuery({ queryKey: ['users-contractors'],    queryFn: () => api.get('/users/').then(r => r.data.filter((u: any) => u.role === 'Contractor')), ...STABLE })
+
+  const contractorCompanies: any[] = useMemo(() => {
+    const seen = new Set<string>()
+    return (contractors || []).filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
+  }, [contractors])
+  const companyWorkers: any[] = useMemo(() =>
+    (contractors || []).filter((c: any) => c.name === form.contractor_company),
+    [contractors, form.contractor_company]
+  )
 
   // placeholderData keeps previous data while new key fetches → prevents dropdown from going blank → no layout shift
   const { data: specificConcerns } = useQuery({
@@ -160,6 +181,7 @@ export default function ObservationForm() {
         obs_time: existing.obs_time || '',
         obs_date: existing.obs_date || '',
         contractor_user_id: existing.contractor_user_id?.toString() || '',
+        contractor_company: existing.contractor_name || '',
         to_be_rectified_by: existing.to_be_rectified_by || '',
         observer_name: existing.observer_name || '',
         core_concern_id: existing.core_concern_id?.toString() || '',
@@ -261,16 +283,6 @@ export default function ObservationForm() {
   const riskColor = risk?.level === 'High' ? 'border-rose-300 bg-rose-50' : risk?.level === 'Medium' ? 'border-amber-300 bg-amber-50' : 'border-emerald-300 bg-emerald-50'
   const riskTextColor = risk?.level === 'High' ? 'text-rose-700' : risk?.level === 'Medium' ? 'text-amber-700' : 'text-emerald-700'
 
-  const SectionCard = ({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) => (
-    <div className="section-card">
-      <div className="section-card-header">
-        {icon && <span className="text-indigo-500">{icon}</span>}
-        <h2>{title}</h2>
-      </div>
-      <div className="section-card-body">{children}</div>
-    </div>
-  )
-
   const G3 = 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4'
 
   return (
@@ -348,27 +360,22 @@ export default function ObservationForm() {
           <Field label="Observer Name">
             <input className="input" value={form.observer_name} onChange={e => set('observer_name', e.target.value)} />
           </Field>
-          <Field label="Contractor">
+          <Field label="Contractor Company">
             <select
               className="select"
-              value={form.contractor_user_id}
+              value={form.contractor_company}
               onChange={e => {
-                const selectedId = e.target.value
-                set('contractor_user_id', selectedId)
-                // Auto-fill "To Be Rectified By" with the contractor's name
-                // only if the field is still empty or matches a previous auto-fill
-                if (!isEdit) {
-                  const selectedContractor = (contractors || []).find((c: any) => String(c.id) === selectedId)
-                  const prevContractor = (contractors || []).find((c: any) => String(c.id) === form.contractor_user_id)
-                  const prevAutoName = prevContractor?.name || ''
-                  if (!form.to_be_rectified_by || form.to_be_rectified_by === prevAutoName) {
-                    set('to_be_rectified_by', selectedContractor?.name || '')
-                  }
-                }
+                const company = e.target.value
+                const workers = (contractors || []).filter((c: any) => c.name === company)
+                const firstWorker = workers[0]
+                set('contractor_company', company)
+                set('contractor_user_id', firstWorker ? String(firstWorker.id) : '')
+                // auto-fill name if only one worker; clear otherwise so user picks
+                set('to_be_rectified_by', workers.length === 1 ? (firstWorker?.email || '') : '')
               }}
             >
               <option value="">Select contractor…</option>
-              {(contractors || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {contractorCompanies.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
             </select>
           </Field>
           {/* Date + Time on same row */}
@@ -383,7 +390,28 @@ export default function ObservationForm() {
             </div>
           </div>
           <Field label="To Be Rectified By">
-            <input className="input" placeholder="Name / dept" value={form.to_be_rectified_by} onChange={e => set('to_be_rectified_by', e.target.value)} />
+            {form.contractor_company && companyWorkers.length > 1 ? (
+              <select
+                className="select"
+                value={form.contractor_user_id}
+                onChange={e => {
+                  const userId = e.target.value
+                  const worker = companyWorkers.find((c: any) => String(c.id) === userId)
+                  set('contractor_user_id', userId)
+                  set('to_be_rectified_by', worker?.email || '')
+                }}
+              >
+                <option value="">Select individual…</option>
+                {companyWorkers.map((c: any) => <option key={c.id} value={String(c.id)}>{c.email}</option>)}
+              </select>
+            ) : (
+              <input
+                className="input"
+                placeholder={form.contractor_company ? 'Auto-filled from contractor' : 'Select contractor first'}
+                value={form.to_be_rectified_by}
+                onChange={e => set('to_be_rectified_by', e.target.value)}
+              />
+            )}
           </Field>
         </div>
       </SectionCard>

@@ -329,7 +329,7 @@ function rowPriority(row: any): 'critical' | 'warning' | 'normal' {
 
 function ComplianceAnalysis() {
   const [projectIds,    setProjectIds]    = useState<number[]>([])
-  const [contractorIds, setContractorIds] = useState<number[]>([])
+  const [selectedContractors, setSelectedContractors] = useState<string[]>([])
   const _last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const _today  = new Date().toISOString().slice(0, 10)
   const [dateFrom,      setDateFrom]      = useState(_last30)
@@ -347,15 +347,29 @@ function ComplianceAnalysis() {
     queryFn: () => api.get('/users/').then(r => r.data),
   })
   const contractors: any[] = (users || []).filter((u: any) => u.role === 'Contractor')
-  const projectOptions:    MSOption[] = (projects || []).map((p: any) => ({ value: p.id, label: p.name }))
-  const contractorOptions: MSOption[] = contractors.map((c: any)     => ({ value: c.id, label: c.name }))
+  const projectOptions: MSOption[] = (projects || []).map((p: any) => ({ value: p.id, label: p.name }))
+  const contractorOptions: MSOption[] = useMemo(() => {
+    const seen = new Set<string>()
+    return contractors
+      .filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
+      .map((c: any) => ({ value: c.name, label: c.name }))
+  }, [contractors])
+  const companyToUserIds = useMemo(() => {
+    const map = new Map<string, number[]>()
+    for (const c of contractors) { map.set(c.name, [...(map.get(c.name) || []), c.id]) }
+    return map
+  }, [contractors])
+  const expandedContractorIds = useMemo(() =>
+    selectedContractors.flatMap(name => companyToUserIds.get(name) || []),
+    [selectedContractors, companyToUserIds]
+  )
 
   const { data: details, isLoading } = useQuery({
-    queryKey: ['compliance-details', projectIds, contractorIds, dateFrom, dateTo],
+    queryKey: ['compliance-details', projectIds, selectedContractors, dateFrom, dateTo],
     queryFn: () => api.get('/observations/stats/summary-details', {
       params: {
-        project_id:         projectIds.length    ? projectIds    : undefined,
-        contractor_user_id: contractorIds.length ? contractorIds : undefined,
+        project_id:         projectIds.length            ? projectIds            : undefined,
+        contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
         date_from: dateFrom,
         date_to:   dateTo,
       },
@@ -418,7 +432,7 @@ function ComplianceAnalysis() {
   }
 
   const compActiveCount =
-    (projectIds.length > 0 ? 1 : 0) + (contractorIds.length > 0 ? 1 : 0) +
+    (projectIds.length > 0 ? 1 : 0) + (selectedContractors.length > 0 ? 1 : 0) +
     (dateFrom !== _last30 ? 1 : 0) + (dateTo !== _today ? 1 : 0)
 
   return (
@@ -440,8 +454,8 @@ function ComplianceAnalysis() {
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
           <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
             onChange={v => setProjectIds(v as number[])} placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
-          <MultiSelectFilter size="sm" options={contractorOptions} value={contractorIds}
-            onChange={v => setContractorIds(v as number[])} placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[130px]" />
+          <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
+            onChange={v => setSelectedContractors(v as string[])} placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[130px]" />
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date from" />
@@ -450,7 +464,7 @@ function ComplianceAnalysis() {
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date to" />
           </div>
           {compActiveCount > 0 && (
-            <button onClick={() => { setProjectIds([]); setContractorIds([]); setDateFrom(_last30); setDateTo(_today) }}
+            <button onClick={() => { setProjectIds([]); setSelectedContractors([]); setDateFrom(_last30); setDateTo(_today) }}
               className="col-span-2 sm:col-auto flex items-center justify-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors border border-red-100 sm:border-0">
               <X className="w-3 h-3" /> Clear filters
             </button>

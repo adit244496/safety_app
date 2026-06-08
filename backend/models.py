@@ -18,7 +18,7 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
-    email = Column(String, nullable=False, unique=True)
+    email = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(String, nullable=False)  # Admin, PIC, AIC, HO, Contractor, Observer
     created_at = Column(DateTime, default=func.now())
