@@ -6,7 +6,7 @@ import {
   ImageIcon, MessageSquare, ClipboardCheck,
   ChevronDown, ChevronUp, Maximize2, Minimize2,
   AlertTriangle, CheckCircle2, ShieldAlert,
-  MapPin, Target, RefreshCw,
+  MapPin, Target, RefreshCw, Trash2,
 } from 'lucide-react'
 import api from '../../lib/api'
 import { fmtDateTime, getStatusClass } from '../../lib/utils'
@@ -376,6 +376,7 @@ export default function ObservationDetail() {
   const [statusOpen, setStatusOpen] = useState(false)
   const [newStatus, setNewStatus] = useState('')
   const [statusComment, setStatusComment] = useState('')
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   const { data: obs, isLoading } = useQuery({
     queryKey: ['observation', id],
@@ -474,6 +475,14 @@ export default function ObservationDetail() {
     },
   })
 
+  const discardDraft = useMutation({
+    mutationFn: () => api.delete(`/observations/${obs?.id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['observations'] })
+      navigate('/observations')
+    },
+  })
+
   // Scroll chat panel into view when navigated with #conversation
   useEffect(() => {
     if (location.hash === '#conversation' && chatPanelRef.current) {
@@ -492,6 +501,8 @@ export default function ObservationDetail() {
   const canUpload    = ['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
   const canComment   = ['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
   const isContractor = user?.role === 'Contractor'
+  const isAdmin      = ['SuperAdmin', 'Admin'].includes(user?.role || '')
+  const canDiscard   = obs.status === 'Draft' && (isAdmin || obs.created_by === user?.id)
 
   const riskBg = obs.risk_level === 'High'   ? 'bg-rose-100 text-rose-800 border-rose-200'
     : obs.risk_level === 'Medium' ? 'bg-amber-100 text-amber-800 border-amber-200'
@@ -573,13 +584,40 @@ export default function ObservationDetail() {
             </p>
           </div>
         </div>
-        {canEdit && !isContractor && (
-          <button onClick={() => navigate(`/observations/${obs.id}/edit`)} className="btn-secondary btn-sm self-start sm:self-auto flex-shrink-0 ml-9 sm:ml-0">
-            <Edit className="w-4 h-4" />
-            <span className="hidden sm:inline">Edit Observation</span>
-            <span className="sm:hidden">Edit</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2 self-start sm:self-auto flex-shrink-0 ml-9 sm:ml-0">
+          {canEdit && !isContractor && (
+            <button onClick={() => navigate(`/observations/${obs.id}/edit`)} className="btn-secondary btn-sm">
+              <Edit className="w-4 h-4" />
+              <span className="hidden sm:inline">Edit Observation</span>
+              <span className="sm:hidden">Edit</span>
+            </button>
+          )}
+          {canDiscard && (
+            confirmDiscard ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-red-600 font-medium">Discard draft?</span>
+                <button
+                  onClick={() => discardDraft.mutate()}
+                  disabled={discardDraft.isPending}
+                  className="text-xs font-semibold text-white bg-red-500 hover:bg-red-600 px-2 py-1 rounded transition-colors"
+                >Yes</button>
+                <button
+                  onClick={() => setConfirmDiscard(false)}
+                  className="text-xs font-semibold text-gray-600 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-100 transition-colors"
+                >No</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmDiscard(true)}
+                className="btn-sm flex items-center gap-1.5 text-red-600 bg-red-50 border border-red-200 hover:bg-red-100 rounded-lg px-3 py-1.5 transition-colors font-medium"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Discard Draft</span>
+                <span className="sm:hidden">Discard</span>
+              </button>
+            )
+          )}
+        </div>
       </div>
 
       {/* ── Main grid: 65 / 35 ── */}

@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react'
 import { usePageTitle } from '../../store/pageTitleContext'
-import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Plus, ChevronRight, ChevronDown, SlidersHorizontal, X, MessageSquare, PencilLine } from 'lucide-react'
+import { Plus, ChevronRight, ChevronDown, SlidersHorizontal, X, MessageSquare, PencilLine, Trash2 } from 'lucide-react'
 import api from '../../lib/api'
 import { fmtDate, getStatusClass, getRiskClass, STATUSES } from '../../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
@@ -16,8 +16,18 @@ const RISK_OPTIONS:     MSOption[] = ['High', 'Medium', 'Low'].map(r => ({ value
 export default function ObservationsList() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const qc = useQueryClient()
   const canCreate = ['SuperAdmin', 'Admin', 'Observer'].includes(user?.role || '')
   const [showFilters, setShowFilters] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState<number | null>(null)
+
+  const discardDraft = useMutation({
+    mutationFn: (id: number) => api.delete(`/observations/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['observations'] })
+      setConfirmDiscard(null)
+    },
+  })
 
   const [statuses,       setStatuses]       = useState<string[]>([])
   const [projectIds,     setProjectIds]     = useState<number[]>([])
@@ -256,6 +266,28 @@ export default function ObservationsList() {
                     <p className="text-gray-400">{o.observer_name || o.created_by_name || '—'}</p>
                   </div>
                   <div className="flex items-center gap-1">
+                    {o.status === 'Draft' && (
+                      confirmDiscard === o.id ? (
+                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                          <span className="text-[10px] text-red-600 font-medium">Discard?</span>
+                          <button
+                            onClick={e => { e.stopPropagation(); discardDraft.mutate(o.id) }}
+                            className="text-[10px] font-semibold text-white bg-red-500 hover:bg-red-600 px-1.5 py-0.5 rounded"
+                          >Yes</button>
+                          <button
+                            onClick={e => { e.stopPropagation(); setConfirmDiscard(null) }}
+                            className="text-[10px] font-semibold text-gray-600 px-1.5 py-0.5 rounded hover:bg-gray-100"
+                          >No</button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={e => { e.stopPropagation(); setConfirmDiscard(o.id) }}
+                          className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )
+                    )}
                     <button
                       onClick={e => { e.stopPropagation(); navigate(`/observations/${o.observation_id}#conversation`) }}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
@@ -325,6 +357,29 @@ export default function ObservationsList() {
                     </td>
                     <td className="td">
                       <div className="flex items-center gap-1.5 justify-end">
+                        {o.status === 'Draft' && (
+                          confirmDiscard === o.id ? (
+                            <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                              <span className="text-[10px] text-red-600 font-medium">Discard?</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); discardDraft.mutate(o.id) }}
+                                className="text-[10px] font-semibold text-white bg-red-500 hover:bg-red-600 px-1.5 py-0.5 rounded transition-colors"
+                              >Yes</button>
+                              <button
+                                onClick={e => { e.stopPropagation(); setConfirmDiscard(null) }}
+                                className="text-[10px] font-semibold text-gray-600 hover:text-gray-800 px-1.5 py-0.5 rounded hover:bg-gray-100 transition-colors"
+                              >No</button>
+                            </div>
+                          ) : (
+                            <button
+                              title="Discard draft"
+                              onClick={e => { e.stopPropagation(); setConfirmDiscard(o.id) }}
+                              className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )
+                        )}
                         <button
                           title="Open conversation"
                           onClick={e => { e.stopPropagation(); navigate(`/observations/${o.observation_id}#conversation`) }}

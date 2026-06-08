@@ -167,16 +167,16 @@ def stats(
             q = q.filter(models.Observation.risk_level.in_(risk_level))
         return q
 
-    q = apply_filters(db.query(models.Observation))
+    q = apply_filters(db.query(models.Observation)).filter(models.Observation.status != 'Draft')
     total = q.count()
 
     by_status = apply_filters(
         db.query(models.Observation.status, func.count().label("count"))
-    ).group_by(models.Observation.status).all()
+    ).filter(models.Observation.status != 'Draft').group_by(models.Observation.status).all()
 
     by_risk = apply_filters(
         db.query(models.Observation.risk_level, func.count().label("count"))
-    ).group_by(models.Observation.risk_level).all()
+    ).filter(models.Observation.status != 'Draft').group_by(models.Observation.risk_level).all()
 
     recent = q.order_by(models.Observation.created_at.desc()).limit(4).all()
 
@@ -184,6 +184,7 @@ def stats(
     month_expr = func.substr(models.Observation.obs_date, 1, 7)
     by_month = (
         apply_filters(db.query(month_expr.label("month"), func.count().label("count")))
+        .filter(models.Observation.status != 'Draft')
         .filter(models.Observation.obs_date.isnot(None))
         .filter(models.Observation.obs_date != "")
         .group_by(month_expr)
@@ -200,6 +201,7 @@ def stats(
                 func.count().label("count"),
             )
         )
+        .filter(models.Observation.status != 'Draft')
         .filter(models.Observation.obs_date.isnot(None))
         .filter(models.Observation.obs_date != "")
         .group_by(month_expr, models.Observation.status)
@@ -657,10 +659,14 @@ def add_comment(obs_id: int, body: CommentBody, db: Session = Depends(get_db), u
 
 
 @router.delete("/{obs_id}")
-def delete_observation(obs_id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+def delete_observation(obs_id: int, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     obs = db.query(models.Observation).filter(models.Observation.id == obs_id).first()
     if not obs:
         raise HTTPException(404)
+    is_admin = user.role in ("SuperAdmin", "Admin")
+    is_own_draft = obs.status == "Draft" and obs.created_by == user.id
+    if not is_admin and not is_own_draft:
+        raise HTTPException(403, "Only admins or the draft creator can delete this observation")
     db.delete(obs)
     db.commit()
     return {"success": True}
