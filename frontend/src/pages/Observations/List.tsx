@@ -266,7 +266,7 @@ export default function ObservationsList() {
                     <p className="text-gray-400">{o.observer_name || o.created_by_name || '—'}</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    {o.status === 'Draft' && user?.role === 'SuperAdmin' && (
+                    {o.status === 'Draft' && (
                       confirmDiscard === o.id ? (
                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                           <span className="text-[10px] text-red-600 font-medium">Discard?</span>
@@ -357,7 +357,7 @@ export default function ObservationsList() {
                     </td>
                     <td className="td">
                       <div className="flex items-center gap-1.5 justify-end">
-                        {o.status === 'Draft' && user?.role === 'SuperAdmin' && (
+                        {o.status === 'Draft' && (
                           confirmDiscard === o.id ? (
                             <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                               <span className="text-[10px] text-red-600 font-medium">Discard?</span>

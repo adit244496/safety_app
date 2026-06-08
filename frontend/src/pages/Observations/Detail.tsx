@@ -501,7 +501,7 @@ export default function ObservationDetail() {
   const canUpload    = ['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
   const canComment   = ['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
   const isContractor = user?.role === 'Contractor'
-  const canDiscard   = user?.role === 'SuperAdmin' && obs.status === 'Draft'
+  const canDiscard   = obs.status === 'Draft' && (user?.role === 'SuperAdmin' || obs.created_by === user?.id)
 
   const riskBg = obs.risk_level === 'High'   ? 'bg-rose-100 text-rose-800 border-rose-200'
     : obs.risk_level === 'Medium' ? 'bg-amber-100 text-amber-800 border-amber-200'

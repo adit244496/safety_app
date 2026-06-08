@@ -663,8 +663,10 @@ def delete_observation(obs_id: int, db: Session = Depends(get_db), user: models.
     obs = db.query(models.Observation).filter(models.Observation.id == obs_id).first()
     if not obs:
         raise HTTPException(404)
-    if user.role != "SuperAdmin":
-        raise HTTPException(403, "Only SuperAdmin can delete observations")
+    is_super_admin = user.role == "SuperAdmin"
+    is_own_draft = obs.status == "Draft" and obs.created_by == user.id
+    if not is_super_admin and not is_own_draft:
+        raise HTTPException(403, "Only SuperAdmin can delete observations, or the creator can delete their own draft")
     db.delete(obs)
     db.commit()
     return {"success": True}
