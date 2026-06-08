@@ -27,7 +27,7 @@ def generate_obs_id(db: Session, project_id: int) -> str:
 
 
 def get_allowed_project_ids(user: models.User) -> Optional[List[int]]:
-    if user.role in ("Admin", "PC"):
+    if user.role in ("Admin", "PIC", "AIC"):
         return None
     return [up.project_id for up in user.user_projects]
 
@@ -389,6 +389,12 @@ def stats_details(
 def list_observations(
     project_id: List[int] = Query(default=[]),
     status: List[str] = Query(default=[]),
+    contractor_user_id: List[int] = Query(default=[]),
+    risk_level: List[str] = Query(default=[]),
+    core_concern_id: List[int] = Query(default=[]),
+    specific_concern_id: List[int] = Query(default=[]),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -404,6 +410,18 @@ def list_observations(
         q = q.filter(models.Observation.project_id.in_(project_id))
     if status:
         q = q.filter(models.Observation.status.in_(status))
+    if contractor_user_id:
+        q = q.filter(models.Observation.contractor_user_id.in_(contractor_user_id))
+    if risk_level:
+        q = q.filter(models.Observation.risk_level.in_(risk_level))
+    if core_concern_id:
+        q = q.filter(models.Observation.core_concern_id.in_(core_concern_id))
+    if specific_concern_id:
+        q = q.filter(models.Observation.specific_concern_id.in_(specific_concern_id))
+    if date_from:
+        q = q.filter(models.Observation.obs_date >= date_from)
+    if date_to:
+        q = q.filter(models.Observation.obs_date <= date_to)
 
     # Drafts are private — only visible to the creator
     q = q.filter(
@@ -471,6 +489,8 @@ def get_observation(obs_id: str, db: Session = Depends(get_db), user: models.Use
 
 @router.post("/", status_code=201)
 def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    if user.role not in ("SuperAdmin", "Admin", "Observer"):
+        raise HTTPException(status_code=403, detail="Only Admin and Observer can create observations")
     factor, level = calc_risk(body.severity or 1, body.probability or 1)
     obs_id = generate_obs_id(db, body.project_id)
 

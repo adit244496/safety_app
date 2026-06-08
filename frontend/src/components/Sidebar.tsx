@@ -84,7 +84,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggle
           )}
 
           <div className="space-y-0.5">
-            {NAV.map(({ to, icon: Icon, label, exact }) => {
+            {NAV.filter(({ to }) => to !== '/observations/new' || ['SuperAdmin', 'Admin', 'Observer'].includes(user?.role || '')).map(({ to, icon: Icon, label, exact }) => {
               const isActive = active(to, exact)
               return (
                 <NavLink

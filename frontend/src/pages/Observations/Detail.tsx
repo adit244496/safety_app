@@ -15,7 +15,8 @@ import { useAuth } from '../../store/authStore'
 // ── Role colour tokens ────────────────────────────────────────────────────
 const ROLE: Record<string, { avatarBg: string; badgeBg: string; badgeText: string; borderColor: string }> = {
   Admin:      { avatarBg: 'bg-rose-500',   badgeBg: 'bg-rose-100',   badgeText: 'text-rose-800',   borderColor: '#f43f5e' },
-  PC:         { avatarBg: 'bg-indigo-500', badgeBg: 'bg-indigo-100', badgeText: 'text-indigo-800', borderColor: '#6366f1' },
+  PIC:        { avatarBg: 'bg-indigo-500', badgeBg: 'bg-indigo-100', badgeText: 'text-indigo-800', borderColor: '#6366f1' },
+  AIC:        { avatarBg: 'bg-blue-500',   badgeBg: 'bg-blue-100',   badgeText: 'text-blue-800',   borderColor: '#3b82f6' },
   HO:         { avatarBg: 'bg-violet-500', badgeBg: 'bg-violet-100', badgeText: 'text-violet-800', borderColor: '#8b5cf6' },
   Contractor: { avatarBg: 'bg-amber-500',  badgeBg: 'bg-amber-100',  badgeText: 'text-amber-800',  borderColor: '#f59e0b' },
   Observer:   { avatarBg: 'bg-teal-500',   badgeBg: 'bg-teal-100',   badgeText: 'text-teal-800',   borderColor: '#14b8a6' },
@@ -411,6 +412,33 @@ export default function ObservationDetail() {
         await api.post(`/observations/${obs!.id}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       }
     },
+    onMutate: async ({ text }: { text: string; files: File[]; imgType: string }) => {
+      await qc.cancelQueries({ queryKey: ['observation', id] })
+      const previous = qc.getQueryData<any>(['observation', id])
+      qc.setQueryData(['observation', id], (old: any) => {
+        if (!old) return old
+        return {
+          ...old,
+          comments: [
+            ...(old.comments ?? []),
+            {
+              id: -Date.now(),
+              comment: text,
+              user_id: user?.id ?? null,
+              user_name: user?.name ?? '',
+              user_role: user?.role ?? null,
+              created_at: new Date().toISOString(),
+            },
+          ],
+        }
+      })
+      return { previous }
+    },
+    onError: (_err: unknown, _vars: unknown, context: any) => {
+      if (context?.previous !== undefined) {
+        qc.setQueryData(['observation', id], context.previous)
+      }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['observation', id] }),
   })
 
@@ -458,9 +486,9 @@ export default function ObservationDetail() {
   )
   if (!obs) return <div className="text-center text-gray-500 py-12">Observation not found</div>
 
-  const canEdit      = ['Admin', 'PC', 'HO', 'Observer'].includes(user?.role || '')
-  const canUpload    = ['Admin', 'PC', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
-  const canComment   = ['Admin', 'PC', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
+  const canEdit      = ['Admin', 'HO', 'Observer'].includes(user?.role || '')
+  const canUpload    = ['Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
+  const canComment   = ['Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
   const isContractor = user?.role === 'Contractor'
 
   const riskBg = obs.risk_level === 'High'   ? 'bg-rose-100 text-rose-800 border-rose-200'
@@ -660,7 +688,7 @@ export default function ObservationDetail() {
                       </span>
                       <p className="text-white/80 text-[9px] mt-0.5">{img.uploader_name}</p>
                     </div>
-                    {(user?.role === 'Admin' || user?.role === 'PC' || img.uploaded_by === user?.id) && (
+                    {(user?.role === 'Admin' || img.uploaded_by === user?.id) && (
                       <button
                         onClick={e => { e.stopPropagation(); deleteImage.mutate(img.id) }}
                         className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
@@ -746,7 +774,7 @@ export default function ObservationDetail() {
                     value={newStatus}
                     onChange={e => setNewStatus(e.target.value)}
                   >
-                    {['Open', 'Pending', 'Closed'].map(s => (
+                    {['Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed'].map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
@@ -777,13 +805,35 @@ export default function ObservationDetail() {
             )}
           </div>
 
-          {/* Contractor compliance hint */}
-          {isContractor && obs.status !== 'Closed' && (
-            <div className="mx-3 mt-3 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2 flex-shrink-0">
-              <Camera className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-amber-700 leading-relaxed">
-                <span className="font-semibold">Action required:</span> Add a comment and attach closure photos to demonstrate rectification.
-              </p>
+          {/* Contractor compliance hint + status change */}
+          {isContractor && !['Closed', 'Partially Closed'].includes(obs.status) && (
+            <div className="mx-3 mt-3 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl flex-shrink-0 space-y-2">
+              <div className="flex items-start gap-2">
+                <Camera className="w-3.5 h-3.5 text-amber-600 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-amber-700 leading-relaxed">
+                  <span className="font-semibold">Action required:</span> Add a comment and attach closure photos to demonstrate rectification.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  className="text-xs border border-amber-200 rounded-lg px-2 py-1.5 bg-white text-gray-800 focus:outline-none focus:ring-1 focus:ring-amber-400 flex-1"
+                  value={newStatus}
+                  onChange={e => setNewStatus(e.target.value)}
+                >
+                  <option value="">Mark progress…</option>
+                  <option value="Partially Closed">Partially Closed</option>
+                  <option value="Closed">Closed</option>
+                </select>
+                <button
+                  disabled={!newStatus || changeStatus.isPending}
+                  onClick={() => changeStatus.mutate({ status: newStatus, comment: statusComment })}
+                  className="btn-primary btn-sm flex-shrink-0"
+                >
+                  {changeStatus.isPending
+                    ? <span className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
+                    : <RefreshCw className="w-3 h-3" />}
+                </button>
+              </div>
             </div>
           )}
 

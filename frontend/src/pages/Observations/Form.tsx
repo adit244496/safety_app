@@ -118,8 +118,8 @@ export default function ObservationForm() {
   const STABLE = { staleTime: 5 * 60 * 1000 } as const
 
   const { data: projects }    = useQuery({ queryKey: ['projects'],             queryFn: () => api.get('/projects/').then(r => r.data), ...STABLE })
-  const { data: buildings }   = useQuery({ queryKey: ['buildings'],            queryFn: () => api.get('/admin/buildings').then(r => r.data), ...STABLE })
-  const { data: floors }      = useQuery({ queryKey: ['floors'],               queryFn: () => api.get('/admin/floors').then(r => r.data), ...STABLE })
+  const { data: buildings }   = useQuery({ queryKey: ['buildings', form.project_id],  queryFn: () => api.get('/admin/buildings', { params: { project_id: form.project_id } }).then(r => r.data), enabled: !!form.project_id, ...STABLE })
+  const { data: floors }      = useQuery({ queryKey: ['floors', form.building_id],    queryFn: () => api.get('/admin/floors', { params: { building_id: form.building_id } }).then(r => r.data), enabled: !!form.building_id, ...STABLE })
   const { data: coreConcerns }= useQuery({ queryKey: ['core-concerns'],        queryFn: () => api.get('/admin/core-concerns').then(r => r.data), ...STABLE })
   const { data: rootCatList } = useQuery({ queryKey: ['root-cause-categories'],queryFn: () => api.get('/admin/root-cause-categories').then(r => r.data), ...STABLE })
   const { data: violations }  = useQuery({ queryKey: ['violations'],           queryFn: () => api.get('/admin/violations').then(r => r.data), ...STABLE })
@@ -325,19 +325,19 @@ export default function ObservationForm() {
       <SectionCard title="Site Information" icon={<MapPin className="w-3.5 h-3.5" />}>
         <div className={G3}>
           <Field label="Project" required>
-            <select className="select" value={form.project_id} onChange={e => set('project_id', e.target.value)} required>
+            <select className="select" value={form.project_id} onChange={e => { set('project_id', e.target.value); set('building_id', ''); set('floor_id', '') }} required>
               <option value="">Select project…</option>
               {(projects || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
           <Field label="Building / Tower">
-            <select className="select" value={form.building_id} onChange={e => set('building_id', e.target.value)}>
+            <select className="select" value={form.building_id} onChange={e => { set('building_id', e.target.value); set('floor_id', '') }} disabled={!form.project_id}>
               <option value="">Select building…</option>
               {(buildings || []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </Field>
           <Field label="Floor">
-            <select className="select" value={form.floor_id} onChange={e => set('floor_id', e.target.value)}>
+            <select className="select" value={form.floor_id} onChange={e => set('floor_id', e.target.value)} disabled={!form.building_id}>
               <option value="">Select floor…</option>
               {(floors || []).map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
             </select>

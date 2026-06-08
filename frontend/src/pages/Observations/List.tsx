@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Plus, ChevronRight, ChevronDown, SlidersHorizontal, X, MessageSquare, PencilLine } from 'lucide-react'
 import api from '../../lib/api'
 import { fmtDate, getStatusClass, getRiskClass, STATUSES } from '../../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
+import { useAuth } from '../../store/authStore'
 
 const STABLE = { staleTime: 5 * 60 * 1000 } as const
 
@@ -13,37 +14,42 @@ const RISK_OPTIONS:     MSOption[] = ['High', 'Medium', 'Low'].map(r => ({ value
 
 export default function ObservationsList() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const canCreate = ['SuperAdmin', 'Admin', 'Observer'].includes(user?.role || '')
   const [showFilters, setShowFilters] = useState(false)
 
   const [statuses,       setStatuses]       = useState<string[]>([])
   const [projectIds,     setProjectIds]     = useState<number[]>([])
   const [contractorIds,  setContractorIds]  = useState<number[]>([])
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
-  const [coreConcernIds, setCoreConcernIds] = useState<number[]>([])
-  const [dateFrom,       setDateFrom]       = useState('')
-  const [dateTo,         setDateTo]         = useState('')
-  const [page,           setPage]           = useState(1)
+  const [coreConcernIds,    setCoreConcernIds]    = useState<number[]>([])
+  const [specificConcernIds, setSpecificConcernIds] = useState<number[]>([])
+  const [dateFrom,           setDateFrom]           = useState('')
+  const [dateTo,             setDateTo]             = useState('')
+  const [page,               setPage]               = useState(1)
 
   const activeCount =
-    (statuses.length       > 0 ? 1 : 0) +
-    (projectIds.length     > 0 ? 1 : 0) +
-    (contractorIds.length  > 0 ? 1 : 0) +
-    (riskLevels.length     > 0 ? 1 : 0) +
-    (coreConcernIds.length > 0 ? 1 : 0) +
-    (dateFrom              ? 1 : 0) +
-    (dateTo                ? 1 : 0)
+    (statuses.length          > 0 ? 1 : 0) +
+    (projectIds.length        > 0 ? 1 : 0) +
+    (contractorIds.length     > 0 ? 1 : 0) +
+    (riskLevels.length        > 0 ? 1 : 0) +
+    (coreConcernIds.length    > 0 ? 1 : 0) +
+    (specificConcernIds.length > 0 ? 1 : 0) +
+    (dateFrom                 ? 1 : 0) +
+    (dateTo                   ? 1 : 0)
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['observations', statuses, projectIds, contractorIds, riskLevels, coreConcernIds, dateFrom, dateTo, page],
+    queryKey: ['observations', statuses, projectIds, contractorIds, riskLevels, coreConcernIds, specificConcernIds, dateFrom, dateTo, page],
     queryFn: () => api.get('/observations/', {
       params: {
-        status:              statuses.length       ? statuses       : undefined,
-        project_id:          projectIds.length     ? projectIds     : undefined,
-        contractor_user_id:  contractorIds.length  ? contractorIds  : undefined,
-        risk_level:          riskLevels.length     ? riskLevels     : undefined,
-        core_concern_id:     coreConcernIds.length ? coreConcernIds : undefined,
-        date_from:           dateFrom              || undefined,
-        date_to:             dateTo                || undefined,
+        status:               statuses.length          ? statuses          : undefined,
+        project_id:           projectIds.length        ? projectIds        : undefined,
+        contractor_user_id:   contractorIds.length     ? contractorIds     : undefined,
+        risk_level:           riskLevels.length        ? riskLevels        : undefined,
+        core_concern_id:      coreConcernIds.length    ? coreConcernIds    : undefined,
+        specific_concern_id:  specificConcernIds.length ? specificConcernIds : undefined,
+        date_from:            dateFrom                 || undefined,
+        date_to:              dateTo                   || undefined,
         page,
         limit: 15,
       },
@@ -67,11 +73,22 @@ export default function ObservationsList() {
     queryFn: () => api.get('/admin/core-concerns').then(r => r.data),
     ...STABLE,
   })
+  const { data: allSpecificConcerns } = useQuery({
+    queryKey: ['all-specific-concerns'],
+    queryFn: () => api.get('/admin/specific-concerns').then(r => r.data),
+    ...STABLE,
+  })
 
   const contractors: any[]    = (users || []).filter((u: any) => u.role === 'Contractor')
   const projectOptions:     MSOption[] = (projects    || []).map((p: any) => ({ value: p.id,   label: p.name }))
   const contractorOptions:  MSOption[] = contractors.map((c: any)          => ({ value: c.id,   label: c.name }))
   const coreConcernOptions: MSOption[] = (concerns    || []).map((c: any)  => ({ value: c.id,   label: c.name }))
+  const filteredSpecificConcerns = useMemo(() => {
+    const all: any[] = allSpecificConcerns || []
+    if (coreConcernIds.length === 0) return all
+    return all.filter((s: any) => coreConcernIds.includes(s.core_concern_id))
+  }, [allSpecificConcerns, coreConcernIds])
+  const specificConcernOptions: MSOption[] = filteredSpecificConcerns.map((s: any) => ({ value: s.id, label: s.name }))
 
   const obs        = data?.observations || []
   const total      = data?.total ?? 0
@@ -79,7 +96,7 @@ export default function ObservationsList() {
 
   const clearFilters = () => {
     setStatuses([]); setProjectIds([]); setContractorIds([])
-    setRiskLevels([]); setCoreConcernIds([]); setDateFrom(''); setDateTo(''); setPage(1)
+    setRiskLevels([]); setCoreConcernIds([]); setSpecificConcernIds([]); setDateFrom(''); setDateTo(''); setPage(1)
   }
   const resetPage = () => setPage(1)
 
@@ -91,9 +108,11 @@ export default function ObservationsList() {
           <h1 className="page-title">Observations</h1>
           <p className="text-sm text-gray-400 mt-1">{total} total observation{total !== 1 ? 's' : ''}</p>
         </div>
-        <button onClick={() => navigate('/observations/new')} className="btn-primary flex-shrink-0">
-          <Plus className="w-4 h-4" /> New Observation
-        </button>
+        {canCreate && (
+          <button onClick={() => navigate('/observations/new')} className="btn-primary flex-shrink-0">
+            <Plus className="w-4 h-4" /> New Observation
+          </button>
+        )}
       </div>
 
       {/* Filters bar */}
@@ -132,8 +151,12 @@ export default function ObservationsList() {
             placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
 
           <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}
-            onChange={v => { setCoreConcernIds(v as number[]); resetPage() }}
+            onChange={v => { setCoreConcernIds(v as number[]); setSpecificConcernIds([]); resetPage() }}
             placeholder="Core Concern" className="w-full sm:w-auto sm:min-w-[130px]" />
+
+          <MultiSelectFilter size="sm" options={specificConcernOptions} value={specificConcernIds}
+            onChange={v => { setSpecificConcernIds(v as number[]); resetPage() }}
+            placeholder="Specific Concern" className="w-full sm:w-auto sm:min-w-[150px]" />
 
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input

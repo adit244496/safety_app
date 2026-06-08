@@ -26,7 +26,7 @@ function Guard({ children }: { children: React.ReactNode }) {
 function AdminGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   if (!user) return null
-  if (!['SuperAdmin', 'Admin', 'PC'].includes(user.role)) return <Navigate to="/" replace />
+  if (!['SuperAdmin', 'Admin'].includes(user.role)) return <Navigate to="/" replace />
   return <>{children}</>
 }
 

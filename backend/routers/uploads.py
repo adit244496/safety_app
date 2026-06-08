@@ -61,7 +61,7 @@ def delete_image(image_id: int, db: Session = Depends(get_db), user: models.User
     img = db.query(models.ObservationImage).filter(models.ObservationImage.id == image_id).first()
     if not img:
         raise HTTPException(404)
-    if user.role not in ("Admin", "PC") and img.uploaded_by != user.id:
+    if user.role not in ("Admin",) and img.uploaded_by != user.id:
         raise HTTPException(403)
     try:
         os.remove(os.path.join(UPLOAD_DIR, img.file_path))

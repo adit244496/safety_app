@@ -8,7 +8,7 @@ from auth import get_current_user, require_admin, require_super_admin, hash_pass
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
-VALID_ROLES = {"SuperAdmin", "Admin", "PC", "HO", "Contractor", "Observer"}
+VALID_ROLES = {"SuperAdmin", "Admin", "PIC", "AIC", "HO", "Contractor", "Observer"}
 
 
 class UserCreate(BaseModel):

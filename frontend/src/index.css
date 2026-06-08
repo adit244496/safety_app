@@ -56,7 +56,8 @@
   .badge-open   { @apply badge bg-indigo-100 text-indigo-800 ring-1 ring-indigo-200/60; }
   .badge-pending{ @apply badge bg-amber-100 text-amber-800 ring-1 ring-amber-200/60; }
   .badge-review { @apply badge bg-orange-100 text-orange-800 ring-1 ring-orange-200/60; }
-  .badge-closed { @apply badge bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/60; }
+  .badge-closed  { @apply badge bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/60; }
+  .badge-partial { @apply badge bg-teal-100 text-teal-800 ring-1 ring-teal-200/60; }
   .badge-low    { @apply badge bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200/60; }
   .badge-medium { @apply badge bg-amber-100 text-amber-800 ring-1 ring-amber-200/60; }
   .badge-high   { @apply badge bg-rose-100 text-rose-800 ring-1 ring-rose-200/60; }
