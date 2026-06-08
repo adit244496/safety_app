@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 from database import get_db
-import models
+import models, re
 from auth import get_current_user, require_admin, require_super_admin
 from email_service import send_observation_email
 
@@ -270,9 +270,14 @@ def get_buildings(project_id: Optional[int] = Query(None), db: Session = Depends
     if project_id:
         q = q.filter(models.Building.project_id == project_id)
     rows = q.order_by(models.Building.name).all()
+    def _max_floor_num(floors):
+        nums = [int(m.group(1)) for f in floors
+                for m in [re.match(r'^floor\s+(\d+)$', f.name.strip().lower())] if m]
+        return max(nums) if nums else 0
+
     return [{"id": r.id, "name": r.name, "project_id": r.project_id,
              "project_name": r.project.name if r.project else None,
-             "floor_count": len(r.floors)} for r in rows]
+             "floor_count": _max_floor_num(r.floors)} for r in rows]
 
 @router.post("/buildings", status_code=201)
 def create_building(body: BuildingBody, db: Session = Depends(get_db), _=Depends(require_admin)):
@@ -291,27 +296,28 @@ def update_building(id: int, body: BuildingBody, db: Session = Depends(get_db), 
     r.name = body.name.strip(); r.project_id = body.project_id
 
     if body.total_floors is not None and body.total_floors >= 0:
-        current_count = db.query(models.Floor).filter(models.Floor.building_id == id).count()
         new_total = body.total_floors
-        if new_total > current_count:
-            for i in range(current_count + 1, new_total + 1):
+        all_floors = db.query(models.Floor).filter(models.Floor.building_id == id).all()
+
+        # Map: floor number → Floor row (only for "Floor N" pattern)
+        numbered = {}
+        for f in all_floors:
+            m = re.match(r'^floor\s+(\d+)$', f.name.strip().lower())
+            if m:
+                numbered[int(m.group(1))] = f
+
+        # Add any missing Floor 1 … Floor N
+        for i in range(1, new_total + 1):
+            if i not in numbered:
                 db.add(models.Floor(name=f"Floor {i}", building_id=id))
-        elif new_total < current_count:
-            # Remove from highest floor down, only if not referenced by any observation
-            floors_desc = (
-                db.query(models.Floor)
-                .filter(models.Floor.building_id == id)
-                .order_by(models.Floor.id.desc())
-                .all()
-            )
-            to_remove = current_count - new_total
-            for floor in floors_desc:
-                if to_remove == 0:
-                    break
+
+        # Remove Floor X where X > new_total, only if unreferenced
+        for num in sorted(numbered.keys(), reverse=True):
+            if num > new_total:
+                floor = numbered[num]
                 has_obs = db.query(models.Observation).filter(models.Observation.floor_id == floor.id).first()
                 if not has_obs:
                     db.delete(floor)
-                    to_remove -= 1
 
     db.commit()
     return {"success": True}

@@ -25,10 +25,14 @@ function sortFloors(floors: any[]): any[] {
   return [...floors].sort((a, b) => {
     const rank = (name: string): [number, number] => {
       const s = (name || '').toLowerCase().trim()
-      if (s.startsWith('basement')) return [0, parseInt(s.replace(/\D/g, '')) || 0]
-      if (s === 'terrace')          return [1, 0]
-      if (s.startsWith('floor'))    return [2, parseInt(s.replace(/\D/g, '')) || 0]
-      return [3, 0]
+      if (s.startsWith('basement'))  return [0, parseInt(s.replace(/\D/g, '')) || 0]
+      if (s === 'terrace')           return [1, 0]
+      if (s === 'ground' || s === 'ground floor' || s === 'gf') return [2, 0]
+      if (s.startsWith('floor'))     return [3, parseInt(s.replace(/\D/g, '')) || 0]
+      // ordinal names: "1st", "2nd", "3rd", "4th" etc.
+      const m = s.match(/^(\d+)(st|nd|rd|th)$/)
+      if (m)                         return [3, parseInt(m[1])]
+      return [4, 0]
     }
     const [ra, na] = rank(a.name), [rb, nb] = rank(b.name)
     return ra !== rb ? ra - rb : na - nb
