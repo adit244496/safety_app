@@ -194,7 +194,7 @@ function EaseScoreView() {
           <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full" />
         </div>
       ) : !periods.length ? (
-        <div className="card h-48 flex items-center justify-center text-slate-400">No EASE Score data for the selected filters.</div>
+        <div className="card h-48 flex items-center justify-center text-slate-400">No SHE Score data for the selected filters.</div>
       ) : (
         <>
           {/* Overall % */}
@@ -203,7 +203,7 @@ function EaseScoreView() {
               <Award className="w-6 h-6 text-indigo-600" />
             </div>
             <div>
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Overall EASE Score</p>
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Overall SHE Score</p>
               <p className="text-3xl font-bold text-slate-900">
                 {aggregatedOverall != null ? `${aggregatedOverall}%` : '—'}
               </p>
@@ -722,7 +722,7 @@ function EvaluationCriteria() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <ClipboardList className="w-5 h-5 text-indigo-600" />
-              <h2 className="font-semibold text-gray-900 text-lg">EASE Evaluation Criteria</h2>
+              <h2 className="font-semibold text-gray-900 text-lg">SHE Evaluation Criteria</h2>
             </div>
             <p className="text-xs text-slate-400">
               Scoring: Yes → full · Tending Yes → ½ · Tending No → ¼ · No → 0 · NA → excluded
@@ -957,7 +957,7 @@ export default function Summary() {
   const [activeTab, setActiveTab] = useState<Tab>('ease')
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'ease', label: 'EASE Score' },
+    { id: 'ease', label: 'SHE Score' },
     { id: 'compliance', label: 'Compliance Analysis' },
     { id: 'criteria', label: 'Evaluation Criteria' },
   ]
@@ -967,7 +967,7 @@ export default function Summary() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="page-title">Summary</h1>
-          <p className="text-sm text-gray-400 mt-1">EASE scores and compliance analysis across projects and contractors.</p>
+          <p className="text-sm text-gray-400 mt-1">SHE scores and compliance analysis across projects and contractors.</p>
         </div>
         <div className="flex gap-1.5 bg-slate-100 rounded-xl p-1 self-start sm:self-auto">
           {tabs.map(tab => (

@@ -10,7 +10,7 @@ const TABS = [
   { to: '/admin', label: 'Users', icon: Users, exact: true },
   { to: '/admin/data', label: 'Data Input', icon: Database },
   { to: '/admin/safety', label: 'Safety Measures', icon: Shield },
-  { to: '/admin/ease-criteria', label: 'EASE Criteria', icon: ClipboardList },
+  { to: '/admin/ease-criteria', label: 'SHE Criteria', icon: ClipboardList },
   { to: '/admin/email', label: 'Email Settings', icon: Mail },
 ]
 
@@ -20,7 +20,7 @@ export default function Admin() {
     <div className="space-y-6">
       <div>
         <h1 className="page-title">Admin Panel</h1>
-        <p className="text-sm text-gray-400 mt-1">Manage users, projects, reference data, and EASE evaluation criteria</p>
+        <p className="text-sm text-gray-400 mt-1">Manage users, projects, reference data, and SHE evaluation criteria</p>
       </div>
 
       {/* Tab bar — horizontally scrollable on mobile */}
