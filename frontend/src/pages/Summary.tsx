@@ -235,8 +235,8 @@ function EaseScoreView() {
             </div>
           </div>
 
-          {/* Project-level SHE Score chart — only when multiple projects present */}
-          {projectChartData.length > 1 && (
+          {/* Project-level SHE Score chart */}
+          {projectChartData.length > 0 && (
             <div className="card">
               <div className="flex items-center gap-2 mb-4">
                 <BarChart3 className="w-4 h-4 text-indigo-600" />
