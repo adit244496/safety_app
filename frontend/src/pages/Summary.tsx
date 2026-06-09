@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import { usePageTitle } from '../store/pageTitleContext'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -6,6 +6,7 @@ import {
 } from 'recharts'
 import { BarChart3, TrendingUp, ArrowUpRight, Users, Award, ClipboardList, Save, CheckCircle, SlidersHorizontal, X, ChevronRight, ChevronDown, Download } from 'lucide-react'
 import ExcelJS from 'exceljs'
+import { printPdf } from '../lib/printPdf'
 import api from '../lib/api'
 import { useAuth } from '../store/authStore'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -492,6 +493,33 @@ function ComplianceAnalysis() {
     a.click(); URL.revokeObjectURL(url)
   }
 
+  function downloadPdf() {
+    const scoreBar = (score: number) => {
+      const color = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444'
+      return `<span style="color:${color};font-weight:700">${score}%</span>`
+    }
+    const projRows = sortedProjects.map((r: any) =>
+      `<tr><td>${r.project_name||'—'}</td><td style="text-align:center">${r.total||0}</td><td style="text-align:center">${r.open||0}</td><td style="text-align:center">${r.closed||0}</td><td style="text-align:center">${r.high_risk||0}</td><td style="text-align:center">${r.medium_risk||0}</td><td style="text-align:center">${r.low_risk||0}</td><td style="text-align:center">${scoreBar(r.compliance_score||0)}</td></tr>`
+    ).join('')
+    const conRows = sortedContractors.map((r: any) =>
+      `<tr><td>${r.contractor_name||'—'}</td><td style="text-align:center">${r.total||0}</td><td style="text-align:center">${r.open||0}</td><td style="text-align:center">${r.closed||0}</td><td style="text-align:center">${r.high_risk||0}</td><td style="text-align:center">${r.medium_risk||0}</td><td style="text-align:center">${r.low_risk||0}</td><td style="text-align:center">${scoreBar(r.compliance_score||0)}</td></tr>`
+    ).join('')
+    const cols = '<th>Name</th><th>Total</th><th>Open</th><th>Closed</th><th>High</th><th>Medium</th><th>Low</th><th>Compliance</th>'
+    const body = `
+      <div class="section">
+        <div class="section-title">By Project</div>
+        <table><thead><tr>${cols}</tr></thead><tbody>${projRows||'<tr><td colspan="8" style="text-align:center;color:#9ca3af">No data</td></tr>'}</tbody></table>
+      </div>
+      <div class="section">
+        <div class="section-title">By Contractor</div>
+        <table><thead><tr>${cols}</tr></thead><tbody>${conRows||'<tr><td colspan="8" style="text-align:center;color:#9ca3af">No data</td></tr>'}</tbody></table>
+      </div>`
+    printPdf('Compliance Summary Report', body)
+  }
+
+  const [showDlMenu, setShowDlMenu] = useState(false)
+  const dlRef = useRef<HTMLDivElement>(null)
+
   const { data: details, isLoading } = useQuery({
     queryKey: ['compliance-details', projectIds, selectedContractors, dateFrom, dateTo],
     queryFn: () => api.get('/observations/stats/summary-details', {
@@ -577,12 +605,24 @@ function ComplianceAnalysis() {
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{compActiveCount}</span>
           )}
           <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
-          <button
-            onClick={e => { e.stopPropagation(); downloadExcel() }}
-            className="hidden sm:flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-2.5 py-1 rounded-lg transition-colors ml-2"
-          >
-            <Download className="w-3.5 h-3.5" /> Download
-          </button>
+          <div className="relative ml-2" ref={dlRef} onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setShowDlMenu(v => !v)}
+              className="hidden sm:flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" /> Download <ChevronDown className="w-3 h-3" />
+            </button>
+            {showDlMenu && (
+              <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-50 overflow-hidden">
+                <button onClick={() => { downloadExcel(); setShowDlMenu(false) }} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2">
+                  <span>📊</span> Excel (.xlsx)
+                </button>
+                <button onClick={() => { downloadPdf(); setShowDlMenu(false) }} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2">
+                  <span>📄</span> PDF (Print)
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className={`gap-2 mt-3 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${showFilters ? 'grid grid-cols-2' : 'hidden'}`}>
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import { usePageTitle } from '../store/pageTitleContext'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -11,6 +11,7 @@ import {
   TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, Clock, Download,
 } from 'lucide-react'
 import ExcelJS from 'exceljs'
+import { printPdf } from '../lib/printPdf'
 import api from '../lib/api'
 import { fmtDate, getRiskClass, getStatusClass } from '../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -245,6 +246,39 @@ export default function Dashboard() {
     a.click(); URL.revokeObjectURL(url)
   }
 
+  function downloadPdf() {
+    const riskRows = riskBars.map((r: any) => `<tr><td>${r.risk_level}</td><td style="text-align:center">${r.count}</td></tr>`).join('')
+    const trendRows = trendData.map((d: any) =>
+      `<tr><td>${d.month}</td><td style="text-align:center">${d.Open||0}</td><td style="text-align:center">${d.Pending||0}</td><td style="text-align:center">${d['Under Review']||0}</td><td style="text-align:center">${d['Partially Closed']||0}</td><td style="text-align:center">${d.Closed||0}</td><td style="text-align:center;font-weight:700">${d._total||0}</td></tr>`
+    ).join('')
+
+    const body = `
+      <div class="kpi-grid">
+        ${cards.map(c => `<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`).join('')}
+      </div>
+      <div class="section">
+        <div class="section-title">${viewMode === 'quarterly' ? 'Quarterly' : 'Monthly'} Trend</div>
+        <table><thead><tr><th>Period</th><th>Open</th><th>Pending</th><th>Under Review</th><th>Partially Closed</th><th>Closed</th><th>Total</th></tr></thead>
+        <tbody>${trendRows}</tbody></table>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div class="section">
+          <div class="section-title">By Status</div>
+          <table><thead><tr><th>Status</th><th>Count</th></tr></thead>
+          <tbody>${statusPie.map((s: any) => `<tr><td>${s.name}</td><td style="text-align:center">${s.value}</td></tr>`).join('')}</tbody></table>
+        </div>
+        ${riskBars.length ? `<div class="section">
+          <div class="section-title">By Risk Level</div>
+          <table><thead><tr><th>Risk</th><th>Count</th></tr></thead>
+          <tbody>${riskRows}</tbody></table>
+        </div>` : ''}
+      </div>`
+    printPdf('Dashboard Report', body)
+  }
+
+  const [showDownloadMenu, setShowDownloadMenu] = useState(false)
+  const dlRef = useRef<HTMLDivElement>(null)
+
   return (
     <div className="space-y-5">
       {/* Page header */}
@@ -253,10 +287,24 @@ export default function Dashboard() {
           <h1 className="page-title">Dashboard</h1>
           <p className="text-sm text-gray-400 mt-1">Overview of all safety observations</p>
         </div>
-        <div className="ml-auto">
-          <button onClick={downloadExcel} className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
+        <div className="ml-auto relative" ref={dlRef}>
+          <button
+            onClick={() => setShowDownloadMenu(v => !v)}
+            className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+          >
             <Download className="w-3.5 h-3.5" /> Download Report
+            <ChevronDown className="w-3 h-3 ml-0.5" />
           </button>
+          {showDownloadMenu && (
+            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-50 overflow-hidden">
+              <button onClick={() => { downloadExcel(); setShowDownloadMenu(false) }} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2">
+                <span>📊</span> Excel (.xlsx)
+              </button>
+              <button onClick={() => { downloadPdf(); setShowDownloadMenu(false) }} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2">
+                <span>📄</span> PDF (Print)
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
