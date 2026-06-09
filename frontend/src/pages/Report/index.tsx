@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { usePageTitle } from '../../store/pageTitleContext'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { useAuth } from '../../store/authStore'
 import { FileText, AlertTriangle, ZoomIn, ZoomOut, X, Download, LayoutList } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import api from '../../lib/api'
@@ -1173,6 +1174,8 @@ function SHETrackerTab({
 // ── Main page ─────────────────────────────────────────────────────────────
 export default function ReportPage() {
   usePageTitle('SHE Reports', 'Surveillance Safety, Health & Environment report generator')
+  const { user } = useAuth()
+  const isContractor = user?.role === 'Contractor'
   const last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today  = new Date().toISOString().slice(0, 10)
 
@@ -1180,7 +1183,9 @@ export default function ReportPage() {
   const [projectIds,      setProjectIds]      = useState<number[]>([])
   const [dateFrom,        setDateFrom]        = useState(last30)
   const [dateTo,          setDateTo]          = useState(today)
-  const [selectedContractors, setSelectedContractors] = useState<string[]>([])
+  const [selectedContractors, setSelectedContractors] = useState<string[]>(
+    () => isContractor && user?.name ? [user.name] : []
+  )
   const [riskLevels,      setRiskLevels]      = useState<string[]>([])
   const [reportDate,      setReportDate]      = useState(new Date().toISOString().slice(0, 10))
   const [trackerNo,       setTrackerNo]       = useState('')
@@ -1259,7 +1264,8 @@ export default function ReportPage() {
 
   const reset = () => {
     setProjectIds([]); setDateFrom(last30); setDateTo(today)
-    setSelectedContractors([]); setRiskLevels([]); setGenerated(false); setTrackerNo('')
+    if (!isContractor) setSelectedContractors([])
+    setRiskLevels([]); setGenerated(false); setTrackerNo('')
   }
 
   return (
@@ -1318,13 +1324,19 @@ export default function ReportPage() {
             </div>
             <div>
               <label className="label">Contractor</label>
-              <MultiSelectFilter
-                options={contractorOptions}
-                value={selectedContractors}
-                onChange={v => { setSelectedContractors(v as string[]); setGenerated(false) }}
-                placeholder="All Contractors"
-                className="w-full"
-              />
+              {isContractor ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1.5 rounded-lg cursor-default w-full">
+                  <span className="text-gray-400">Locked:</span> {user?.name}
+                </span>
+              ) : (
+                <MultiSelectFilter
+                  options={contractorOptions}
+                  value={selectedContractors}
+                  onChange={v => { setSelectedContractors(v as string[]); setGenerated(false) }}
+                  placeholder="All Contractors"
+                  className="w-full"
+                />
+              )}
             </div>
             <div>
               <label className="label">Issue Priority</label>

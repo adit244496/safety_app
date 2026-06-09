@@ -29,6 +29,11 @@ async def upload_images(
     if not obs:
         raise HTTPException(404, "Observation not found")
 
+    MAX_IMAGES = 5
+    existing_count = db.query(models.ObservationImage).filter(models.ObservationImage.observation_id == obs_id).count()
+    if existing_count + len(files) > MAX_IMAGES:
+        raise HTTPException(400, f"Maximum {MAX_IMAGES} photos allowed per observation (already has {existing_count})")
+
     saved = []
     for f in files:
         ext = os.path.splitext(f.filename or "")[1].lower()

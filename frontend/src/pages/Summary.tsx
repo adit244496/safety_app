@@ -392,8 +392,12 @@ function rowPriority(row: any): 'critical' | 'warning' | 'normal' {
 }
 
 function ComplianceAnalysis() {
+  const { user } = useAuth()
+  const isContractor = user?.role === 'Contractor'
   const [projectIds,    setProjectIds]    = useState<number[]>([])
-  const [selectedContractors, setSelectedContractors] = useState<string[]>([])
+  const [selectedContractors, setSelectedContractors] = useState<string[]>(
+    () => isContractor && user?.name ? [user.name] : []
+  )
   const _last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const _today  = new Date().toISOString().slice(0, 10)
   const [dateFrom,      setDateFrom]      = useState(_last30)
@@ -573,7 +577,7 @@ function ComplianceAnalysis() {
   }
 
   const compActiveCount =
-    (projectIds.length > 0 ? 1 : 0) + (selectedContractors.length > 0 ? 1 : 0) +
+    (projectIds.length > 0 ? 1 : 0) + (!isContractor && selectedContractors.length > 0 ? 1 : 0) +
     (dateFrom !== _last30 ? 1 : 0) + (dateTo !== _today ? 1 : 0)
 
   return (
@@ -621,17 +625,23 @@ function ComplianceAnalysis() {
               }
             }}
             placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
-          <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
-            onChange={v => {
-              const names = v as string[]
-              setSelectedContractors(names)
-              if (names.length > 0) {
-                const valid = new Set<number>()
-                contractors.filter((c: any) => names.includes(c.name)).forEach((c: any) => (c.projects || []).forEach((p: any) => valid.add(p.id)))
-                setProjectIds(prev => prev.filter(id => valid.has(id)))
-              }
-            }}
-            placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[130px]" />
+          {isContractor ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1.5 rounded-lg cursor-default">
+              <span className="text-gray-400">Contractor:</span> {user?.name}
+            </span>
+          ) : (
+            <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
+              onChange={v => {
+                const names = v as string[]
+                setSelectedContractors(names)
+                if (names.length > 0) {
+                  const valid = new Set<number>()
+                  contractors.filter((c: any) => names.includes(c.name)).forEach((c: any) => (c.projects || []).forEach((p: any) => valid.add(p.id)))
+                  setProjectIds(prev => prev.filter(id => valid.has(id)))
+                }
+              }}
+              placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[130px]" />
+          )}
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date from" />
@@ -640,7 +650,7 @@ function ComplianceAnalysis() {
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date to" />
           </div>
           {compActiveCount > 0 && (
-            <button onClick={() => { setProjectIds([]); setSelectedContractors([]); setDateFrom(_last30); setDateTo(_today) }}
+            <button onClick={() => { setProjectIds([]); if (!isContractor) setSelectedContractors([]); setDateFrom(_last30); setDateTo(_today) }}
               className="col-span-2 sm:col-auto flex items-center justify-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors border border-red-100 sm:border-0">
               <X className="w-3 h-3" /> Clear filters
             </button>

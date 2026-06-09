@@ -237,13 +237,17 @@ export default function ObservationForm() {
     ? calcRisk(Number(form.severity), Number(form.probability))
     : null
 
+  const MAX_IMAGES = 5
+
   const handleFiles = (files: FileList | null) => {
     if (!files) return
-    const arr = Array.from(files)
-    setPendingFiles(p => [...p, ...arr])
-    arr.forEach(f => {
-      const url = URL.createObjectURL(f)
-      setPreviewUrls(p => [...p, url])
+    setPendingFiles(prev => {
+      const slots = MAX_IMAGES - prev.length
+      if (slots <= 0) { setError(`Maximum ${MAX_IMAGES} photos allowed`); return prev }
+      const arr = Array.from(files).slice(0, slots)
+      if (arr.length < files.length) setError(`Maximum ${MAX_IMAGES} photos allowed — only ${arr.length} added`)
+      arr.forEach(f => setPreviewUrls(p => [...p, URL.createObjectURL(f)]))
+      return [...prev, ...arr]
     })
   }
 

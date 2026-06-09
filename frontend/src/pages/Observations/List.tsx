@@ -17,6 +17,7 @@ export default function ObservationsList() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const qc = useQueryClient()
+  const isContractor = user?.role === 'Contractor'
   const canCreate = ['SuperAdmin', 'Admin', 'Observer'].includes(user?.role || '')
   const [showFilters, setShowFilters] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState<number | null>(null)
@@ -31,7 +32,9 @@ export default function ObservationsList() {
 
   const [statuses,       setStatuses]       = useState<string[]>([])
   const [projectIds,     setProjectIds]     = useState<number[]>([])
-  const [selectedContractors, setSelectedContractors] = useState<string[]>([])
+  const [selectedContractors, setSelectedContractors] = useState<string[]>(
+    () => isContractor && user?.name ? [user.name] : []
+  )
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
   const [coreConcernIds,    setCoreConcernIds]    = useState<number[]>([])
   const [specificConcernIds, setSpecificConcernIds] = useState<number[]>([])
@@ -42,7 +45,7 @@ export default function ObservationsList() {
   const activeCount =
     (statuses.length          > 0 ? 1 : 0) +
     (projectIds.length        > 0 ? 1 : 0) +
-    (selectedContractors.length > 0 ? 1 : 0) +
+    (!isContractor && selectedContractors.length > 0 ? 1 : 0) +
     (riskLevels.length        > 0 ? 1 : 0) +
     (coreConcernIds.length    > 0 ? 1 : 0) +
     (specificConcernIds.length > 0 ? 1 : 0) +
@@ -140,7 +143,8 @@ export default function ObservationsList() {
   usePageTitle('Observations', `${total} total observation${total !== 1 ? 's' : ''}`)
 
   const clearFilters = () => {
-    setStatuses([]); setProjectIds([]); setSelectedContractors([])
+    setStatuses([]); setProjectIds([])
+    if (!isContractor) setSelectedContractors([])
     setRiskLevels([]); setCoreConcernIds([]); setSpecificConcernIds([]); setDateFrom(''); setDateTo(''); setPage(1)
   }
   const resetPage = () => setPage(1)
@@ -194,17 +198,23 @@ export default function ObservationsList() {
             }}
             placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
 
-          <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
-            onChange={v => {
-              const names = v as string[]
-              setSelectedContractors(names); resetPage()
-              if (names.length > 0) {
-                const valid = new Set<number>()
-                contractors.filter((c: any) => names.includes(c.name)).forEach((c: any) => (c.projects || []).forEach((p: any) => valid.add(p.id)))
-                setProjectIds(prev => prev.filter(id => valid.has(id)))
-              }
-            }}
-            placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
+          {isContractor ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1.5 rounded-lg cursor-default col-span-1">
+              <span className="text-gray-400">Contractor:</span> {user?.name}
+            </span>
+          ) : (
+            <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
+              onChange={v => {
+                const names = v as string[]
+                setSelectedContractors(names); resetPage()
+                if (names.length > 0) {
+                  const valid = new Set<number>()
+                  contractors.filter((c: any) => names.includes(c.name)).forEach((c: any) => (c.projects || []).forEach((p: any) => valid.add(p.id)))
+                  setProjectIds(prev => prev.filter(id => valid.has(id)))
+                }
+              }}
+              placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
+          )}
 
           <MultiSelectFilter size="sm" options={RISK_OPTIONS} value={riskLevels}
             onChange={v => { setRiskLevels(v as string[]); resetPage() }}

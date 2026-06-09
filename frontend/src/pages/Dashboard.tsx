@@ -2,6 +2,7 @@ import { useState, useMemo, useRef } from 'react'
 import { usePageTitle } from '../store/pageTitleContext'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../store/authStore'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList,
   PieChart, Pie, Cell,
@@ -30,13 +31,17 @@ const PRIORITY_OPTIONS: MSOption[] = [
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const isContractor = user?.role === 'Contractor'
   const [showFilters, setShowFilters] = useState(false)
   usePageTitle('Dashboard', 'Overview of all safety observations')
 
   // ── Filter state (arrays for multi-select) ──────────────────────────────
   const [projectIds,     setProjectIds]     = useState<number[]>([])
   const [buildingId,     setBuildingId]     = useState<number | ''>('')
-  const [selectedContractors, setSelectedContractors] = useState<string[]>([])
+  const [selectedContractors, setSelectedContractors] = useState<string[]>(
+    () => isContractor && user?.name ? [user.name] : []
+  )
   const [coreConcernIds, setCoreConcernIds] = useState<number[]>([])
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
   const [dateFrom,       setDateFrom]       = useState('')
@@ -45,7 +50,7 @@ export default function Dashboard() {
   const activeFilterCount =
     (projectIds.length    > 0 ? 1 : 0) +
     (buildingId           ? 1 : 0) +
-    (selectedContractors.length > 0 ? 1 : 0) +
+    (!isContractor && selectedContractors.length > 0 ? 1 : 0) +
     (coreConcernIds.length > 0 ? 1 : 0) +
     (riskLevels.length    > 0 ? 1 : 0) +
     (dateFrom             ? 1 : 0) +
@@ -165,7 +170,8 @@ export default function Dashboard() {
   ]
 
   const resetFilters = () => {
-    setProjectIds([]); setBuildingId(''); setSelectedContractors([])
+    setProjectIds([]); setBuildingId('')
+    if (!isContractor) setSelectedContractors([])
     setCoreConcernIds([]); setRiskLevels([])
     setDateFrom(''); setDateTo('')
   }
@@ -325,17 +331,23 @@ export default function Dashboard() {
               {buildingOptions.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
             </select>
           )}
-          <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
-            onChange={v => {
-              const names = v as string[]
-              setSelectedContractors(names)
-              if (names.length > 0) {
-                const valid = new Set<number>()
-                contractors.filter((c: any) => names.includes(c.name)).forEach((c: any) => (c.projects || []).forEach((p: any) => valid.add(p.id)))
-                setProjectIds(prev => prev.filter(id => valid.has(id)))
-              }
-            }}
-            placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
+          {isContractor ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1.5 rounded-lg cursor-default">
+              <span className="text-gray-400">Contractor:</span> {user?.name}
+            </span>
+          ) : (
+            <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
+              onChange={v => {
+                const names = v as string[]
+                setSelectedContractors(names)
+                if (names.length > 0) {
+                  const valid = new Set<number>()
+                  contractors.filter((c: any) => names.includes(c.name)).forEach((c: any) => (c.projects || []).forEach((p: any) => valid.add(p.id)))
+                  setProjectIds(prev => prev.filter(id => valid.has(id)))
+                }
+              }}
+              placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
+          )}
           <MultiSelectFilter size="sm" options={PRIORITY_OPTIONS} value={riskLevels}
             onChange={v => setRiskLevels(v as string[])} placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
           <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}
