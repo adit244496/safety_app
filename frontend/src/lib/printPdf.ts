@@ -18,7 +18,15 @@ export interface SummaryPdfParams {
   dateRange: string
 }
 
-// ── Colour palette ─────────────────────────────────────────────────────────────
+export interface EasePdfParams {
+  overallScore: number | null
+  overallGrade: string
+  filterDesc: string
+  projectCount: number
+  periodCount: number
+}
+
+// ── Colour constants ───────────────────────────────────────────────────────────
 type RGB = [number, number, number]
 
 const C = {
@@ -34,18 +42,8 @@ const C = {
   riskLow:  [16,  185, 129] as RGB,
 }
 
-const STATUS_RGB: Record<string, RGB> = {
-  Open:               [99,  102, 241],
-  Pending:            [245, 158, 11],
-  'Under Review':     [59,  130, 246],
-  'Partially Closed': [139, 92,  246],
-  Closed:             [16,  185, 129],
-}
-
 const RISK_RGB: Record<string, RGB> = {
-  High:   C.riskHigh,
-  Medium: C.riskMed,
-  Low:    C.riskLow,
+  High: C.riskHigh, Medium: C.riskMed, Low: C.riskLow,
 }
 
 function cc(score: number | null): RGB {
@@ -55,7 +53,6 @@ function cc(score: number | null): RGB {
   if (score >= 60) return [245, 158, 11]
   return [239, 68, 68]
 }
-
 function cg(score: number | null): string {
   if (score == null) return 'N/A'
   if (score >= 90) return 'EXCELLENT'
@@ -69,65 +66,62 @@ function fc(pdf: jsPDF, c: RGB) { pdf.setFillColor(c[0], c[1], c[2]) }
 function tc(pdf: jsPDF, c: RGB) { pdf.setTextColor(c[0], c[1], c[2]) }
 function dc(pdf: jsPDF, c: RGB) { pdf.setDrawColor(c[0], c[1], c[2]) }
 
-// ── Page helpers ───────────────────────────────────────────────────────────────
-function drawHeader(
-  pdf: jsPDF,
-  title: string,
-  W: number, M: number,
-  date: string,
-  filterDesc: string,
-) {
+// ── Page chrome ────────────────────────────────────────────────────────────────
+function drawHeader(pdf: jsPDF, title: string, W: number, M: number, date: string, filterDesc: string) {
   fc(pdf, C.indigo); pdf.rect(0, 0, W, 14, 'F')
-
   tc(pdf, C.white)
-  pdf.setFont('helvetica', 'bold');  pdf.setFontSize(9.5)
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9.5)
   pdf.text('Safety App', M, 7.5)
   pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6.5)
   pdf.text('neo she | safety reporting', M, 12)
-
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(12)
   pdf.text(title, W / 2, 9, { align: 'center' })
-
   pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7)
   pdf.text(`Generated: ${date}`, W - M, 9, { align: 'right' })
-
   fc(pdf, C.indigo50); pdf.rect(0, 14, W, 6.5, 'F')
-  pdf.setFont('helvetica', 'italic'); pdf.setFontSize(6.5)
-  tc(pdf, C.indigo)
-  const truncated = filterDesc.length > 140 ? filterDesc.slice(0, 137) + '…' : filterDesc
+  pdf.setFont('helvetica', 'italic'); pdf.setFontSize(6.5); tc(pdf, C.indigo)
+  const truncated = filterDesc.length > 145 ? filterDesc.slice(0, 142) + '…' : filterDesc
   pdf.text(`Filters: ${truncated}`, M, 18.5)
 }
 
 function drawFooter(pdf: jsPDF, page: number, total: number, W: number, H: number, M: number) {
   fc(pdf, C.indigo50); pdf.rect(0, H - 7, W, 7, 'F')
-  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6)
-  tc(pdf, C.gray500)
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6); tc(pdf, C.gray500)
   pdf.text('Safety App — Confidential | For internal distribution only', M, H - 2)
   pdf.text(`Page ${page} of ${total}`, W - M, H - 2, { align: 'right' })
 }
 
-async function captureChart(id: string): Promise<string | null> {
+// Returns the captured image with its original pixel dimensions for correct aspect ratio in addImage
+async function captureChart(id: string): Promise<{ dataUrl: string; pw: number; ph: number } | null> {
   const el = document.getElementById(id)
   if (!el) return null
   await new Promise<void>(r => setTimeout(r, 150))
   const canvas = await html2canvas(el, {
-    scale: 2.5,
-    useCORS: true,
-    allowTaint: true,
-    backgroundColor: '#ffffff',
-    logging: false,
+    scale: 2.5, useCORS: true, allowTaint: true,
+    backgroundColor: '#ffffff', logging: false,
   })
-  return canvas.toDataURL('image/png')
+  return { dataUrl: canvas.toDataURL('image/png'), pw: canvas.width, ph: canvas.height }
+}
+
+// Fit image into a box (maxW × maxH) preserving aspect ratio
+function fitImage(
+  pdf: jsPDF, img: { dataUrl: string; pw: number; ph: number },
+  x: number, y: number, maxW: number, maxH: number,
+) {
+  const ratio = img.ph / img.pw
+  let w = maxW, h = maxW * ratio
+  if (h > maxH) { h = maxH; w = maxH / ratio }
+  pdf.addImage(img.dataUrl, 'PNG', x, y, w, h)
+  return { w, h }
 }
 
 // ── Dashboard PDF ──────────────────────────────────────────────────────────────
 export async function generateDashboardPdf(p: DashboardPdfParams) {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const W = 297, H = 210, M = 12
-  const PAGES = 2
+  const W = 297, H = 210, M = 12, PAGES = 2
   const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
-  // ── Page 1: KPI cards + Trend chart + Status donut ──────────────────────────
+  // ── Page 1: KPIs + Trend chart + Status donut ─────────────────────────────
   drawHeader(pdf, 'Safety Dashboard Report', W, M, date, p.filterDesc)
 
   const KPI_PAL: Array<[RGB, RGB, RGB]> = [
@@ -154,60 +148,45 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
   const chartsY = kpiY + kpiH + 6
   const chartsH = H - chartsY - 9
 
+  // Capture both chart cards (each card includes its own title + legend)
   const [trendImg, donutImg] = await Promise.all([
     captureChart('dash-trend-chart'),
     captureChart('dash-status-donut'),
   ])
 
-  const trendW = (W - M * 2) * 0.62
+  const trendW = (W - M * 2) * 0.63
   const donutW = (W - M * 2) - trendW - 6
   const donutX = M + trendW + 6
 
-  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); tc(pdf, C.gray900)
-
+  // Trend chart card — the card div already contains the legend row
   if (trendImg) {
-    pdf.text(`${p.viewMode === 'quarterly' ? 'Quarterly' : 'Monthly'} Trend`, M, chartsY - 1.5)
-    pdf.addImage(trendImg, 'PNG', M, chartsY, trendW, chartsH - 2)
+    fitImage(pdf, trendImg, M, chartsY, trendW, chartsH)
   } else {
-    fc(pdf, C.indigo50); pdf.roundedRect(M, chartsY, trendW, chartsH - 2, 2, 2, 'F')
+    fc(pdf, C.indigo50); pdf.roundedRect(M, chartsY, trendW, chartsH, 2, 2, 'F')
     tc(pdf, C.gray500); pdf.setFontSize(7)
     pdf.text('Chart not available', M + trendW / 2, chartsY + chartsH / 2, { align: 'center' })
   }
 
+  // Status donut card — the card div already contains the legend list below the donut
   if (donutImg) {
-    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); tc(pdf, C.gray900)
-    pdf.text('Status Distribution', donutX, chartsY - 1.5)
-    const donutImgH = Math.min(chartsH * 0.63, donutW * 1.05)
-    pdf.addImage(donutImg, 'PNG', donutX, chartsY, donutW, donutImgH)
-
-    // Status legend
-    let legY = chartsY + donutImgH + 3.5
-    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6.5)
-    for (const s of p.statusPie) {
-      const rgb = STATUS_RGB[s.name] || ([148, 163, 184] as RGB)
-      fc(pdf, rgb); pdf.roundedRect(donutX, legY, 3, 3, 0.6, 0.6, 'F')
-      tc(pdf, C.gray700)
-      pdf.text(`${s.name}: ${s.value}`, donutX + 4.5, legY + 2.5)
-      legY += 5
-    }
+    fitImage(pdf, donutImg, donutX, chartsY, donutW, chartsH)
   }
 
   drawFooter(pdf, 1, PAGES, W, H, M)
 
-  // ── Page 2: Risk distribution + Recent observations ──────────────────────────
+  // ── Page 2: Risk distribution + Recent observations ──────────────────────
   pdf.addPage()
   drawHeader(pdf, 'Safety Dashboard Report', W, M, date, p.filterDesc)
 
   const p2Y = 24
   const riskColW = (W - M * 2) * 0.32
+  const barTrackW = riskColW - 28
 
-  // Risk distribution — drawn programmatically
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); tc(pdf, C.gray900)
   pdf.text('Risk Distribution', M, p2Y - 1.5)
 
   const totalRisk = p.riskBars.reduce((s, r) => s + r.count, 0)
   let rY = p2Y + 4
-  const barTrackW = riskColW - 28
   const barH = 9
 
   for (const level of ['High', 'Medium', 'Low']) {
@@ -218,24 +197,16 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
 
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(7.5); tc(pdf, rgb)
     pdf.text(level, M, rY + 6)
-
-    dc(pdf, C.gray200)
     fc(pdf, C.gray200); pdf.roundedRect(M + 18, rY, barTrackW, barH, 2, 2, 'F')
     if (pct > 0) {
       fc(pdf, rgb); pdf.roundedRect(M + 18, rY, Math.max(pct * barTrackW, 3), barH, 2, 2, 'F')
     }
-
     fc(pdf, rgb); pdf.roundedRect(M + 18 + barTrackW + 2, rY, 22, barH, 2, 2, 'F')
     tc(pdf, C.white); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(6.5)
-    pdf.text(
-      `${item.count}  (${Math.round(pct * 100)}%)`,
-      M + 18 + barTrackW + 13, rY + 6,
-      { align: 'center' },
-    )
+    pdf.text(`${item.count}  (${Math.round(pct * 100)}%)`, M + 18 + barTrackW + 13, rY + 6, { align: 'center' })
     rY += barH + 7
   }
 
-  // Total badge
   fc(pdf, C.indigo); pdf.roundedRect(M, rY + 2, riskColW, 8, 2, 2, 'F')
   tc(pdf, C.white); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8)
   pdf.text(`Total: ${totalRisk} observations`, M + riskColW / 2, rY + 7.2, { align: 'center' })
@@ -243,7 +214,6 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
   // Recent observations table
   const tableX = M + riskColW + 8
   const tableW = W - tableX - M
-
   if (p.recent.length > 0) {
     const COLS = ['Obs. ID', 'Project', 'Core Concern', 'Risk', 'Status', 'Date']
     const COLW = [34, 42, 52, 20, 28, 20]
@@ -264,7 +234,6 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
       const rowBg: RGB = idx % 2 === 0 ? [248, 249, 255] : [255, 255, 255]
       fc(pdf, rowBg); pdf.rect(tableX, tY, tableW, ROW_H, 'F')
       dc(pdf, C.gray200); pdf.line(tableX, tY + ROW_H, tableX + tableW, tY + ROW_H)
-
       cx = tableX + 2.5
       const row = [
         obs.observation_id || '—',
@@ -277,8 +246,7 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
       row.forEach((val, i) => {
         pdf.setFontSize(6.5)
         if (COLS[i] === 'Risk' && val !== '—') {
-          const rgb = RISK_RGB[val] || C.gray700
-          tc(pdf, rgb); pdf.setFont('helvetica', 'bold')
+          const rgb = RISK_RGB[val] || C.gray700; tc(pdf, rgb); pdf.setFont('helvetica', 'bold')
         } else if (COLS[i] === 'Obs. ID') {
           tc(pdf, C.indigo); pdf.setFont('helvetica', 'bold')
         } else {
@@ -295,11 +263,62 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
   pdf.save(`dashboard-${new Date().toISOString().slice(0, 10)}.pdf`)
 }
 
+// ── SHE Score PDF ──────────────────────────────────────────────────────────────
+export async function generateEasePdf(p: EasePdfParams) {
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  const W = 297, H = 210, M = 12, PAGES = 2
+  const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+
+  const [projectImg, categoryImg] = await Promise.all([
+    captureChart('ease-project-chart'),
+    captureChart('ease-category-chart'),
+  ])
+
+  // ── Page 1: Overall KPI + Project chart ──────────────────────────────────
+  drawHeader(pdf, 'SHE Score Report', W, M, date, p.filterDesc)
+
+  // Overall score banner
+  const kpiY = 22.5
+  const scoreRgb = cc(p.overallScore)
+  fc(pdf, scoreRgb); pdf.roundedRect(M, kpiY, W - M * 2, 16, 2, 2, 'F')
+  tc(pdf, C.white)
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(22)
+  pdf.text(p.overallScore != null ? `${p.overallScore}%` : 'N/A', W / 2, kpiY + 11, { align: 'center' })
+  pdf.setFont('helvetica', 'normal'); pdf.setFontSize(7.5)
+  pdf.text('Overall SHE Score', M + 5, kpiY + 11)
+  pdf.text(
+    `${p.periodCount} period${p.periodCount !== 1 ? 's' : ''}  ·  ${p.projectCount > 0 ? `${p.projectCount} project${p.projectCount !== 1 ? 's' : ''}  ·  ` : ''}Grade: ${p.overallGrade}`,
+    W - M - 5, kpiY + 11, { align: 'right' },
+  )
+
+  if (projectImg) {
+    const chartY = kpiY + 16 + 5
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); tc(pdf, C.gray900)
+    pdf.text('SHE Score by Project', M, chartY - 1.5)
+    fitImage(pdf, projectImg, M, chartY, W - M * 2, H - chartY - 9)
+  }
+
+  drawFooter(pdf, 1, PAGES, W, H, M)
+
+  // ── Page 2: Category scores ──────────────────────────────────────────────
+  pdf.addPage()
+  drawHeader(pdf, 'SHE Score Report', W, M, date, p.filterDesc)
+
+  if (categoryImg) {
+    const chartY = 23
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8); tc(pdf, C.gray900)
+    pdf.text('Category Scores (Aggregated)', M, chartY - 1.5)
+    fitImage(pdf, categoryImg, M, chartY, W - M * 2, H - chartY - 9)
+  }
+
+  drawFooter(pdf, 2, PAGES, W, H, M)
+  pdf.save(`she-score-${new Date().toISOString().slice(0, 10)}.pdf`)
+}
+
 // ── Summary / Compliance PDF ───────────────────────────────────────────────────
 export async function generateSummaryPdf(p: SummaryPdfParams) {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
-  const W = 297, H = 210, M = 12
-  const PAGES = 2
+  const W = 297, H = 210, M = 12, PAGES = 2
   const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
 
   const TBL_COLS = ['#', 'Name', 'Total', 'Open', 'Closed', 'High Risk', 'Med Risk', 'Low Risk', 'Score', 'Grade']
@@ -308,23 +327,22 @@ export async function generateSummaryPdf(p: SummaryPdfParams) {
   const tableW   = TBL_W.reduce((a, b) => a + b, 0)
 
   function drawTable(title: string, rows: any[], nameKey: string, pageNum: number) {
-    const filterLine = `${p.filterDesc}  |  Period: ${p.dateRange}`
-    drawHeader(pdf, 'Compliance Analysis Report', W, M, date, filterLine)
+    drawHeader(pdf, 'Compliance Analysis Report', W, M, date, `${p.filterDesc}  |  Period: ${p.dateRange}`)
 
-    // KPI strip
+    // Summary KPI strip
     const kpiBandY = 22.5
     const kpiBandH = 14
-    const totalObs  = rows.reduce((s, r) => s + (r.total || 0), 0)
+    const totalObs  = rows.reduce((s: number, r: any) => s + (r.total || 0), 0)
     const avgScore  = rows.length > 0
-      ? Math.round(rows.reduce((s, r) => s + (r.compliance_score || 0), 0) / rows.length)
+      ? Math.round(rows.reduce((s: number, r: any) => s + (r.compliance_score || 0), 0) / rows.length)
       : 0
-    const highTotal = rows.reduce((s, r) => s + (r.high_risk || 0), 0)
+    const highTotal = rows.reduce((s: number, r: any) => s + (r.high_risk || 0), 0)
 
     const kpiItems = [
-      { label: 'Total Observations', val: String(totalObs), color: C.indigo },
-      { label: 'Avg Compliance Score', val: `${avgScore}%`, color: cc(avgScore) },
-      { label: 'Total High Risk Items', val: String(highTotal), color: C.riskHigh },
-      { label: pageNum === 1 ? 'Projects Listed' : 'Contractors Listed', val: String(rows.length), color: [99, 102, 241] as RGB },
+      { label: 'Total Observations',  val: String(totalObs),  color: C.indigo },
+      { label: 'Avg Compliance Score', val: `${avgScore}%`,    color: cc(avgScore) },
+      { label: 'Total High Risk',      val: String(highTotal), color: C.riskHigh },
+      { label: pageNum === 1 ? 'Projects' : 'Contractors', val: String(rows.length), color: [99, 102, 241] as RGB },
     ]
     const kpiItemW = (W - M * 2) / kpiItems.length
     kpiItems.forEach((k, i) => {
@@ -351,19 +369,19 @@ export async function generateSummaryPdf(p: SummaryPdfParams) {
     tY += ROW_H
 
     // Data rows
-    rows.forEach((row, idx) => {
+    rows.forEach((row: any, idx: number) => {
       if (tY + ROW_H > H - 15) return
       const score = row.compliance_score
       const grade = cg(score)
       const scoreRgb = cc(score)
-      const priority = (row.open > 0 && score != null && score < 40)
+      const priority = (row.total === 0)
         ? 'critical'
         : (row.high_risk > 0 ? 'warning' : 'normal')
 
-      let rowBg: RGB
-      if (priority === 'critical')     rowBg = [254, 242, 242]
-      else if (priority === 'warning') rowBg = [255, 251, 235]
-      else                             rowBg = idx % 2 === 0 ? [248, 249, 255] : [255, 255, 255]
+      const rowBg: RGB =
+        priority === 'critical' ? [254, 242, 242] :
+        priority === 'warning'  ? [255, 251, 235] :
+        idx % 2 === 0           ? [248, 249, 255] : [255, 255, 255]
 
       fc(pdf, rowBg); pdf.rect(M, tY, tableW + 4, ROW_H, 'F')
       dc(pdf, C.gray200); pdf.line(M, tY + ROW_H, M + tableW + 4, tY + ROW_H)
@@ -381,7 +399,6 @@ export async function generateSummaryPdf(p: SummaryPdfParams) {
         score != null ? `${score}%` : '—',
         grade,
       ]
-
       vals.forEach((val, i) => {
         pdf.setFontSize(7)
         if (TBL_COLS[i] === 'Grade') {
@@ -417,12 +434,11 @@ export async function generateSummaryPdf(p: SummaryPdfParams) {
     fc(pdf, [245, 247, 250] as RGB); pdf.rect(M, legY, W - M * 2, 7, 'F')
     pdf.setFont('helvetica', 'bold'); pdf.setFontSize(6); tc(pdf, C.gray500)
     pdf.text('Compliance Scale:', M + 2, legY + 4.5)
-
     const GRADES: Array<{ label: string; color: RGB }> = [
       { label: 'EXCELLENT  ≥ 90%', color: [16,  185, 129] },
-      { label: 'GOOD  ≥ 75%',       color: [34,  197, 94]  },
-      { label: 'AVERAGE  ≥ 60%',    color: [245, 158, 11]  },
-      { label: 'BELOW AVG  < 60%',  color: [239, 68,  68]  },
+      { label: 'GOOD  ≥ 75%',      color: [34,  197, 94]  },
+      { label: 'AVERAGE  ≥ 60%',   color: [245, 158, 11]  },
+      { label: 'BELOW AVG  < 60%', color: [239, 68,  68]  },
     ]
     let legX = M + 38
     GRADES.forEach(g => {
@@ -435,7 +451,7 @@ export async function generateSummaryPdf(p: SummaryPdfParams) {
     drawFooter(pdf, pageNum, PAGES, W, H, M)
   }
 
-  drawTable('Project-wise Safety Compliance', p.projectRows, 'project_name', 1)
+  drawTable('Project-wise Safety Compliance',    p.projectRows,    'project_name',    1)
   pdf.addPage()
   drawTable('Contractor-wise Safety Compliance', p.contractorRows, 'contractor_name', 2)
 

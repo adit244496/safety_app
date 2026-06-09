@@ -252,7 +252,7 @@ export default function Dashboard() {
     a.click(); URL.revokeObjectURL(url)
   }
 
-  function downloadPdf() {
+  async function downloadPdf() {
     const filterParts = [
       projectIds.length
         ? `Projects: ${projectIds.map(id => (projects as any[] || []).find((p: any) => p.id === id)?.name || id).join(', ')}`
@@ -265,7 +265,7 @@ export default function Dashboard() {
     ].filter(Boolean)
     const filterDesc = filterParts.length ? filterParts.join(' | ') : 'All data — no filters applied'
 
-    generateDashboardPdf({
+    await generateDashboardPdf({
       cards: cards.map(c => ({ label: c.label, value: c.value })),
       statusPie,
       riskBars,

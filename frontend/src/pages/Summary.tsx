@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import { BarChart3, TrendingUp, ArrowUpRight, Users, Award, ClipboardList, Save, CheckCircle, SlidersHorizontal, X, ChevronRight, ChevronDown, Download } from 'lucide-react'
 import ExcelJS from 'exceljs'
-import { generateSummaryPdf } from '../lib/printPdf'
+import { generateSummaryPdf, generateEasePdf } from '../lib/printPdf'
 import api from '../lib/api'
 import { useAuth } from '../store/authStore'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -169,6 +169,19 @@ function EaseScoreView() {
 
   const easeActiveCount = (projectFilter ? 1 : 0) + (dateFrom !== last90 ? 1 : 0) + (dateTo !== today ? 1 : 0)
 
+  const [showEaseDlMenu, setShowEaseDlMenu] = useState(false)
+  const easeDlRef = useRef<HTMLDivElement>(null)
+
+  async function downloadEasePdf() {
+    await generateEasePdf({
+      overallScore: aggregatedOverall,
+      overallGrade: aggregatedGrad,
+      filterDesc: `${projectFilter || 'All projects'}  |  ${dateFrom} to ${dateTo}`,
+      projectCount: projectChartData.length,
+      periodCount: periods.length,
+    })
+  }
+
   return (
     <div className="space-y-5">
       {/* Filter bar */}
@@ -183,6 +196,21 @@ function EaseScoreView() {
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{easeActiveCount}</span>
           )}
           <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+          <div className="relative ml-2" ref={easeDlRef} onClick={e => e.stopPropagation()}>
+            <button
+              onClick={() => setShowEaseDlMenu(v => !v)}
+              className="hidden sm:flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-2.5 py-1 rounded-lg transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" /> Download <ChevronDown className="w-3 h-3" />
+            </button>
+            {showEaseDlMenu && (
+              <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-50 overflow-hidden">
+                <button onClick={() => { downloadEasePdf(); setShowEaseDlMenu(false) }} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2">
+                  <span>📄</span> PDF (Print)
+                </button>
+              </div>
+            )}
+          </div>
         </div>
         <div className={`gap-2 mt-3 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${showFilters ? 'grid grid-cols-2' : 'hidden'}`}>
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
@@ -239,7 +267,7 @@ function EaseScoreView() {
 
           {/* Project-level SHE Score chart */}
           {projectChartData.length > 0 && (
-            <div className="card">
+            <div id="ease-project-chart" className="card">
               <div className="flex items-center gap-2 mb-4">
                 <BarChart3 className="w-4 h-4 text-indigo-600" />
                 <h2 className="font-semibold text-gray-900">SHE Score by Project</h2>
@@ -281,7 +309,7 @@ function EaseScoreView() {
           )}
 
           {/* Aggregated bar chart */}
-          <div className="card">
+          <div id="ease-category-chart" className="card">
             <div className="flex items-center gap-2 mb-4">
               <BarChart3 className="w-4 h-4 text-indigo-600" />
               <h2 className="font-semibold text-gray-900">Category Scores (Aggregated)</h2>
@@ -497,7 +525,7 @@ function ComplianceAnalysis() {
     a.click(); URL.revokeObjectURL(url)
   }
 
-  function downloadPdf() {
+  async function downloadPdf() {
     const filterParts = [
       projectIds.length
         ? `Projects: ${projectIds.map(id => (projects as any[] || []).find((p: any) => p.id === id)?.name || id).join(', ')}`
@@ -511,7 +539,7 @@ function ComplianceAnalysis() {
     ].filter(Boolean)
     const filterDesc = filterParts.length ? filterParts.join(' | ') : 'All projects & contractors'
 
-    generateSummaryPdf({
+    await generateSummaryPdf({
       projectRows: sortedProjects,
       contractorRows: sortedContractors,
       filterDesc,
