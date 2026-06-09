@@ -24,7 +24,6 @@ export async function captureAndPrint(
     windowHeight: el.scrollHeight,
   })
 
-  const imgData = canvas.toDataURL('image/png')
   const imgWidth  = canvas.width
   const imgHeight = canvas.height
 
@@ -51,7 +50,6 @@ export async function captureAndPrint(
   }
 
   // Fit image across pages
-  const ratio    = imgWidth / imgHeight
   const sliceH   = Math.round((usableH / usableW) * imgWidth) // px height per page
   let offsetY    = 0
   let firstPage  = true
