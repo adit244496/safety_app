@@ -404,11 +404,10 @@ function ComplianceAnalysis() {
     queryKey: ['projects'],
     queryFn: () => api.get('/projects/').then(r => r.data),
   })
-  const { data: users } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => api.get('/users/').then(r => r.data),
+  const { data: contractors = [] as any[] } = useQuery({
+    queryKey: ['contractors'],
+    queryFn: () => api.get('/users/contractors').then(r => r.data),
   })
-  const contractors: any[] = (users || []).filter((u: any) => u.role === 'Contractor')
   const projectOptions: MSOption[] = (projects || []).map((p: any) => ({ value: p.id, label: p.name }))
   const contractorOptions: MSOption[] = useMemo(() => {
     const seen = new Set<string>()

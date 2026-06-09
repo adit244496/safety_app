@@ -1190,11 +1190,9 @@ export default function ReportPage() {
   const { data: projects } = useQuery({
     queryKey: ['projects'], queryFn: () => api.get('/projects/').then(r => r.data), ...STALE,
   })
-  const { data: users } = useQuery({
-    queryKey: ['users'], queryFn: () => api.get('/users/').then(r => r.data), ...STALE,
+  const { data: contractors = [] as any[] } = useQuery({
+    queryKey: ['contractors'], queryFn: () => api.get('/users/contractors').then(r => r.data), ...STALE,
   })
-
-  const contractors: any[] = (users || []).filter((u: any) => u.role === 'Contractor')
 
   const projectOptions:    MSOption[] = (projects || []).map((p: any) => ({ value: p.id, label: p.name }))
   const contractorOptions: MSOption[] = useMemo(() => {

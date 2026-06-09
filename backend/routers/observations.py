@@ -616,6 +616,7 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
         raise HTTPException(404, "Observation not found")
     _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'Observer'])
 
+    was_draft = obs.status == 'Draft'
     factor, level = calc_risk(body.severity or obs.severity or 1, body.probability or obs.probability or 1)
 
     for field, val in body.model_dump(exclude_unset=True).items():
@@ -625,6 +626,23 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
     obs.risk_level = level
     obs.updated_at = datetime.now()
     db.commit()
+    db.refresh(obs)
+
+    # Send notifications when a draft is being submitted (converted to non-Draft)
+    if was_draft and obs.status != 'Draft':
+        if obs.contractor_user_id:
+            project_name = obs.project.name if obs.project else ""
+            notif = models.Notification(
+                user_id=obs.contractor_user_id,
+                observation_id=obs.id,
+                obs_ref=obs.observation_id,
+                message=f"New observation {obs.observation_id} assigned to you on project '{project_name}'.",
+                is_read=False,
+            )
+            db.add(notif)
+            db.commit()
+        _send_obs_email(obs, db)
+
     return {"success": True, "risk_factor": factor, "risk_level": level}
 
 

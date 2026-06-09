@@ -63,16 +63,14 @@ export default function Dashboard() {
       : Promise.resolve([]),
     enabled: !!singleProjectId,
   })
-  const { data: users } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => api.get('/users/').then(r => r.data),
+  const { data: contractors = [] as any[] } = useQuery({
+    queryKey: ['contractors'],
+    queryFn: () => api.get('/users/contractors').then(r => r.data),
   })
   const { data: coreConcerns } = useQuery({
     queryKey: ['core-concerns'],
     queryFn: () => api.get('/admin/core-concerns').then(r => r.data),
   })
-
-  const contractors: any[] = (users || []).filter((u: any) => u.role === 'Contractor')
   const contractorOptions: MSOption[] = useMemo(() => {
     const seen = new Set<string>()
     return contractors

@@ -74,9 +74,9 @@ export default function ObservationsList() {
     queryFn: () => api.get('/projects/').then(r => r.data),
     ...STABLE,
   })
-  const { data: users } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => api.get('/users/').then(r => r.data),
+  const { data: contractors = [] as any[] } = useQuery({
+    queryKey: ['contractors'],
+    queryFn: () => api.get('/users/contractors').then(r => r.data),
     ...STABLE,
   })
   const { data: concerns } = useQuery({
@@ -89,8 +89,6 @@ export default function ObservationsList() {
     queryFn: () => api.get('/admin/specific-concerns').then(r => r.data),
     ...STABLE,
   })
-
-  const contractors: any[] = (users || []).filter((u: any) => u.role === 'Contractor')
   const contractorOptions: MSOption[] = useMemo(() => {
     const seen = new Set<string>()
     return contractors

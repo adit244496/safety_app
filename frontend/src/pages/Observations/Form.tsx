@@ -279,7 +279,7 @@ export default function ObservationForm() {
     try {
       const payload = {
         ...form,
-        status: overrideStatus ?? form.status,
+        status: isDraft ? 'Draft' : (overrideStatus ?? (form.status === 'Draft' ? 'Open' : form.status)),
         project_id: Number(form.project_id),
         building_id: form.building_id ? Number(form.building_id) : null,
         floor_id: form.floor_id ? Number(form.floor_id) : null,
