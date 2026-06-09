@@ -8,8 +8,9 @@ import {
 } from 'recharts'
 import {
   ClipboardList, AlertTriangle, CheckCircle,
-  TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, Clock,
+  TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, Clock, Download,
 } from 'lucide-react'
+import ExcelJS from 'exceljs'
 import api from '../lib/api'
 import { fmtDate, getRiskClass, getStatusClass } from '../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -71,12 +72,29 @@ export default function Dashboard() {
     queryKey: ['core-concerns'],
     queryFn: () => api.get('/admin/core-concerns').then(r => r.data),
   })
+  // Cascading: contractor options narrowed to selected projects
   const contractorOptions: MSOption[] = useMemo(() => {
     const seen = new Set<string>()
     return contractors
-      .filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
+      .filter((c: any) => {
+        if (seen.has(c.name)) return false
+        seen.add(c.name)
+        if (projectIds.length === 0) return true
+        return (c.projects || []).some((p: any) => projectIds.includes(p.id))
+      })
       .map((c: any) => ({ value: c.name, label: c.name }))
-  }, [contractors])
+  }, [contractors, projectIds])
+
+  // Cascading: project options narrowed to selected contractors
+  const contractorProjectIds = useMemo(() => {
+    if (selectedContractors.length === 0) return null
+    const ids = new Set<number>()
+    contractors
+      .filter((c: any) => selectedContractors.includes(c.name))
+      .forEach((c: any) => (c.projects || []).forEach((p: any) => ids.add(p.id)))
+    return ids
+  }, [contractors, selectedContractors])
+
   const companyToUserIds = useMemo(() => {
     const map = new Map<string, number[]>()
     for (const c of contractors) { map.set(c.name, [...(map.get(c.name) || []), c.id]) }
@@ -151,18 +169,94 @@ export default function Dashboard() {
     setDateFrom(''); setDateTo('')
   }
 
-  // Options arrays for MultiSelectFilter
-  const projectOptions:     MSOption[] = (projects    || []).map((p: any) => ({ value: p.id,   label: p.name }))
+  // Options arrays for MultiSelectFilter (project options cascade from contractor selection)
+  const projectOptions: MSOption[] = useMemo(() =>
+    (projects || [])
+      .filter((p: any) => !contractorProjectIds || contractorProjectIds.has(p.id))
+      .map((p: any) => ({ value: p.id, label: p.name })),
+    [projects, contractorProjectIds]
+  )
   const buildingOptions:    MSOption[] = (buildings   || []).map((b: any) => ({ value: b.id,   label: b.name }))
   const coreConcernOptions: MSOption[] = (coreConcerns || []).map((c: any) => ({ value: c.id, label: c.name }))
 
+  async function downloadExcel() {
+    const wb = new ExcelJS.Workbook()
+    wb.creator = 'Neo SHE Safety App'
+
+    const hFill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } })
+    const bold  = (size = 10): Partial<ExcelJS.Font> => ({ bold: true, size, color: { argb: 'FFFFFFFF' } })
+    const addHeaderRow = (ws: ExcelJS.Worksheet, cols: string[], color: string) => {
+      const row = ws.addRow(cols)
+      row.eachCell(cell => {
+        cell.fill = hFill(color); cell.font = bold()
+        cell.alignment = { horizontal: 'center', vertical: 'middle' }
+        cell.border = { bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } } }
+      })
+      row.height = 20
+    }
+
+    // Sheet 1 – Summary KPIs
+    const ws1 = wb.addWorksheet('Summary')
+    ws1.columns = [{ width: 24 }, { width: 12 }]
+    addHeaderRow(ws1, ['Metric', 'Count'], 'FF4F46E5')
+    cards.forEach((c, i) => {
+      const row = ws1.addRow([c.label, c.value])
+      row.getCell(1).fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF')
+      row.getCell(2).alignment = { horizontal: 'center' }
+    })
+
+    // Sheet 2 – Trend
+    const ws2 = wb.addWorksheet(viewMode === 'quarterly' ? 'Quarterly Trend' : 'Monthly Trend')
+    const trendCols = ['Period', 'Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed', 'Total']
+    ws2.columns = trendCols.map((h, i) => ({ header: h, width: i === 0 ? 16 : 14 }))
+    addHeaderRow(ws2, trendCols, 'FF4F46E5')
+    trendData.forEach((d: any, i) => {
+      const row = ws2.addRow([d.month, d.Open || 0, d.Pending || 0, d['Under Review'] || 0, d['Partially Closed'] || 0, d.Closed || 0, d._total || 0])
+      row.eachCell(cell => { cell.fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF') })
+      row.getCell(7).font = { bold: true }
+    })
+
+    // Sheet 3 – By Status
+    const ws3 = wb.addWorksheet('By Status')
+    ws3.columns = [{ width: 20 }, { width: 12 }]
+    addHeaderRow(ws3, ['Status', 'Count'], 'FF4F46E5')
+    statusPie.forEach((s: any, i) => {
+      const row = ws3.addRow([s.name, s.value])
+      row.getCell(1).fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF')
+      row.getCell(2).alignment = { horizontal: 'center' }
+    })
+
+    // Sheet 4 – By Risk
+    if (riskBars.length > 0) {
+      const ws4 = wb.addWorksheet('By Risk')
+      ws4.columns = [{ width: 14 }, { width: 12 }]
+      addHeaderRow(ws4, ['Risk Level', 'Count'], 'FF4F46E5')
+      riskBars.forEach((r: any, i) => {
+        const row = ws4.addRow([r.risk_level, r.count])
+        row.getCell(1).fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF')
+        row.getCell(2).alignment = { horizontal: 'center' }
+      })
+    }
+
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = `dashboard-${new Date().toISOString().slice(0, 10)}.xlsx`
+    a.click(); URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-5">
-      {/* Page header — hidden on desktop (shown in top bar instead) */}
-      <div className="flex items-center justify-between lg:hidden">
-        <div>
+      {/* Page header */}
+      <div className="flex items-center justify-between">
+        <div className="lg:hidden">
           <h1 className="page-title">Dashboard</h1>
           <p className="text-sm text-gray-400 mt-1">Overview of all safety observations</p>
+        </div>
+        <div className="ml-auto">
+          <button onClick={downloadExcel} className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-3 py-1.5 rounded-lg transition-colors">
+            <Download className="w-3.5 h-3.5" /> Download Report
+          </button>
         </div>
       </div>
 
@@ -185,7 +279,14 @@ export default function Dashboard() {
         <div className={`gap-2 mt-3 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${showFilters ? 'grid grid-cols-2' : 'hidden'}`}>
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
           <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
-            onChange={v => { setProjectIds(v as number[]); setBuildingId('') }}
+            onChange={v => {
+              const ids = v as number[]
+              setProjectIds(ids); setBuildingId('')
+              if (ids.length > 0) {
+                const valid = new Set(contractors.filter((c: any) => (c.projects || []).some((p: any) => ids.includes(p.id))).map((c: any) => c.name))
+                setSelectedContractors(prev => prev.filter(n => valid.has(n)))
+              }
+            }}
             placeholder="Project" className="w-full sm:w-auto sm:min-w-[110px]" />
           {singleProjectId && (
             <select
@@ -198,7 +299,16 @@ export default function Dashboard() {
             </select>
           )}
           <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
-            onChange={v => setSelectedContractors(v as string[])} placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
+            onChange={v => {
+              const names = v as string[]
+              setSelectedContractors(names)
+              if (names.length > 0) {
+                const valid = new Set<number>()
+                contractors.filter((c: any) => names.includes(c.name)).forEach((c: any) => (c.projects || []).forEach((p: any) => valid.add(p.id)))
+                setProjectIds(prev => prev.filter(id => valid.has(id)))
+              }
+            }}
+            placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
           <MultiSelectFilter size="sm" options={PRIORITY_OPTIONS} value={riskLevels}
             onChange={v => setRiskLevels(v as string[])} placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
           <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}

@@ -89,12 +89,28 @@ export default function ObservationsList() {
     queryFn: () => api.get('/admin/specific-concerns').then(r => r.data),
     ...STABLE,
   })
+  // Cascading: contractor options narrowed by selected projects
   const contractorOptions: MSOption[] = useMemo(() => {
     const seen = new Set<string>()
     return contractors
-      .filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
+      .filter((c: any) => {
+        if (seen.has(c.name)) return false
+        seen.add(c.name)
+        if (projectIds.length === 0) return true
+        return (c.projects || []).some((p: any) => projectIds.includes(p.id))
+      })
       .map((c: any) => ({ value: c.name, label: c.name }))
-  }, [contractors])
+  }, [contractors, projectIds])
+
+  // Cascading: project options narrowed by selected contractors
+  const contractorProjectIds = useMemo(() => {
+    if (selectedContractors.length === 0) return null
+    const ids = new Set<number>()
+    contractors.filter((c: any) => selectedContractors.includes(c.name))
+      .forEach((c: any) => (c.projects || []).forEach((p: any) => ids.add(p.id)))
+    return ids
+  }, [contractors, selectedContractors])
+
   const companyToUserIds = useMemo(() => {
     const map = new Map<string, number[]>()
     for (const c of contractors) { map.set(c.name, [...(map.get(c.name) || []), c.id]) }
@@ -104,7 +120,12 @@ export default function ObservationsList() {
     selectedContractors.flatMap(name => companyToUserIds.get(name) || []),
     [selectedContractors, companyToUserIds]
   )
-  const projectOptions:     MSOption[] = (projects || []).map((p: any) => ({ value: p.id, label: p.name }))
+  const projectOptions: MSOption[] = useMemo(() =>
+    (projects || [])
+      .filter((p: any) => !contractorProjectIds || contractorProjectIds.has(p.id))
+      .map((p: any) => ({ value: p.id, label: p.name })),
+    [projects, contractorProjectIds]
+  )
   const coreConcernOptions: MSOption[] = (concerns  || []).map((c: any) => ({ value: c.id, label: c.name }))
   const filteredSpecificConcerns = useMemo(() => {
     const all: any[] = allSpecificConcerns || []
@@ -163,11 +184,26 @@ export default function ObservationsList() {
             placeholder="Status" className="w-full sm:w-auto sm:min-w-[110px]" />
 
           <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
-            onChange={v => { setProjectIds(v as number[]); resetPage() }}
+            onChange={v => {
+              const ids = v as number[]
+              setProjectIds(ids); resetPage()
+              if (ids.length > 0) {
+                const valid = new Set(contractors.filter((c: any) => (c.projects || []).some((p: any) => ids.includes(p.id))).map((c: any) => c.name))
+                setSelectedContractors(prev => prev.filter(n => valid.has(n)))
+              }
+            }}
             placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
 
           <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
-            onChange={v => { setSelectedContractors(v as string[]); resetPage() }}
+            onChange={v => {
+              const names = v as string[]
+              setSelectedContractors(names); resetPage()
+              if (names.length > 0) {
+                const valid = new Set<number>()
+                contractors.filter((c: any) => names.includes(c.name)).forEach((c: any) => (c.projects || []).forEach((p: any) => valid.add(p.id)))
+                setProjectIds(prev => prev.filter(id => valid.has(id)))
+              }
+            }}
             placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
 
           <MultiSelectFilter size="sm" options={RISK_OPTIONS} value={riskLevels}

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from sqlalchemy.orm import Session
@@ -62,15 +62,15 @@ def user_to_dict(user: models.User):
 
 @router.get("/contractors")
 def list_contractors(
-    project_id: Optional[int] = None,
+    project_id: List[int] = Query(default=[]),
     db: Session = Depends(get_db),
     _user: models.User = Depends(get_current_user),
 ):
     q = db.query(models.User).filter(models.User.role == "Contractor")
     if project_id:
         q = q.join(models.UserProject, models.User.id == models.UserProject.user_id).filter(
-            models.UserProject.project_id == project_id
-        )
+            models.UserProject.project_id.in_(project_id)
+        ).distinct()
     return [user_to_dict(u) for u in q.order_by(models.User.name).all()]
 
 

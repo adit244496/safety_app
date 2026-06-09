@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList,
 } from 'recharts'
-import { BarChart3, TrendingUp, ArrowUpRight, Users, Award, ClipboardList, Save, CheckCircle, SlidersHorizontal, X, ChevronRight, ChevronDown } from 'lucide-react'
+import { BarChart3, TrendingUp, ArrowUpRight, Users, Award, ClipboardList, Save, CheckCircle, SlidersHorizontal, X, ChevronRight, ChevronDown, Download } from 'lucide-react'
+import ExcelJS from 'exceljs'
 import api from '../lib/api'
 import { useAuth } from '../store/authStore'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -408,13 +409,34 @@ function ComplianceAnalysis() {
     queryKey: ['contractors'],
     queryFn: () => api.get('/users/contractors').then(r => r.data),
   })
-  const projectOptions: MSOption[] = (projects || []).map((p: any) => ({ value: p.id, label: p.name }))
+  // Cascading: contractor options narrowed to selected projects
   const contractorOptions: MSOption[] = useMemo(() => {
     const seen = new Set<string>()
     return contractors
-      .filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
+      .filter((c: any) => {
+        if (seen.has(c.name)) return false
+        seen.add(c.name)
+        if (projectIds.length === 0) return true
+        return (c.projects || []).some((p: any) => projectIds.includes(p.id))
+      })
       .map((c: any) => ({ value: c.name, label: c.name }))
-  }, [contractors])
+  }, [contractors, projectIds])
+
+  // Cascading: project options narrowed to selected contractors
+  const contractorProjectIds = useMemo(() => {
+    if (selectedContractors.length === 0) return null
+    const ids = new Set<number>()
+    contractors.filter((c: any) => selectedContractors.includes(c.name))
+      .forEach((c: any) => (c.projects || []).forEach((p: any) => ids.add(p.id)))
+    return ids
+  }, [contractors, selectedContractors])
+
+  const projectOptions: MSOption[] = useMemo(() =>
+    (projects || [])
+      .filter((p: any) => !contractorProjectIds || contractorProjectIds.has(p.id))
+      .map((p: any) => ({ value: p.id, label: p.name })),
+    [projects, contractorProjectIds]
+  )
   const companyToUserIds = useMemo(() => {
     const map = new Map<string, number[]>()
     for (const c of contractors) { map.set(c.name, [...(map.get(c.name) || []), c.id]) }
@@ -424,6 +446,51 @@ function ComplianceAnalysis() {
     selectedContractors.flatMap(name => companyToUserIds.get(name) || []),
     [selectedContractors, companyToUserIds]
   )
+
+  async function downloadExcel() {
+    const wb = new ExcelJS.Workbook()
+    wb.creator = 'Neo SHE Safety App'
+    const hFill = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } })
+    const addHeaderRow = (ws: ExcelJS.Worksheet, cols: string[]) => {
+      const row = ws.addRow(cols)
+      row.eachCell(cell => {
+        cell.fill = hFill('FF4F46E5')
+        cell.font = { bold: true, size: 10, color: { argb: 'FFFFFFFF' } }
+        cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      })
+      row.height = 20
+    }
+    const addDataRows = (ws: ExcelJS.Worksheet, rows: any[], cols: string[]) => {
+      rows.forEach((r, i) => {
+        const row = ws.addRow(cols.map(c => r[c] ?? ''))
+        row.eachCell(cell => { cell.fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF') })
+      })
+    }
+
+    // Sheet 1 – By Project
+    const ws1 = wb.addWorksheet('By Project')
+    ws1.columns = [
+      { width: 24 }, { width: 10 }, { width: 10 }, { width: 10 },
+      { width: 10 }, { width: 10 }, { width: 10 }, { width: 16 },
+    ]
+    addHeaderRow(ws1, ['Project', 'Total', 'Open', 'Closed', 'High Risk', 'Medium Risk', 'Low Risk', 'Compliance %'])
+    addDataRows(ws1, sortedProjects, ['project_name', 'total', 'open', 'closed', 'high_risk', 'medium_risk', 'low_risk', 'compliance_score'])
+
+    // Sheet 2 – By Contractor
+    const ws2 = wb.addWorksheet('By Contractor')
+    ws2.columns = [
+      { width: 28 }, { width: 10 }, { width: 10 }, { width: 10 },
+      { width: 10 }, { width: 10 }, { width: 10 }, { width: 16 },
+    ]
+    addHeaderRow(ws2, ['Contractor', 'Total', 'Open', 'Closed', 'High Risk', 'Medium Risk', 'Low Risk', 'Compliance %'])
+    addDataRows(ws2, sortedContractors, ['contractor_name', 'total', 'open', 'closed', 'high_risk', 'medium_risk', 'low_risk', 'compliance_score'])
+
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a'); a.href = url; a.download = `compliance-summary-${new Date().toISOString().slice(0, 10)}.xlsx`
+    a.click(); URL.revokeObjectURL(url)
+  }
 
   const { data: details, isLoading } = useQuery({
     queryKey: ['compliance-details', projectIds, selectedContractors, dateFrom, dateTo],
@@ -510,13 +577,36 @@ function ComplianceAnalysis() {
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{compActiveCount}</span>
           )}
           <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+          <button
+            onClick={e => { e.stopPropagation(); downloadExcel() }}
+            className="hidden sm:flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-2.5 py-1 rounded-lg transition-colors ml-2"
+          >
+            <Download className="w-3.5 h-3.5" /> Download
+          </button>
         </div>
         <div className={`gap-2 mt-3 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${showFilters ? 'grid grid-cols-2' : 'hidden'}`}>
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
           <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
-            onChange={v => setProjectIds(v as number[])} placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
+            onChange={v => {
+              const ids = v as number[]
+              setProjectIds(ids)
+              if (ids.length > 0) {
+                const valid = new Set(contractors.filter((c: any) => (c.projects || []).some((p: any) => ids.includes(p.id))).map((c: any) => c.name))
+                setSelectedContractors(prev => prev.filter(n => valid.has(n)))
+              }
+            }}
+            placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
           <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
-            onChange={v => setSelectedContractors(v as string[])} placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[130px]" />
+            onChange={v => {
+              const names = v as string[]
+              setSelectedContractors(names)
+              if (names.length > 0) {
+                const valid = new Set<number>()
+                contractors.filter((c: any) => names.includes(c.name)).forEach((c: any) => (c.projects || []).forEach((p: any) => valid.add(p.id)))
+                setProjectIds(prev => prev.filter(id => valid.has(id)))
+              }
+            }}
+            placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[130px]" />
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date from" />
