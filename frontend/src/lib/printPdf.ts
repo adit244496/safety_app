@@ -1,39 +1,80 @@
-export function printPdf(title: string, bodyHtml: string) {
-  const win = window.open('', '_blank')
-  if (!win) return
-  win.document.write(`<!DOCTYPE html><html><head>
-<meta charset="UTF-8"/>
-<title>${title}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #1f2937; padding: 24px; }
-  h1 { font-size: 18px; font-weight: 700; color: #1f2937; margin-bottom: 2px; }
-  .subtitle { font-size: 11px; color: #6b7280; margin-bottom: 20px; }
-  .section { margin-bottom: 20px; }
-  .section-title { font-size: 13px; font-weight: 700; color: #4f46e5; margin-bottom: 8px; border-bottom: 2px solid #e0e7ff; padding-bottom: 4px; }
-  table { width: 100%; border-collapse: collapse; margin-bottom: 4px; }
-  th { background: #4f46e5; color: #fff; font-weight: 700; font-size: 10px; padding: 6px 8px; text-align: left; }
-  td { padding: 5px 8px; border-bottom: 1px solid #f3f4f6; font-size: 10px; }
-  tr:nth-child(even) td { background: #f5f5ff; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-weight: 700; font-size: 9px; }
-  .badge-high   { background: #fee2e2; color: #991b1b; }
-  .badge-medium { background: #fef9c3; color: #92400e; }
-  .badge-low    { background: #dcfce7; color: #166534; }
-  .kpi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 16px; }
-  .kpi-card { background: #f5f5ff; border-left: 3px solid #4f46e5; padding: 10px 12px; border-radius: 6px; }
-  .kpi-label { font-size: 9px; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; }
-  .kpi-value { font-size: 22px; font-weight: 800; color: #1f2937; }
-  .meta { font-size: 10px; color: #9ca3af; margin-bottom: 16px; }
-  @media print {
-    body { padding: 12px; }
-    @page { margin: 15mm; size: A4 landscape; }
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
+
+export async function captureAndPrint(
+  elementId: string,
+  filename: string,
+  title: string,
+  subtitle?: string,
+) {
+  const el = document.getElementById(elementId)
+  if (!el) return
+
+  // Temporarily scroll el into full view and expand it
+  el.style.height = 'auto'
+  el.style.overflow = 'visible'
+
+  const canvas = await html2canvas(el, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    backgroundColor: '#f8fafc',
+    logging: false,
+    windowWidth: el.scrollWidth,
+    windowHeight: el.scrollHeight,
+  })
+
+  const imgData = canvas.toDataURL('image/png')
+  const imgWidth  = canvas.width
+  const imgHeight = canvas.height
+
+  // A4 landscape: 297 × 210 mm  →  at 96dpi ≈ 1123 × 794 px
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+  const pageW = pdf.internal.pageSize.getWidth()   // 297
+  const pageH = pdf.internal.pageSize.getHeight()  // 210
+
+  const margin   = 10
+  const headerH  = 14                               // reserved for title
+  const usableW  = pageW - margin * 2
+  const usableH  = pageH - margin * 2 - headerH
+
+  // Title header
+  pdf.setFontSize(14)
+  pdf.setFont('helvetica', 'bold')
+  pdf.setTextColor(31, 41, 55)
+  pdf.text(title, margin, margin + 7)
+  if (subtitle) {
+    pdf.setFontSize(8)
+    pdf.setFont('helvetica', 'normal')
+    pdf.setTextColor(107, 114, 128)
+    pdf.text(subtitle, margin, margin + 12)
   }
-</style>
-</head><body>
-<h1>${title}</h1>
-<p class="subtitle">Generated on ${new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</p>
-${bodyHtml}
-<script>window.onload = function(){ window.print(); }<\/script>
-</body></html>`)
-  win.document.close()
+
+  // Fit image across pages
+  const ratio    = imgWidth / imgHeight
+  const sliceH   = Math.round((usableH / usableW) * imgWidth) // px height per page
+  let offsetY    = 0
+  let firstPage  = true
+
+  while (offsetY < imgHeight) {
+    if (!firstPage) pdf.addPage()
+
+    // Crop a horizontal strip from the source canvas
+    const stripH    = Math.min(sliceH, imgHeight - offsetY)
+    const strip     = document.createElement('canvas')
+    strip.width     = imgWidth
+    strip.height    = stripH
+    const ctx       = strip.getContext('2d')!
+    ctx.drawImage(canvas, 0, -offsetY)
+    const stripData = strip.toDataURL('image/png')
+
+    const printH = (stripH / imgWidth) * usableW
+    const topY   = firstPage ? margin + headerH : margin
+    pdf.addImage(stripData, 'PNG', margin, topY, usableW, printH)
+
+    offsetY   += sliceH
+    firstPage  = false
+  }
+
+  pdf.save(filename)
 }

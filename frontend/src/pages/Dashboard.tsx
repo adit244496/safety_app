@@ -11,7 +11,7 @@ import {
   TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, Clock, Download,
 } from 'lucide-react'
 import ExcelJS from 'exceljs'
-import { printPdf } from '../lib/printPdf'
+import { captureAndPrint } from '../lib/printPdf'
 import api from '../lib/api'
 import { fmtDate, getRiskClass, getStatusClass } from '../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -247,40 +247,19 @@ export default function Dashboard() {
   }
 
   function downloadPdf() {
-    const riskRows = riskBars.map((r: any) => `<tr><td>${r.risk_level}</td><td style="text-align:center">${r.count}</td></tr>`).join('')
-    const trendRows = trendData.map((d: any) =>
-      `<tr><td>${d.month}</td><td style="text-align:center">${d.Open||0}</td><td style="text-align:center">${d.Pending||0}</td><td style="text-align:center">${d['Under Review']||0}</td><td style="text-align:center">${d['Partially Closed']||0}</td><td style="text-align:center">${d.Closed||0}</td><td style="text-align:center;font-weight:700">${d._total||0}</td></tr>`
-    ).join('')
-
-    const body = `
-      <div class="kpi-grid">
-        ${cards.map(c => `<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`).join('')}
-      </div>
-      <div class="section">
-        <div class="section-title">${viewMode === 'quarterly' ? 'Quarterly' : 'Monthly'} Trend</div>
-        <table><thead><tr><th>Period</th><th>Open</th><th>Pending</th><th>Under Review</th><th>Partially Closed</th><th>Closed</th><th>Total</th></tr></thead>
-        <tbody>${trendRows}</tbody></table>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-        <div class="section">
-          <div class="section-title">By Status</div>
-          <table><thead><tr><th>Status</th><th>Count</th></tr></thead>
-          <tbody>${statusPie.map((s: any) => `<tr><td>${s.name}</td><td style="text-align:center">${s.value}</td></tr>`).join('')}</tbody></table>
-        </div>
-        ${riskBars.length ? `<div class="section">
-          <div class="section-title">By Risk Level</div>
-          <table><thead><tr><th>Risk</th><th>Count</th></tr></thead>
-          <tbody>${riskRows}</tbody></table>
-        </div>` : ''}
-      </div>`
-    printPdf('Dashboard Report', body)
+    captureAndPrint(
+      'dashboard-pdf-content',
+      `dashboard-${new Date().toISOString().slice(0, 10)}.pdf`,
+      'Dashboard Report',
+      `Generated on ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+    )
   }
 
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const dlRef = useRef<HTMLDivElement>(null)
 
   return (
-    <div className="space-y-5">
+    <div id="dashboard-pdf-content" className="space-y-5">
       {/* Page header */}
       <div className="flex items-center justify-between">
         <div className="lg:hidden">

@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import { BarChart3, TrendingUp, ArrowUpRight, Users, Award, ClipboardList, Save, CheckCircle, SlidersHorizontal, X, ChevronRight, ChevronDown, Download } from 'lucide-react'
 import ExcelJS from 'exceljs'
-import { printPdf } from '../lib/printPdf'
+import { captureAndPrint } from '../lib/printPdf'
 import api from '../lib/api'
 import { useAuth } from '../store/authStore'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -494,27 +494,12 @@ function ComplianceAnalysis() {
   }
 
   function downloadPdf() {
-    const scoreBar = (score: number) => {
-      const color = score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444'
-      return `<span style="color:${color};font-weight:700">${score}%</span>`
-    }
-    const projRows = sortedProjects.map((r: any) =>
-      `<tr><td>${r.project_name||'—'}</td><td style="text-align:center">${r.total||0}</td><td style="text-align:center">${r.open||0}</td><td style="text-align:center">${r.closed||0}</td><td style="text-align:center">${r.high_risk||0}</td><td style="text-align:center">${r.medium_risk||0}</td><td style="text-align:center">${r.low_risk||0}</td><td style="text-align:center">${scoreBar(r.compliance_score||0)}</td></tr>`
-    ).join('')
-    const conRows = sortedContractors.map((r: any) =>
-      `<tr><td>${r.contractor_name||'—'}</td><td style="text-align:center">${r.total||0}</td><td style="text-align:center">${r.open||0}</td><td style="text-align:center">${r.closed||0}</td><td style="text-align:center">${r.high_risk||0}</td><td style="text-align:center">${r.medium_risk||0}</td><td style="text-align:center">${r.low_risk||0}</td><td style="text-align:center">${scoreBar(r.compliance_score||0)}</td></tr>`
-    ).join('')
-    const cols = '<th>Name</th><th>Total</th><th>Open</th><th>Closed</th><th>High</th><th>Medium</th><th>Low</th><th>Compliance</th>'
-    const body = `
-      <div class="section">
-        <div class="section-title">By Project</div>
-        <table><thead><tr>${cols}</tr></thead><tbody>${projRows||'<tr><td colspan="8" style="text-align:center;color:#9ca3af">No data</td></tr>'}</tbody></table>
-      </div>
-      <div class="section">
-        <div class="section-title">By Contractor</div>
-        <table><thead><tr>${cols}</tr></thead><tbody>${conRows||'<tr><td colspan="8" style="text-align:center;color:#9ca3af">No data</td></tr>'}</tbody></table>
-      </div>`
-    printPdf('Compliance Summary Report', body)
+    captureAndPrint(
+      'summary-pdf-content',
+      `compliance-summary-${new Date().toISOString().slice(0, 10)}.pdf`,
+      'Compliance Summary Report',
+      `Generated on ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`,
+    )
   }
 
   const [showDlMenu, setShowDlMenu] = useState(false)
@@ -592,7 +577,7 @@ function ComplianceAnalysis() {
     (dateFrom !== _last30 ? 1 : 0) + (dateTo !== _today ? 1 : 0)
 
   return (
-    <div className="space-y-5">
+    <div id="summary-pdf-content" className="space-y-5">
       {/* Filter bar */}
       <div className="card-sm">
         <div

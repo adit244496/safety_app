@@ -78,9 +78,10 @@ export default function ObservationForm() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { user } = useAuth()
-  const fileRef    = useRef<HTMLInputElement>(null)
-  const cameraRef  = useRef<HTMLInputElement>(null)
-  const formRef    = useRef<HTMLFormElement>(null)
+  const fileRef      = useRef<HTMLInputElement>(null)
+  const cameraRef    = useRef<HTMLInputElement>(null)
+  const formRef      = useRef<HTMLFormElement>(null)
+  const isSavingRef  = useRef(false)   // prevents double-tap double-submit on mobile
 
   // Prevent select / input focus + change from scrolling the page.
   // Phase 1 (mousedown/touchstart): snapshot scroll before browser acts.
@@ -252,7 +253,9 @@ export default function ObservationForm() {
   }
 
   async function doSave(overrideStatus?: string) {
-    if (!form.project_id) { setError('Project is required'); return }
+    if (isSavingRef.current) return   // block double-tap before re-render disables the button
+    isSavingRef.current = true
+    if (!form.project_id) { setError('Project is required'); isSavingRef.current = false; return }
     const isDraft = overrideStatus === 'Draft'
 
     if (!isDraft) {
@@ -326,6 +329,7 @@ export default function ObservationForm() {
       toast.error(msg)
     } finally {
       setSaving(false); setSavingDraft(false)
+      isSavingRef.current = false
     }
   }
 

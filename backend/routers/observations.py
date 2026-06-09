@@ -23,7 +23,13 @@ def generate_obs_id(db: Session, project_id: int) -> str:
     prefix = "".join(c for c in (project.name if project else "OBS") if c.isalnum()).upper()[:4]
     count = db.query(models.Observation).filter(models.Observation.project_id == project_id).count()
     date_str = datetime.now().strftime("%Y%m%d")
-    return f"{prefix}-{date_str}-{str(count + 1).zfill(4)}"
+    seq = count + 1
+    # Ensure uniqueness — walk forward if the ID is already taken (handles race conditions & deletions)
+    while db.query(models.Observation).filter(
+        models.Observation.observation_id == f"{prefix}-{date_str}-{str(seq).zfill(4)}"
+    ).first() is not None:
+        seq += 1
+    return f"{prefix}-{date_str}-{str(seq).zfill(4)}"
 
 
 def _assert_obs_access(obs: models.Observation, user: models.User, write_roles: Optional[List[str]] = None):
