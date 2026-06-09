@@ -220,7 +220,7 @@ export default function Dashboard() {
     const ws3 = wb.addWorksheet('By Status')
     ws3.columns = [{ width: 20 }, { width: 12 }]
     addHeaderRow(ws3, ['Status', 'Count'], 'FF4F46E5')
-    statusPie.forEach((s: any, i) => {
+    statusPie.forEach((s: any, i: number) => {
       const row = ws3.addRow([s.name, s.value])
       row.getCell(1).fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF')
       row.getCell(2).alignment = { horizontal: 'center' }
@@ -231,7 +231,7 @@ export default function Dashboard() {
       const ws4 = wb.addWorksheet('By Risk')
       ws4.columns = [{ width: 14 }, { width: 12 }]
       addHeaderRow(ws4, ['Risk Level', 'Count'], 'FF4F46E5')
-      riskBars.forEach((r: any, i) => {
+      riskBars.forEach((r: any, i: number) => {
         const row = ws4.addRow([r.risk_level, r.count])
         row.getCell(1).fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF')
         row.getCell(2).alignment = { horizontal: 'center' }
