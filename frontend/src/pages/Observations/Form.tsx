@@ -166,7 +166,11 @@ export default function ObservationForm() {
   const { data: violations }  = useQuery({ queryKey: ['violations'],           queryFn: () => api.get('/admin/violations').then(r => r.data), ...STABLE })
   const { data: targetDates } = useQuery({ queryKey: ['target-dates'],         queryFn: () => api.get('/admin/target-dates').then(r => r.data), ...STABLE })
   const { data: outcomes }    = useQuery({ queryKey: ['possible-outcomes'],    queryFn: () => api.get('/admin/possible-outcomes').then(r => r.data), ...STABLE })
-  const { data: contractors } = useQuery({ queryKey: ['users-contractors'],    queryFn: () => api.get('/users/').then(r => r.data.filter((u: any) => u.role === 'Contractor')), ...STABLE })
+  const { data: contractors } = useQuery({
+    queryKey: ['contractors', form.project_id],
+    queryFn: () => api.get('/users/contractors', { params: form.project_id ? { project_id: form.project_id } : {} }).then(r => r.data),
+    staleTime: 30_000,
+  })
 
   const contractorCompanies: any[] = useMemo(() => {
     const seen = new Set<string>()
@@ -392,7 +396,7 @@ export default function ObservationForm() {
       <SectionCard title="Site Information" icon={<MapPin className="w-3.5 h-3.5" />}>
         <div className={G3}>
           <Field label="Project" required>
-            <select className="select" value={form.project_id} onChange={e => { set('project_id', e.target.value); set('building_id', ''); set('floor_id', '') }} required>
+            <select className="select" value={form.project_id} onChange={e => { set('project_id', e.target.value); set('building_id', ''); set('floor_id', ''); set('contractor_company', ''); set('contractor_user_id', '') }} required>
               <option value="">Select project…</option>
               {(projects || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
