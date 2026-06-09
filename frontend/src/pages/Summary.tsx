@@ -6,7 +6,7 @@ import {
 } from 'recharts'
 import { BarChart3, TrendingUp, ArrowUpRight, Users, Award, ClipboardList, Save, CheckCircle, SlidersHorizontal, X, ChevronRight, ChevronDown, Download } from 'lucide-react'
 import ExcelJS from 'exceljs'
-import { captureAndPrint } from '../lib/printPdf'
+import { generateSummaryPdf } from '../lib/printPdf'
 import api from '../lib/api'
 import { useAuth } from '../store/authStore'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -498,12 +498,25 @@ function ComplianceAnalysis() {
   }
 
   function downloadPdf() {
-    captureAndPrint(
-      'summary-pdf-content',
-      `compliance-summary-${new Date().toISOString().slice(0, 10)}.pdf`,
-      'Compliance Summary Report',
-      `Generated on ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`,
-    )
+    const filterParts = [
+      projectIds.length
+        ? `Projects: ${projectIds.map(id => (projects as any[] || []).find((p: any) => p.id === id)?.name || id).join(', ')}`
+        : null,
+      isContractor
+        ? `Contractor: ${user?.name}`
+        : selectedContractors.length ? `Contractors: ${selectedContractors.join(', ')}` : null,
+      (dateFrom !== _last30 || dateTo !== _today)
+        ? `${dateFrom} → ${dateTo}`
+        : null,
+    ].filter(Boolean)
+    const filterDesc = filterParts.length ? filterParts.join(' | ') : 'All projects & contractors'
+
+    generateSummaryPdf({
+      projectRows: sortedProjects,
+      contractorRows: sortedContractors,
+      filterDesc,
+      dateRange: `${dateFrom} to ${dateTo}`,
+    })
   }
 
   const [showDlMenu, setShowDlMenu] = useState(false)

@@ -12,7 +12,7 @@ import {
   TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, Clock, Download,
 } from 'lucide-react'
 import ExcelJS from 'exceljs'
-import { captureAndPrint } from '../lib/printPdf'
+import { generateDashboardPdf } from '../lib/printPdf'
 import api from '../lib/api'
 import { fmtDate, getRiskClass, getStatusClass } from '../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -253,12 +253,26 @@ export default function Dashboard() {
   }
 
   function downloadPdf() {
-    captureAndPrint(
-      'dashboard-pdf-content',
-      `dashboard-${new Date().toISOString().slice(0, 10)}.pdf`,
-      'Dashboard Report',
-      `Generated on ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}`,
-    )
+    const filterParts = [
+      projectIds.length
+        ? `Projects: ${projectIds.map(id => (projects as any[] || []).find((p: any) => p.id === id)?.name || id).join(', ')}`
+        : null,
+      isContractor
+        ? `Contractor: ${user?.name}`
+        : selectedContractors.length ? `Contractors: ${selectedContractors.join(', ')}` : null,
+      riskLevels.length ? `Risk: ${riskLevels.join(', ')}` : null,
+      dateFrom || dateTo ? `${dateFrom || 'start'} → ${dateTo || 'today'}` : null,
+    ].filter(Boolean)
+    const filterDesc = filterParts.length ? filterParts.join(' | ') : 'All data — no filters applied'
+
+    generateDashboardPdf({
+      cards: cards.map(c => ({ label: c.label, value: c.value })),
+      statusPie,
+      riskBars,
+      recent: data?.recent || [],
+      filterDesc,
+      viewMode,
+    })
   }
 
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
@@ -392,7 +406,7 @@ export default function Dashboard() {
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             {/* Trend chart — Monthly or Quarterly */}
-            <div className="card lg:col-span-2">
+            <div id="dash-trend-chart" className="card lg:col-span-2">
               <div className="flex items-start justify-between gap-2 mb-4 flex-wrap">
                 <div className="flex items-center gap-2">
                   <div className="w-7 h-7 bg-indigo-50 rounded-lg flex items-center justify-center flex-shrink-0">
@@ -505,7 +519,7 @@ export default function Dashboard() {
             </div>
 
             {/* Status donut — full tenure */}
-            <div className="card">
+            <div id="dash-status-donut" className="card">
               <h2 className="font-semibold text-gray-900 mb-1">By Status</h2>
               <p className="text-[10px] text-gray-400 mb-3">Entire filtered tenure</p>
               {statusPie.length > 0 ? (
