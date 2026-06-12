@@ -179,8 +179,11 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
   drawHeader(pdf, 'Safety Dashboard Report', W, M, date, p.filterDesc)
 
   const p2Y = 24
-  const riskColW = (W - M * 2) * 0.32
-  const barTrackW = riskColW - 28
+  // Risk column: badge must fit within riskColW
+  // layout: label(18) | bar(barTrackW) | gap(3) | badge(BADGE_W) | pad(2) = riskColW
+  const BADGE_W = 24
+  const riskColW = (W - M * 2) * 0.38
+  const barTrackW = riskColW - 18 - 3 - BADGE_W - 2   // fits everything within riskColW
 
   pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); tc(pdf, C.gray900)
   pdf.text('Risk Distribution', M, p2Y - 1.5)
@@ -201,9 +204,10 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
     if (pct > 0) {
       fc(pdf, rgb); pdf.roundedRect(M + 18, rY, Math.max(pct * barTrackW, 3), barH, 2, 2, 'F')
     }
-    fc(pdf, rgb); pdf.roundedRect(M + 18 + barTrackW + 2, rY, 22, barH, 2, 2, 'F')
+    const badgeX = M + 18 + barTrackW + 3
+    fc(pdf, rgb); pdf.roundedRect(badgeX, rY, BADGE_W, barH, 2, 2, 'F')
     tc(pdf, C.white); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(6.5)
-    pdf.text(`${item.count}  (${Math.round(pct * 100)}%)`, M + 18 + barTrackW + 13, rY + 6, { align: 'center' })
+    pdf.text(`${item.count} (${Math.round(pct * 100)}%)`, badgeX + BADGE_W / 2, rY + 6, { align: 'center' })
     rY += barH + 7
   }
 
@@ -211,8 +215,8 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
   tc(pdf, C.white); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8)
   pdf.text(`Total: ${totalRisk} observations`, M + riskColW / 2, rY + 7.2, { align: 'center' })
 
-  // Recent observations table
-  const tableX = M + riskColW + 8
+  // Recent observations table — starts safely after the risk column
+  const tableX = M + riskColW + 10
   const tableW = W - tableX - M
   if (p.recent.length > 0) {
     const COLS = ['Obs. ID', 'Project', 'Core Concern', 'Risk', 'Status', 'Date']

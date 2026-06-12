@@ -20,7 +20,7 @@ class User(Base):
     name = Column(String, nullable=False)
     email = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
-    role = Column(String, nullable=False)  # Admin, PIC, AIC, HO, Contractor, Observer
+    role = Column(String, nullable=False)  # Admin, PIC, AIC, HO, PSO, Contractor, Observer
     created_at = Column(DateTime, default=func.now())
     user_projects = relationship("UserProject", back_populates="user", cascade="all, delete")
 

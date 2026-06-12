@@ -607,8 +607,10 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Aging + Risk + Recent */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* Aging + Risk (left col) | Recent (right col) */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Left column: aging donut + risk distribution stacked */}
+            <div className="space-y-5">
             {/* Aging donut */}
             {(() => {
               const byAging = data?.byAging || {}
@@ -704,9 +706,10 @@ export default function Dashboard() {
                 </div>
               ) : <div className="text-gray-400 text-sm text-center py-10">No risk data</div>}
             </div>
+            </div>{/* end left column */}
 
-            {/* Recent observations */}
-            <div className="card lg:col-span-2 flex flex-col">
+            {/* Right column: Recent observations */}
+            <div className="card flex flex-col">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="font-semibold text-gray-900">Recent Observations <span className="text-xs font-normal text-gray-400">(latest 4)</span></h2>
               </div>

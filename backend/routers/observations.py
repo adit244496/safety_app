@@ -44,6 +44,7 @@ def _assert_obs_access(obs: models.Observation, user: models.User, write_roles: 
 def get_allowed_project_ids(user: models.User) -> Optional[List[int]]:
     if user.role in ("SuperAdmin", "Admin", "PIC", "AIC"):
         return None
+    # HO, PSO, Observer, Contractor — scoped to assigned projects
     return [up.project_id for up in user.user_projects]
 
 

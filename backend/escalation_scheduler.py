@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 _scheduler: BackgroundScheduler | None = None
 
-CC_ROLES = {"PIC", "AIC", "HO", "Observer"}
+CC_ROLES = {"PIC", "AIC", "HO", "PSO", "Observer"}
 
 
 def _build_escalation_html(obs: models.Observation, reminder_number: int) -> str:

@@ -18,6 +18,7 @@ const ROLE: Record<string, { avatarBg: string; badgeBg: string; badgeText: strin
   PIC:        { avatarBg: 'bg-indigo-500', badgeBg: 'bg-indigo-100', badgeText: 'text-indigo-800', borderColor: '#6366f1' },
   AIC:        { avatarBg: 'bg-blue-500',   badgeBg: 'bg-blue-100',   badgeText: 'text-blue-800',   borderColor: '#3b82f6' },
   HO:         { avatarBg: 'bg-violet-500', badgeBg: 'bg-violet-100', badgeText: 'text-violet-800', borderColor: '#8b5cf6' },
+  PSO:        { avatarBg: 'bg-sky-500',    badgeBg: 'bg-sky-100',    badgeText: 'text-sky-800',    borderColor: '#0ea5e9' },
   Contractor: { avatarBg: 'bg-amber-500',  badgeBg: 'bg-amber-100',  badgeText: 'text-amber-800',  borderColor: '#f59e0b' },
   Observer:   { avatarBg: 'bg-teal-500',   badgeBg: 'bg-teal-100',   badgeText: 'text-teal-800',   borderColor: '#14b8a6' },
 }
@@ -497,9 +498,9 @@ export default function ObservationDetail() {
   )
   if (!obs) return <div className="text-center text-gray-500 py-12">Observation not found</div>
 
-  const canEdit      = ['SuperAdmin', 'Admin', 'HO', 'Observer'].includes(user?.role || '')
-  const canUpload    = ['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
-  const canComment   = ['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'].includes(user?.role || '')
+  const canEdit      = ['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer'].includes(user?.role || '')
+  const canUpload    = ['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer', 'Contractor'].includes(user?.role || '')
+  const canComment   = ['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer', 'Contractor'].includes(user?.role || '')
   const isContractor = user?.role === 'Contractor'
   const canDiscard   = user?.role === 'SuperAdmin' || (obs.status === 'Draft' && obs.created_by === user?.id)
 

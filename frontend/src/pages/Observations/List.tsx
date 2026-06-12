@@ -45,7 +45,7 @@ export default function ObservationsList() {
   const { user } = useAuth()
   const qc = useQueryClient()
   const isContractor = user?.role === 'Contractor'
-  const canCreate = ['SuperAdmin', 'Admin', 'Observer'].includes(user?.role || '')
+  const canCreate = ['SuperAdmin', 'Admin', 'PSO', 'Observer'].includes(user?.role || '')
   const [showFilters, setShowFilters] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState<number | null>(null)
 

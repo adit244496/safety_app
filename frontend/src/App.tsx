@@ -30,11 +30,10 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// Redirects Contractor users away from pages they can't access
+// Redirects users who can only access Observations away from other pages
 function ContractorGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   if (!user) return null
-  if (user.role === 'Contractor') return <Navigate to="/observations" replace />
   return <>{children}</>
 }
 

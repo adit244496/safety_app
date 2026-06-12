@@ -17,9 +17,9 @@ interface Props {
 const NAV = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', exact: true, roles: null },
   { to: '/observations', icon: ClipboardList, label: 'Observations', exact: false, roles: null },
-  { to: '/observations/new', icon: PlusCircle, label: 'New Observation', exact: true, roles: ['SuperAdmin', 'Admin', 'Observer'] },
-  { to: '/report', icon: FileBarChart2, label: 'SHE Report', exact: true, roles: ['SuperAdmin', 'Admin', 'PIC', 'AIC', 'HO', 'Observer'] },
-  { to: '/summary', icon: BarChart3, label: 'Summary', exact: true, roles: ['SuperAdmin', 'Admin', 'PIC', 'AIC', 'HO', 'Observer'] },
+  { to: '/observations/new', icon: PlusCircle, label: 'New Observation', exact: true, roles: ['SuperAdmin', 'Admin', 'PSO', 'Observer'] },
+  { to: '/report', icon: FileBarChart2, label: 'SHE Report', exact: true, roles: ['SuperAdmin', 'Admin', 'PIC', 'AIC', 'HO', 'PSO', 'Observer'] },
+  { to: '/summary', icon: BarChart3, label: 'Summary', exact: true, roles: ['SuperAdmin', 'Admin', 'PIC', 'AIC', 'HO', 'PSO', 'Observer'] },
 ]
 
 export default function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggleCollapse }: Props) {
