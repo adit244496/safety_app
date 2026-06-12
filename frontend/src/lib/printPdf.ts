@@ -148,10 +148,11 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
   const chartsY = kpiY + kpiH + 6
   const chartsH = H - chartsY - 9
 
-  // Capture both chart cards (each card includes its own title + legend)
-  const [trendImg, donutImg] = await Promise.all([
+  // Capture all chart cards
+  const [trendImg, donutImg, ageingDonutImg] = await Promise.all([
     captureChart('dash-trend-chart'),
     captureChart('dash-status-donut'),
+    captureChart('dash-aging-donut'),
   ])
 
   const trendW = (W - M * 2) * 0.63
@@ -214,6 +215,19 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
   fc(pdf, C.indigo); pdf.roundedRect(M, rY + 2, riskColW, 8, 2, 2, 'F')
   tc(pdf, C.white); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8)
   pdf.text(`Total: ${totalRisk} observations`, M + riskColW / 2, rY + 7.2, { align: 'center' })
+
+  // Ageing Distribution — below Risk Distribution in the same left column
+  const ageingY = rY + 14
+  pdf.setFont('helvetica', 'bold'); pdf.setFontSize(8.5); tc(pdf, C.gray900)
+  pdf.text('Ageing Distribution', M, ageingY - 1.5)
+  if (ageingDonutImg) {
+    const maxAgeingH = H - ageingY - 9
+    fitImage(pdf, ageingDonutImg, M, ageingY, riskColW, maxAgeingH)
+  } else {
+    fc(pdf, C.indigo50); pdf.roundedRect(M, ageingY, riskColW, 50, 2, 2, 'F')
+    tc(pdf, C.gray500); pdf.setFontSize(7)
+    pdf.text('No ageing data', M + riskColW / 2, ageingY + 25, { align: 'center' })
+  }
 
   // Recent observations table — starts safely after the risk column
   const tableX = M + riskColW + 10
