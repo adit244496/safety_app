@@ -587,8 +587,8 @@ def get_observation(obs_id: str, db: Session = Depends(get_db), user: models.Use
 
 @router.post("/", status_code=201)
 def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
-    if user.role not in ("SuperAdmin", "Admin", "Observer"):
-        raise HTTPException(status_code=403, detail="Only Admin and Observer can create observations")
+    if user.role not in ("SuperAdmin", "Admin", "HO", "PSO", "Observer"):
+        raise HTTPException(status_code=403, detail="Your role cannot create observations")
     factor, level = calc_risk(body.severity or 1, body.probability or 1)
     obs_id = generate_obs_id(db, body.project_id)
 
@@ -656,16 +656,20 @@ def _send_obs_email(obs: models.Observation, db: Session):
     if obs.contractor:
         to_emails.append(obs.contractor.email)
 
-    # CC: all HO users on this project + all Admin users
+    # CC: all project members (PIC, AIC, HO, PSO, Observer) + all Admin users
+    CC_PROJECT_ROLES = {"PIC", "AIC", "HO", "PSO", "Observer"}
     cc_emails: List[str] = []
-    ho_users = (
+    project_users = (
         db.query(models.User)
         .join(models.UserProject, models.UserProject.user_id == models.User.id)
-        .filter(models.UserProject.project_id == obs.project_id, models.User.role == "HO")
+        .filter(
+            models.UserProject.project_id == obs.project_id,
+            models.User.role.in_(CC_PROJECT_ROLES),
+        )
         .all()
     )
-    admin_users = db.query(models.User).filter(models.User.role == "Admin").all()
-    for u in ho_users + admin_users:
+    admin_users = db.query(models.User).filter(models.User.role.in_(["Admin", "SuperAdmin"])).all()
+    for u in project_users + admin_users:
         if u.email and u.email not in cc_emails and u.email not in to_emails:
             cc_emails.append(u.email)
 
@@ -697,7 +701,7 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
     obs = db.query(models.Observation).filter(models.Observation.id == obs_id).first()
     if not obs:
         raise HTTPException(404, "Observation not found")
-    _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'Observer'])
+    _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer'])
 
     was_draft = obs.status == 'Draft'
     prev_status = obs.status

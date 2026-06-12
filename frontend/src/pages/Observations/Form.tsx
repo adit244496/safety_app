@@ -454,8 +454,8 @@ export default function ObservationForm() {
                 const firstWorker = workers[0]
                 set('contractor_company', company)
                 set('contractor_user_id', firstWorker ? String(firstWorker.id) : '')
-                // auto-fill name if only one worker; clear otherwise so user picks
-                set('to_be_rectified_by', workers.length === 1 ? (firstWorker?.email || '') : '')
+                // auto-fill contact info if only one worker; clear otherwise so user picks
+                set('to_be_rectified_by', workers.length === 1 ? [firstWorker?.mobile, firstWorker?.email].filter(Boolean).join(' / ') : '')
               }}
             >
               <option value="">Select contractor…</option>
@@ -482,11 +482,14 @@ export default function ObservationForm() {
                   const userId = e.target.value
                   const worker = companyWorkers.find((c: any) => String(c.id) === userId)
                   set('contractor_user_id', userId)
-                  set('to_be_rectified_by', worker?.email || '')
+                  set('to_be_rectified_by', [worker?.mobile, worker?.email].filter(Boolean).join(' / '))
                 }}
               >
                 <option value="">Select individual…</option>
-                {companyWorkers.map((c: any) => <option key={c.id} value={String(c.id)}>{c.email}</option>)}
+                {companyWorkers.map((c: any) => {
+                  const label = [c.mobile, c.email].filter(Boolean).join(' / ')
+                  return <option key={c.id} value={String(c.id)}>{label}</option>
+                })}
               </select>
             ) : (
               <input

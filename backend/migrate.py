@@ -22,6 +22,13 @@ SERIAL = "SERIAL" if is_pg else "INTEGER"
 AUTOINCREMENT = "" if is_pg else "AUTOINCREMENT"
 
 with engine.begin() as conn:
+    # ── users.mobile ──────────────────────────────────────────────────────────
+    if not col_exists("users", "mobile"):
+        conn.execute(text(f"ALTER TABLE users ADD COLUMN mobile {VARCHAR}"))
+        print("Added users.mobile")
+    else:
+        print("users.mobile already exists")
+
     # ── observations.target_date_actual ───────────────────────────────────────
     if not col_exists("observations", "target_date_actual"):
         conn.execute(text(f"ALTER TABLE observations ADD COLUMN target_date_actual {VARCHAR}"))

@@ -5,8 +5,8 @@ import api from '../../lib/api'
 import { getRoleClass, ROLES } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
 
-interface UserForm { name: string; email: string; password: string; role: string; project_ids: number[] }
-const EMPTY: UserForm = { name: '', email: '', password: '', role: 'Observer', project_ids: [] }
+interface UserForm { name: string; email: string; password: string; role: string; mobile: string; project_ids: number[] }
+const EMPTY: UserForm = { name: '', email: '', password: '', role: 'Observer', mobile: '', project_ids: [] }
 
 export default function UsersTab() {
   const qc = useQueryClient()
@@ -29,7 +29,7 @@ export default function UsersTab() {
 
   const openCreate = () => { setForm(EMPTY); setError(''); setModal({ open: true }) }
   const openEdit = (u: any) => {
-    setForm({ name: u.name, email: u.email, password: '', role: u.role, project_ids: u.projects?.map((p: any) => p.id) || [] })
+    setForm({ name: u.name, email: u.email, password: '', role: u.role, mobile: u.mobile || '', project_ids: u.projects?.map((p: any) => p.id) || [] })
     setError('')
     setModal({ open: true, editing: u })
   }
@@ -81,6 +81,7 @@ export default function UsersTab() {
             <tr className="border-b border-gray-100">
               <th className="th">Name</th>
               <th className="th">Email</th>
+              <th className="th">Mobile</th>
               <th className="th">Role</th>
               <th className="th">Project Access</th>
               <th className="th w-20"></th>
@@ -88,10 +89,10 @@ export default function UsersTab() {
           </thead>
           <tbody>
             {isLoading && (
-              <tr><td colSpan={5} className="td text-center py-10 text-gray-400">Loading users…</td></tr>
+              <tr><td colSpan={6} className="td text-center py-10 text-gray-400">Loading users…</td></tr>
             )}
             {!isLoading && (users || []).length === 0 && (
-              <tr><td colSpan={5} className="td text-center py-10 text-gray-400">No users yet</td></tr>
+              <tr><td colSpan={6} className="td text-center py-10 text-gray-400">No users yet</td></tr>
             )}
             {(users || []).map((u: any) => (
               <tr key={u.id} className="tr">
@@ -104,6 +105,7 @@ export default function UsersTab() {
                   </div>
                 </td>
                 <td className="td text-gray-500">{u.email}</td>
+                <td className="td text-gray-500">{u.mobile || <span className="text-gray-300 italic">—</span>}</td>
                 <td className="td">
                   <span className={`badge ${getRoleClass(u.role)}`}>{u.role}</span>
                 </td>
@@ -172,17 +174,21 @@ export default function UsersTab() {
                   <input type="email" className="input" placeholder="jane@company.com" value={form.email} onChange={e => set('email', e.target.value)} />
                 </div>
                 <div>
-                  <label className="label">
-                    {modal.editing ? 'New Password' : 'Password *'}
-                    {modal.editing && <span className="text-gray-400 font-normal ml-1">(leave blank to keep)</span>}
-                  </label>
-                  <input type="password" className="input" placeholder="••••••••" value={form.password} onChange={e => set('password', e.target.value)} />
+                  <label className="label">Mobile Number</label>
+                  <input type="tel" className="input" placeholder="+91 98765 43210" value={form.mobile} onChange={e => set('mobile', e.target.value)} />
                 </div>
                 <div>
                   <label className="label">Role *</label>
                   <select className="select" value={form.role} onChange={e => set('role', e.target.value)}>
                     {ROLES.filter(r => isSuperAdmin() || r !== 'SuperAdmin').map(r => <option key={r}>{r}</option>)}
                   </select>
+                </div>
+                <div>
+                  <label className="label">
+                    {modal.editing ? 'New Password' : 'Password *'}
+                    {modal.editing && <span className="text-gray-400 font-normal ml-1">(leave blank to keep)</span>}
+                  </label>
+                  <input type="password" className="input" placeholder="••••••••" value={form.password} onChange={e => set('password', e.target.value)} />
                 </div>
               </div>
 

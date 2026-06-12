@@ -45,7 +45,7 @@ export default function ObservationsList() {
   const { user } = useAuth()
   const qc = useQueryClient()
   const isContractor = user?.role === 'Contractor'
-  const canCreate = ['SuperAdmin', 'Admin', 'PSO', 'Observer'].includes(user?.role || '')
+  const canCreate = ['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer'].includes(user?.role || '')
   const [showFilters, setShowFilters] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState<number | null>(null)
 
@@ -210,7 +210,7 @@ export default function ObservationsList() {
       <div className="card-sm">
         {/* Header: always visible */}
         <div
-          className="flex items-center gap-2 sm:pointer-events-none cursor-pointer sm:cursor-default"
+          className="flex items-center gap-2 cursor-pointer"
           onClick={() => setShowFilters(v => !v)}
         >
           <SlidersHorizontal className="w-4 h-4 text-gray-400 flex-shrink-0" />
@@ -218,11 +218,11 @@ export default function ObservationsList() {
           {activeCount > 0 && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{activeCount}</span>
           )}
-          <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
         </div>
 
         {/* Filter controls */}
-        <div className={`gap-2 mt-3 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${showFilters ? 'grid grid-cols-2' : 'hidden'}`}>
+        <div className={showFilters ? 'flex flex-wrap items-center gap-2 mt-3' : 'hidden'}>
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
 
           <MultiSelectFilter size="sm" options={STATUS_OPTIONS} value={statuses}
@@ -299,25 +299,6 @@ export default function ObservationsList() {
             placeholder="Aging" className="w-full sm:w-auto sm:min-w-[140px]" />
 
         </div>
-      </div>
-
-      {/* Specific Concern quick-filter + New Observation button */}
-      <div className="flex items-center gap-2">
-        <div className="flex-1">
-          <MultiSelectFilter
-            size="sm"
-            options={specificConcernOptions}
-            value={specificConcernIds}
-            onChange={v => { setSpecificConcernIds(v as number[]); resetPage() }}
-            placeholder="Filter by Specific Concern…"
-            className="w-full"
-          />
-        </div>
-        {canCreate && (
-          <button onClick={() => navigate('/observations/new')} className="btn-primary flex-shrink-0">
-            <Plus className="w-4 h-4" /> New Observation
-          </button>
-        )}
       </div>
 
       {/* Observations output */}

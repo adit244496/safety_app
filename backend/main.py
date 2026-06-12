@@ -39,6 +39,34 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 _IS_PROD = DATABASE_URL.startswith("postgresql")
 
+_DEFAULT_SEVERITY = {
+    1: "First Aid only",
+    2: "Medical Treatment, no lost time",
+    3: "Lost Time Accident",
+    4: "Serious Injury / Hospitalisation",
+    5: "Fatality",
+}
+_DEFAULT_PROBABILITY = {
+    1: "Very Unlikely",
+    2: "Unlikely",
+    3: "Possible",
+    4: "Likely",
+    5: "Almost Certain",
+}
+
+
+def _seed_risk_labels(db):
+    import models as m
+    if db.query(m.SeverityLabel).count() == 0:
+        for lvl, lbl in _DEFAULT_SEVERITY.items():
+            db.add(m.SeverityLabel(level=lvl, label=lbl))
+        db.commit()
+    if db.query(m.ProbabilityLabel).count() == 0:
+        for lvl, lbl in _DEFAULT_PROBABILITY.items():
+            db.add(m.ProbabilityLabel(level=lvl, label=lbl))
+        db.commit()
+
+
 @app.on_event("startup")
 def startup():
     init_db()
@@ -46,6 +74,7 @@ def startup():
     try:
         seed_data(db)
         seed_ease_criteria(db)
+        _seed_risk_labels(db)
         if not _IS_PROD:
             seed_ease_scores(db)
             seed_dummy_data(db)

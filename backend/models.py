@@ -21,6 +21,7 @@ class User(Base):
     email = Column(String, nullable=False)
     password_hash = Column(String, nullable=False)
     role = Column(String, nullable=False)  # Admin, PIC, AIC, HO, PSO, Contractor, Observer
+    mobile = Column(String, nullable=True)
     created_at = Column(DateTime, default=func.now())
     user_projects = relationship("UserProject", back_populates="user", cascade="all, delete")
 

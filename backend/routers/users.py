@@ -8,7 +8,7 @@ from auth import get_current_user, require_admin, require_super_admin, hash_pass
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
-VALID_ROLES = {"SuperAdmin", "Admin", "PIC", "AIC", "HO", "Contractor", "Observer"}
+VALID_ROLES = {"SuperAdmin", "Admin", "PIC", "AIC", "HO", "PSO", "Contractor", "Observer"}
 
 
 class UserCreate(BaseModel):
@@ -16,6 +16,7 @@ class UserCreate(BaseModel):
     email: str
     password: str
     role: str
+    mobile: Optional[str] = None
     project_ids: List[int] = []
 
 
@@ -24,6 +25,7 @@ class UserUpdate(BaseModel):
     email: str
     password: Optional[str] = None
     role: str
+    mobile: Optional[str] = None
     project_ids: List[int] = []
 
 
@@ -54,6 +56,7 @@ def user_to_dict(user: models.User):
         "id": user.id,
         "name": user.name,
         "email": user.email,
+        "mobile": user.mobile or "",
         "role": user.role,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "projects": [{"id": up.project_id, "name": up.project.name} for up in user.user_projects],
@@ -91,6 +94,7 @@ def create_user(body: UserCreate, db: Session = Depends(get_db), _=Depends(requi
         email=body.email.lower().strip(),
         password_hash=hash_password(body.password),
         role=body.role,
+        mobile=body.mobile.strip() if body.mobile else None,
     )
     db.add(user)
     db.flush()
@@ -114,6 +118,7 @@ def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db), _
     user.name = body.name.strip()
     user.email = body.email.lower().strip()
     user.role = body.role
+    user.mobile = body.mobile.strip() if body.mobile else None
     if body.password:
         user.password_hash = hash_password(body.password)
 
