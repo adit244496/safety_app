@@ -143,7 +143,7 @@ export default function ObservationForm() {
     exact_location: '',
     obs_time: now.toTimeString().slice(0, 5),          // auto HH:MM
     obs_date: now.toISOString().slice(0, 10),           // auto today
-    contractor_user_ids: [] as number[], contractor_company: '', to_be_rectified_by: '', observer_name: user?.name || '',
+    contractor_user_ids: [] as number[], contractor_company: '', to_be_rectified_by: '', rectified_by_mobile: '', observer_name: user?.name || '',
     core_concern_id: '', specific_concern_id: '', specific_concern_text: '',
     possible_outcome: '', severity: '', probability: '',
     root_cause_category_id: '', root_cause_specific_id: '',
@@ -235,6 +235,7 @@ export default function ObservationForm() {
           : (existing.contractor_user_id ? [existing.contractor_user_id] : []),
         contractor_company: existing.contractor_name || '',
         to_be_rectified_by: existing.to_be_rectified_by || '',
+        rectified_by_mobile: '',
         observer_name: existing.observer_name || '',
         core_concern_id: existing.core_concern_id?.toString() || '',
         specific_concern_id: existing.specific_concern_id?.toString() || '',
@@ -303,7 +304,7 @@ export default function ObservationForm() {
 
     try {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { contractor_company: _cc, ...formRest } = form
+      const { contractor_company: _cc, rectified_by_mobile: _rbm, ...formRest } = form
       const payload = {
         ...formRest,
         status: isDraft ? 'Draft' : (overrideStatus ?? (form.status === 'Draft' ? 'Open' : form.status)),
@@ -515,9 +516,9 @@ export default function ObservationForm() {
               onChange={e => {
                 const name = e.target.value
                 set('contractor_company', name)
-                // reset workers when company changes
                 set('contractor_user_ids', [])
                 set('to_be_rectified_by', '')
+                set('rectified_by_mobile', '')
               }}
             >
               <option value="">Select contractor company…</option>
@@ -543,16 +544,17 @@ export default function ObservationForm() {
                 size="md"
                 options={companyWorkers.map((c: any) => ({
                   value: c.id,
-                  label: [c.name, c.mobile, c.email].filter(Boolean).join(' · '),
+                  label: [c.name, c.email].filter(Boolean).join(' · '),
                 }))}
                 value={form.contractor_user_ids}
                 onChange={selected => {
                   const ids = selected as number[]
                   set('contractor_user_ids', ids)
-                  const contacts = (contractors || [])
-                    .filter((c: any) => ids.includes(c.id))
-                    .map((c: any) => [c.mobile, c.email].filter(Boolean).join(' / '))
+                  const selected_workers = (contractors || []).filter((c: any) => ids.includes(c.id))
+                  const contacts = selected_workers.map((c: any) => [c.mobile, c.email].filter(Boolean).join(' / '))
                   set('to_be_rectified_by', contacts.join(', '))
+                  const mobiles = selected_workers.map((c: any) => c.mobile).filter(Boolean)
+                  set('rectified_by_mobile', mobiles.join(', '))
                 }}
                 placeholder="Select individual(s)…"
                 className="w-full"
@@ -565,6 +567,14 @@ export default function ObservationForm() {
                 value=""
               />
             )}
+          </Field>
+          <Field label="Mobile Number">
+            <input
+              className="input"
+              placeholder="Auto-filled from selection"
+              value={form.rectified_by_mobile}
+              onChange={e => set('rectified_by_mobile', e.target.value)}
+            />
           </Field>
         </div>
       </SectionCard>
