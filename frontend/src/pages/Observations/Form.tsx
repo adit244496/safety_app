@@ -7,14 +7,14 @@ import api from '../../lib/api'
 import { calcRisk, STATUSES } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
 
-const SEVERITY_LABELS: Record<number, string> = {
+const DEFAULT_SEVERITY: Record<number, string> = {
   1: '1 – First Aid only',
   2: '2 – Medical Treatment, no lost time',
   3: '3 – Lost Time Accident',
   4: '4 – Serious Injury / hospitalisation',
   5: '5 – Fatality',
 }
-const PROB_LABELS: Record<number, string> = {
+const DEFAULT_PROB: Record<number, string> = {
   1: '1 – Very Unlikely',
   2: '2 – Unlikely',
   3: '3 – Possible',
@@ -146,7 +146,7 @@ export default function ObservationForm() {
     core_concern_id: '', specific_concern_id: '', specific_concern_text: '',
     possible_outcome: '', severity: '', probability: '',
     root_cause_category_id: '', root_cause_specific_id: '',
-    violation_id: '', target_date_id: '', status: 'Open',
+    violation_id: '', target_date_actual: '', status: 'Open',
   })
   const [pendingFiles,  setPendingFiles]  = useState<File[]>([])
   const [previewUrls,   setPreviewUrls]   = useState<string[]>([])
@@ -164,9 +164,24 @@ export default function ObservationForm() {
   const { data: floors }      = useQuery({ queryKey: ['floors', form.building_id],    queryFn: () => api.get('/admin/floors', { params: { building_id: form.building_id } }).then(r => r.data), enabled: !!form.building_id, staleTime: 30_000 })
   const { data: coreConcerns }= useQuery({ queryKey: ['core-concerns'],        queryFn: () => api.get('/admin/core-concerns').then(r => r.data), ...STABLE })
   const { data: rootCatList } = useQuery({ queryKey: ['root-cause-categories'],queryFn: () => api.get('/admin/root-cause-categories').then(r => r.data), ...STABLE })
-  const { data: violations }  = useQuery({ queryKey: ['violations'],           queryFn: () => api.get('/admin/violations').then(r => r.data), ...STABLE })
-  const { data: targetDates } = useQuery({ queryKey: ['target-dates'],         queryFn: () => api.get('/admin/target-dates').then(r => r.data), ...STABLE })
-  const { data: outcomes }    = useQuery({ queryKey: ['possible-outcomes'],    queryFn: () => api.get('/admin/possible-outcomes').then(r => r.data), ...STABLE })
+  const { data: violations }      = useQuery({ queryKey: ['violations'],          queryFn: () => api.get('/admin/violations').then(r => r.data), ...STABLE })
+  const { data: outcomes }        = useQuery({ queryKey: ['possible-outcomes'],   queryFn: () => api.get('/admin/possible-outcomes').then(r => r.data), ...STABLE })
+  const { data: severityLabels }  = useQuery({ queryKey: ['severity-labels'],     queryFn: () => api.get('/admin/severity-labels').then(r => r.data), ...STABLE })
+  const { data: probabilityLabels } = useQuery({ queryKey: ['probability-labels'], queryFn: () => api.get('/admin/probability-labels').then(r => r.data), ...STABLE })
+
+  const SEVERITY_LABELS: Record<number, string> = useMemo(() => {
+    if (!severityLabels?.length) return DEFAULT_SEVERITY
+    const m: Record<number, string> = { ...DEFAULT_SEVERITY }
+    severityLabels.forEach((l: any) => { m[l.level] = `${l.level} – ${l.label}` })
+    return m
+  }, [severityLabels])
+
+  const PROB_LABELS: Record<number, string> = useMemo(() => {
+    if (!probabilityLabels?.length) return DEFAULT_PROB
+    const m: Record<number, string> = { ...DEFAULT_PROB }
+    probabilityLabels.forEach((l: any) => { m[l.level] = `${l.level} – ${l.label}` })
+    return m
+  }, [probabilityLabels])
   const { data: contractors } = useQuery({
     queryKey: ['contractors', form.project_id],
     queryFn: () => api.get('/users/contractors', { params: form.project_id ? { project_id: form.project_id } : {} }).then(r => r.data),
@@ -227,7 +242,7 @@ export default function ObservationForm() {
         root_cause_category_id: existing.root_cause_category_id?.toString() || '',
         root_cause_specific_id: existing.root_cause_specific_id?.toString() || '',
         violation_id: existing.violation_id?.toString() || '',
-        target_date_id: existing.target_date_id?.toString() || '',
+        target_date_actual: existing.target_date_actual || '',
         status: existing.status || 'Open',
       })
     }
@@ -271,7 +286,7 @@ export default function ObservationForm() {
       if (!form.core_concern_id)      missing.push('Core Concern')
       if (!form.specific_concern_id)  missing.push('Specific Concern')
       if (!form.violation_id)         missing.push('Violation Caused Due To')
-      if (!form.target_date_id)       missing.push('Target Date for Rectification')
+      if (!form.target_date_actual)    missing.push('Target Date for Rectification')
       if (!form.severity)             missing.push('Severity')
       if (!form.probability)          missing.push('Probability')
       if (missing.length > 0) {
@@ -296,7 +311,7 @@ export default function ObservationForm() {
         root_cause_category_id: form.root_cause_category_id ? Number(form.root_cause_category_id) : null,
         root_cause_specific_id: form.root_cause_specific_id ? Number(form.root_cause_specific_id) : null,
         violation_id: form.violation_id ? Number(form.violation_id) : null,
-        target_date_id: form.target_date_id ? Number(form.target_date_id) : null,
+        target_date_actual: form.target_date_actual || null,
         severity: form.severity ? Number(form.severity) : null,
         probability: form.probability ? Number(form.probability) : null,
       }
@@ -485,6 +500,64 @@ export default function ObservationForm() {
         </div>
       </SectionCard>
 
+      {/* ── Photos ───────────────────────────────── */}
+      <SectionCard title="Photos" icon={<ImagePlus className="w-3.5 h-3.5" />}>
+        {isEdit && existing?.images?.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {existing.images.map((img: any) => (
+              <div key={img.id} className="relative">
+                <img src={`/uploads/${img.file_path}`} alt={img.file_name}
+                  className="w-20 h-20 object-cover rounded-lg border border-gray-200" />
+                <span className="absolute bottom-0.5 left-0.5 bg-black/50 text-white text-[10px] px-1 rounded">{img.image_type}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Two upload options */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* Upload from device */}
+          <div
+            className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center hover:border-indigo-400 hover:bg-indigo-50/20 transition-colors cursor-pointer"
+            onClick={() => fileRef.current?.click()}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files) }}
+          >
+            <ImagePlus className="w-6 h-6 text-gray-400 mx-auto mb-1.5" />
+            <p className="text-sm font-medium text-gray-600">Upload from device</p>
+            <p className="text-xs text-gray-400 mt-0.5">Click or drag & drop</p>
+            <input ref={fileRef} type="file" multiple accept="image/*" className="hidden"
+              onChange={e => handleFiles(e.target.files)} />
+          </div>
+
+          {/* Capture from camera */}
+          <div
+            className="border-2 border-dashed border-indigo-200 rounded-xl p-5 text-center hover:border-indigo-500 hover:bg-indigo-50/30 transition-colors cursor-pointer"
+            onClick={() => cameraRef.current?.click()}
+          >
+            <Camera className="w-6 h-6 text-indigo-400 mx-auto mb-1.5" />
+            <p className="text-sm font-medium text-indigo-600">Take a photo</p>
+            <p className="text-xs text-gray-400 mt-0.5">Opens device camera</p>
+            <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={e => handleFiles(e.target.files)} />
+          </div>
+        </div>
+
+        {previewUrls.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {previewUrls.map((url, i) => (
+              <div key={i} className="relative group">
+                <img src={url} alt="" className="w-20 h-20 object-cover rounded-lg border border-gray-200" />
+                <button type="button" onClick={() => removeFile(i)}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
       {/* ── Observation Details ──────────────────── */}
       <SectionCard title="Observation Details" icon={<ClipboardList className="w-3.5 h-3.5" />}>
         <div className={G3}>
@@ -513,10 +586,7 @@ export default function ObservationForm() {
             </select>
           </Field>
           <Field label="Target Date for Rectification">
-            <select className="select" value={form.target_date_id} onChange={e => set('target_date_id', e.target.value)}>
-              <option value="">Select target date…</option>
-              {(targetDates || []).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
           </Field>
           <div className="lg:col-span-3">
             <Field label="Additional Details">
@@ -588,64 +658,6 @@ export default function ObservationForm() {
             </select>
           </Field>
         </div>
-      </SectionCard>
-
-      {/* ── Photos ───────────────────────────────── */}
-      <SectionCard title="Photos" icon={<ImagePlus className="w-3.5 h-3.5" />}>
-        {isEdit && existing?.images?.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3">
-            {existing.images.map((img: any) => (
-              <div key={img.id} className="relative">
-                <img src={`/uploads/${img.file_path}`} alt={img.file_name}
-                  className="w-20 h-20 object-cover rounded-lg border border-gray-200" />
-                <span className="absolute bottom-0.5 left-0.5 bg-black/50 text-white text-[10px] px-1 rounded">{img.image_type}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Two upload options */}
-        <div className="grid grid-cols-2 gap-3">
-          {/* Upload from device */}
-          <div
-            className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center hover:border-indigo-400 hover:bg-indigo-50/20 transition-colors cursor-pointer"
-            onClick={() => fileRef.current?.click()}
-            onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files) }}
-          >
-            <ImagePlus className="w-6 h-6 text-gray-400 mx-auto mb-1.5" />
-            <p className="text-sm font-medium text-gray-600">Upload from device</p>
-            <p className="text-xs text-gray-400 mt-0.5">Click or drag & drop</p>
-            <input ref={fileRef} type="file" multiple accept="image/*" className="hidden"
-              onChange={e => handleFiles(e.target.files)} />
-          </div>
-
-          {/* Capture from camera */}
-          <div
-            className="border-2 border-dashed border-indigo-200 rounded-xl p-5 text-center hover:border-indigo-500 hover:bg-indigo-50/30 transition-colors cursor-pointer"
-            onClick={() => cameraRef.current?.click()}
-          >
-            <Camera className="w-6 h-6 text-indigo-400 mx-auto mb-1.5" />
-            <p className="text-sm font-medium text-indigo-600">Take a photo</p>
-            <p className="text-xs text-gray-400 mt-0.5">Opens device camera</p>
-            <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden"
-              onChange={e => handleFiles(e.target.files)} />
-          </div>
-        </div>
-
-        {previewUrls.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-3">
-            {previewUrls.map((url, i) => (
-              <div key={i} className="relative group">
-                <img src={url} alt="" className="w-20 h-20 object-cover rounded-lg border border-gray-200" />
-                <button type="button" onClick={() => removeFile(i)}
-                  className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow">
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
       </SectionCard>
 
       {/* Bottom actions */}

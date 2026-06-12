@@ -30,6 +30,14 @@ function AdminGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Redirects Contractor users away from pages they can't access
+function ContractorGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  if (!user) return null
+  if (user.role === 'Contractor') return <Navigate to="/observations" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   const { token, setAuth, logout } = useAuth()
 
@@ -43,13 +51,13 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/" element={<Guard><Layout /></Guard>}>
-          <Route index element={<Dashboard />} />
+          <Route index element={<ContractorGuard><Dashboard /></ContractorGuard>} />
           <Route path="observations" element={<ObservationsList />} />
           <Route path="observations/new" element={<ObservationForm />} />
           <Route path="observations/:id" element={<ObservationDetail />} />
           <Route path="observations/:id/edit" element={<ObservationForm />} />
-          <Route path="summary" element={<Summary />} />
-          <Route path="report" element={<ReportPage />} />
+          <Route path="summary" element={<ContractorGuard><Summary /></ContractorGuard>} />
+          <Route path="report" element={<ContractorGuard><ReportPage /></ContractorGuard>} />
           <Route path="admin/*" element={<AdminGuard><Admin /></AdminGuard>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

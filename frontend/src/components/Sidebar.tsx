@@ -15,11 +15,11 @@ interface Props {
 }
 
 const NAV = [
-  { to: '/', icon: LayoutDashboard, label: 'Dashboard', exact: true },
-  { to: '/observations', icon: ClipboardList, label: 'Observations', exact: false },
-  { to: '/observations/new', icon: PlusCircle, label: 'New Observation', exact: true },
-  { to: '/report', icon: FileBarChart2, label: 'SHE Report', exact: true },
-  { to: '/summary', icon: BarChart3, label: 'Summary', exact: true },
+  { to: '/', icon: LayoutDashboard, label: 'Dashboard', exact: true, roles: null },
+  { to: '/observations', icon: ClipboardList, label: 'Observations', exact: false, roles: null },
+  { to: '/observations/new', icon: PlusCircle, label: 'New Observation', exact: true, roles: ['SuperAdmin', 'Admin', 'Observer'] },
+  { to: '/report', icon: FileBarChart2, label: 'SHE Report', exact: true, roles: ['SuperAdmin', 'Admin', 'PIC', 'AIC', 'HO', 'Observer'] },
+  { to: '/summary', icon: BarChart3, label: 'Summary', exact: true, roles: ['SuperAdmin', 'Admin', 'PIC', 'AIC', 'HO', 'Observer'] },
 ]
 
 export default function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggleCollapse }: Props) {
@@ -84,7 +84,7 @@ export default function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggle
           )}
 
           <div className="space-y-0.5">
-            {NAV.filter(({ to }) => to !== '/observations/new' || ['SuperAdmin', 'Admin', 'Observer'].includes(user?.role || '')).map(({ to, icon: Icon, label, exact }) => {
+            {NAV.filter(({ roles }) => !roles || roles.includes(user?.role || '')).map(({ to, icon: Icon, label, exact }) => {
               const isActive = active(to, exact)
               return (
                 <NavLink

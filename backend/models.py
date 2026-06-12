@@ -144,7 +144,9 @@ class Observation(Base):
     root_cause_specific_id = Column(Integer, ForeignKey("root_cause_specifics.id"), nullable=True)
     violation_id = Column(Integer, ForeignKey("violations.id"), nullable=True)
     target_date_id = Column(Integer, ForeignKey("target_dates.id"), nullable=True)
+    target_date_actual = Column(String, nullable=True)   # YYYY-MM-DD — actual calendar due date
     status = Column(String, nullable=False, default="Open")
+    closed_at = Column(DateTime, nullable=True)           # set when status transitions to Closed
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -262,3 +264,31 @@ class EaseElementResponse(Base):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     element = relationship("EaseEvaluationElement")
+
+
+class SeverityLabel(Base):
+    """Admin-managed labels for each severity level (1–5)."""
+    __tablename__ = "severity_labels"
+    id = Column(Integer, primary_key=True)
+    level = Column(Integer, nullable=False, unique=True)   # 1, 2, 3, 4, 5
+    label = Column(String, nullable=False)
+
+
+class ProbabilityLabel(Base):
+    """Admin-managed labels for each probability level (1–5)."""
+    __tablename__ = "probability_labels"
+    id = Column(Integer, primary_key=True)
+    level = Column(Integer, nullable=False, unique=True)   # 1, 2, 3, 4, 5
+    label = Column(String, nullable=False)
+
+
+class EscalationLog(Base):
+    """Tracks escalation emails sent for overdue observations."""
+    __tablename__ = "escalation_logs"
+    id = Column(Integer, primary_key=True)
+    observation_id = Column(Integer, ForeignKey("observations.id", ondelete="CASCADE"), nullable=False)
+    obs_ref = Column(String, nullable=True)        # human-readable observation_id
+    reminder_number = Column(Integer, nullable=False, default=1)
+    sent_at = Column(DateTime, default=func.now())
+    recipients_json = Column(Text, nullable=True)  # JSON list of email addresses
+    observation = relationship("Observation")

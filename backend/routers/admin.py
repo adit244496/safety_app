@@ -457,6 +457,50 @@ def update_smtp_settings(body: SmtpBody, db: Session = Depends(get_db), _=Depend
     return {"success": True}
 
 
+# ── Severity Labels ──────────────────────────────────────────────────────────
+class RiskLabelBody(BaseModel):
+    level: int
+    label: str
+
+@router.get("/severity-labels")
+def get_severity_labels(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    rows = db.query(models.SeverityLabel).order_by(models.SeverityLabel.level).all()
+    return [{"id": r.id, "level": r.level, "label": r.label} for r in rows]
+
+@router.put("/severity-labels/{level}")
+def upsert_severity_label(level: int, body: RiskLabelBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    if level < 1 or level > 5:
+        raise HTTPException(400, "Level must be 1–5")
+    row = db.query(models.SeverityLabel).filter(models.SeverityLabel.level == level).first()
+    if row:
+        row.label = body.label.strip()
+    else:
+        row = models.SeverityLabel(level=level, label=body.label.strip())
+        db.add(row)
+    db.commit(); db.refresh(row)
+    return {"id": row.id, "level": row.level, "label": row.label}
+
+
+# ── Probability Labels ────────────────────────────────────────────────────────
+@router.get("/probability-labels")
+def get_probability_labels(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    rows = db.query(models.ProbabilityLabel).order_by(models.ProbabilityLabel.level).all()
+    return [{"id": r.id, "level": r.level, "label": r.label} for r in rows]
+
+@router.put("/probability-labels/{level}")
+def upsert_probability_label(level: int, body: RiskLabelBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    if level < 1 or level > 5:
+        raise HTTPException(400, "Level must be 1–5")
+    row = db.query(models.ProbabilityLabel).filter(models.ProbabilityLabel.level == level).first()
+    if row:
+        row.label = body.label.strip()
+    else:
+        row = models.ProbabilityLabel(level=level, label=body.label.strip())
+        db.add(row)
+    db.commit(); db.refresh(row)
+    return {"id": row.id, "level": row.level, "label": row.label}
+
+
 @router.post("/smtp-settings/test")
 def test_smtp(db: Session = Depends(get_db), current=Depends(require_admin)):
     s = _get_or_create_smtp(db)

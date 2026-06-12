@@ -84,6 +84,8 @@ def obs_to_dict(obs: models.Observation, db: Session) -> dict:
         "violation_name": obs.violation.name if obs.violation else None,
         "target_date_id": obs.target_date_id,
         "target_date_name": obs.target_date.name if obs.target_date else None,
+        "target_date_actual": obs.target_date_actual,
+        "closed_at": obs.closed_at.isoformat() if obs.closed_at else None,
         "status": obs.status,
         "created_by": obs.created_by,
         "created_by_name": obs.creator.name if obs.creator else None,
@@ -129,6 +131,7 @@ class ObsCreate(BaseModel):
     root_cause_specific_id: Optional[int] = None
     violation_id: Optional[int] = None
     target_date_id: Optional[int] = None
+    target_date_actual: Optional[str] = None   # YYYY-MM-DD calendar date
     status: Optional[str] = None
 
 
@@ -539,6 +542,7 @@ def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: mod
         root_cause_specific_id=body.root_cause_specific_id,
         violation_id=body.violation_id,
         target_date_id=body.target_date_id,
+        target_date_actual=body.target_date_actual,
         status=body.status or "Open",
         created_by=user.id,
     )
@@ -623,6 +627,7 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
     _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'Observer'])
 
     was_draft = obs.status == 'Draft'
+    prev_status = obs.status
     factor, level = calc_risk(body.severity or obs.severity or 1, body.probability or obs.probability or 1)
 
     for field, val in body.model_dump(exclude_unset=True).items():
@@ -631,6 +636,8 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
     obs.risk_factor = factor
     obs.risk_level = level
     obs.updated_at = datetime.now()
+    if prev_status != 'Closed' and obs.status == 'Closed' and obs.closed_at is None:
+        obs.closed_at = datetime.now()
     db.commit()
     db.refresh(obs)
 
@@ -662,8 +669,11 @@ def update_status(obs_id: int, body: StatusBody, db: Session = Depends(get_db), 
     if not obs:
         raise HTTPException(404, "Observation not found")
     _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'])
+    prev_status = obs.status
     obs.status = body.status
     obs.updated_at = datetime.now()
+    if prev_status != 'Closed' and body.status == 'Closed' and obs.closed_at is None:
+        obs.closed_at = datetime.now()
     db.commit()
     return {"success": True, "status": body.status}
 

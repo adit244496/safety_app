@@ -13,6 +13,33 @@ const STABLE = { staleTime: 5 * 60 * 1000 } as const
 const STATUS_OPTIONS:   MSOption[] = STATUSES.map(s => ({ value: s, label: s }))
 const RISK_OPTIONS:     MSOption[] = ['High', 'Medium', 'Low'].map(r => ({ value: r, label: r }))
 
+const AGING_OPTIONS: MSOption[] = [
+  { value: 'overdue', label: 'Overdue' },
+  { value: 'due_soon', label: 'Due within 7 days' },
+  { value: 'on_time', label: 'On time / Closed on time' },
+]
+
+function calcAgingDays(obs: any): number | null {
+  if (!obs.target_date_actual) return null
+  const target = new Date(obs.target_date_actual)
+  const end = obs.closed_at ? new Date(obs.closed_at) : new Date()
+  return Math.floor((end.getTime() - target.getTime()) / 86_400_000)
+}
+
+function fmtAging(days: number | null): string {
+  if (days === null) return '—'
+  if (days < 0) return `${Math.abs(days)}d early`
+  if (days === 0) return 'On time'
+  return `+${days}d overdue`
+}
+
+function agingClass(days: number | null): string {
+  if (days === null) return 'text-gray-300 text-xs'
+  if (days < 0) return 'text-emerald-600 text-xs font-medium'
+  if (days === 0) return 'text-blue-600 text-xs font-medium'
+  return 'text-red-600 text-xs font-medium'
+}
+
 export default function ObservationsList() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -38,6 +65,7 @@ export default function ObservationsList() {
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
   const [coreConcernIds,    setCoreConcernIds]    = useState<number[]>([])
   const [specificConcernIds, setSpecificConcernIds] = useState<number[]>([])
+  const [agingFilter,        setAgingFilter]        = useState<string[]>([])
   const [dateFrom,           setDateFrom]           = useState('')
   const [dateTo,             setDateTo]             = useState('')
   const [page,               setPage]               = useState(1)
@@ -49,6 +77,7 @@ export default function ObservationsList() {
     (riskLevels.length        > 0 ? 1 : 0) +
     (coreConcernIds.length    > 0 ? 1 : 0) +
     (specificConcernIds.length > 0 ? 1 : 0) +
+    (agingFilter.length       > 0 ? 1 : 0) +
     (dateFrom                 ? 1 : 0) +
     (dateTo                   ? 1 : 0)
 
@@ -145,9 +174,22 @@ export default function ObservationsList() {
   const clearFilters = () => {
     setStatuses([]); setProjectIds([])
     if (!isContractor) setSelectedContractors([])
-    setRiskLevels([]); setCoreConcernIds([]); setSpecificConcernIds([]); setDateFrom(''); setDateTo(''); setPage(1)
+    setRiskLevels([]); setCoreConcernIds([]); setSpecificConcernIds([]); setAgingFilter([]); setDateFrom(''); setDateTo(''); setPage(1)
   }
   const resetPage = () => setPage(1)
+
+  const visibleObs = useMemo(() => {
+    if (agingFilter.length === 0) return obs
+    return obs.filter((o: any) => {
+      const days = calcAgingDays(o)
+      return agingFilter.some(f => {
+        if (f === 'overdue') return days !== null && days > 0
+        if (f === 'due_soon') return days !== null && days <= 0 && days >= -7
+        if (f === 'on_time') return days !== null && days <= 0
+        return true
+      })
+    })
+  }, [obs, agingFilter])
 
   return (
     <div className="space-y-5">
@@ -252,7 +294,30 @@ export default function ObservationsList() {
               <X className="w-3 h-3" /> Clear filters
             </button>
           )}
+          <MultiSelectFilter size="sm" options={AGING_OPTIONS} value={agingFilter}
+            onChange={v => { setAgingFilter(v as string[]); resetPage() }}
+            placeholder="Aging" className="w-full sm:w-auto sm:min-w-[140px]" />
+
         </div>
+      </div>
+
+      {/* Specific Concern quick-filter + New Observation button */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <MultiSelectFilter
+            size="sm"
+            options={specificConcernOptions}
+            value={specificConcernIds}
+            onChange={v => { setSpecificConcernIds(v as number[]); resetPage() }}
+            placeholder="Filter by Specific Concern…"
+            className="w-full"
+          />
+        </div>
+        {canCreate && (
+          <button onClick={() => navigate('/observations/new')} className="btn-primary flex-shrink-0">
+            <Plus className="w-4 h-4" /> New Observation
+          </button>
+        )}
       </div>
 
       {/* Observations output */}
@@ -271,7 +336,7 @@ export default function ObservationsList() {
         )}
 
         {/* Empty state */}
-        {!isLoading && obs.length === 0 && (
+        {!isLoading && visibleObs.length === 0 && (
           <div className="py-16 text-center space-y-2">
             <p className="text-gray-400">No observations found</p>
             {activeCount > 0 && (
@@ -281,9 +346,9 @@ export default function ObservationsList() {
         )}
 
         {/* Mobile card list — shown only on small screens */}
-        {!isLoading && obs.length > 0 && (
+        {!isLoading && visibleObs.length > 0 && (
           <div className="sm:hidden divide-y divide-slate-100">
-            {obs.map((o: any) => (
+            {visibleObs.map((o: any) => (
               <div
                 key={o.id}
                 className={`p-4 cursor-pointer active:bg-indigo-50/50 transition-colors ${o.status === 'Draft' ? 'bg-red-50 border-l-4 border-red-400' : ''}`}
@@ -347,10 +412,10 @@ export default function ObservationsList() {
         )}
 
         {/* Desktop table — hidden on small screens */}
-        {!isLoading && obs.length > 0 && (
-          <div className="hidden sm:block overflow-x-auto">
-            <table className="w-full min-w-[760px]">
-              <thead>
+        {!isLoading && visibleObs.length > 0 && (
+          <div className="hidden sm:block overflow-x-auto overflow-y-auto max-h-[65vh]">
+            <table className="w-full min-w-[860px]">
+              <thead className="sticky top-0 z-10 bg-white">
                 <tr className="border-b border-gray-100">
                   <th className="th">Obs. ID</th>
                   <th className="th">Project</th>
@@ -359,11 +424,12 @@ export default function ObservationsList() {
                   <th className="th">Date</th>
                   <th className="th">Risk</th>
                   <th className="th">Status</th>
+                  <th className="th">Aging</th>
                   <th className="th w-20"></th>
                 </tr>
               </thead>
               <tbody>
-                {obs.map((o: any) => (
+                {visibleObs.map((o: any) => (
                   <tr
                     key={o.id}
                     className={`tr cursor-pointer ${o.status === 'Draft' ? 'bg-red-50 hover:bg-red-100 shadow-[inset_3px_0_0_#ef4444]' : ''}`}
@@ -398,6 +464,9 @@ export default function ObservationsList() {
                     </td>
                     <td className="td">
                       <span className={getStatusClass(o.status)}>{o.status}</span>
+                    </td>
+                    <td className="td whitespace-nowrap">
+                      <span className={agingClass(calcAgingDays(o))}>{fmtAging(calcAgingDays(o))}</span>
                     </td>
                     <td className="td">
                       <div className="flex items-center gap-1.5 justify-end">

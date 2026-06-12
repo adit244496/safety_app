@@ -9,6 +9,7 @@ from seed_ease import seed_ease_scores
 from seed_dummy import seed_dummy_data, seed_ease_dummy_data, seed_recent_observations
 from seed_ease_criteria import seed_ease_criteria
 from routers import auth, users, projects, observations, admin, uploads, notifications, ease_score
+from escalation_scheduler import start_scheduler, stop_scheduler
 
 app = FastAPI(title="Safety Observation API", version="1.0.0")
 
@@ -46,13 +47,18 @@ def startup():
         seed_data(db)
         seed_ease_criteria(db)
         if not _IS_PROD:
-            # Dev/demo only — skip on production PostgreSQL
             seed_ease_scores(db)
             seed_dummy_data(db)
             seed_ease_dummy_data(db)
             seed_recent_observations(db)
     finally:
         db.close()
+    start_scheduler()
+
+
+@app.on_event("shutdown")
+def shutdown():
+    stop_scheduler()
 
 
 @app.get("/api/health")
