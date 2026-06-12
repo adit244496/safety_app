@@ -29,21 +29,21 @@ const PRIORITY_OPTIONS: MSOption[] = [
   { value: 'Low',    label: 'Low'    },
 ]
 
-const AGING_FILTER_OPTIONS: MSOption[] = [
+const AGEING_FILTER_OPTIONS: MSOption[] = [
   { value: 'overdue',   label: 'Overdue'           },
   { value: 'due_soon',  label: 'Due within 7 days' },
   { value: 'on_time',   label: 'On time'           },
   { value: 'no_target', label: 'No target date'    },
 ]
 
-const AGING_COLORS: Record<string, string> = {
+const AGEING_COLORS: Record<string, string> = {
   on_time:       '#10b981',
   overdue_1_7:   '#f59e0b',
   overdue_8_30:  '#f97316',
   overdue_30_plus: '#ef4444',
   no_target:     '#94a3b8',
 }
-const AGING_LABELS: Record<string, string> = {
+const AGEING_LABELS: Record<string, string> = {
   on_time:       'On Time',
   overdue_1_7:   'Overdue ≤7d',
   overdue_8_30:  'Overdue 8-30d',
@@ -66,7 +66,7 @@ export default function Dashboard() {
   )
   const [coreConcernIds, setCoreConcernIds] = useState<number[]>([])
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
-  const [agingFilter,    setAgingFilter]    = useState<string[]>([])
+  const [ageingFilter,   setAgeingFilter]   = useState<string[]>([])
   const [dateFrom,       setDateFrom]       = useState('')
   const [dateTo,         setDateTo]         = useState('')
 
@@ -76,7 +76,7 @@ export default function Dashboard() {
     (!isContractor && selectedContractors.length > 0 ? 1 : 0) +
     (coreConcernIds.length > 0 ? 1 : 0) +
     (riskLevels.length    > 0 ? 1 : 0) +
-    (agingFilter.length   > 0 ? 1 : 0) +
+    (ageingFilter.length  > 0 ? 1 : 0) +
     (dateFrom             ? 1 : 0) +
     (dateTo               ? 1 : 0)
 
@@ -137,7 +137,7 @@ export default function Dashboard() {
 
   // ── Stats query ─────────────────────────────────────────────────────────
   const { data, isLoading } = useQuery({
-    queryKey: ['stats', projectIds, buildingId, selectedContractors, dateFrom, dateTo, coreConcernIds, riskLevels, agingFilter],
+    queryKey: ['stats', projectIds, buildingId, selectedContractors, dateFrom, dateTo, coreConcernIds, riskLevels, ageingFilter],
     queryFn: () => api.get('/observations/stats/summary', {
       params: {
         project_id:         projectIds.length          ? projectIds          : undefined,
@@ -147,7 +147,7 @@ export default function Dashboard() {
         date_to:            dateTo               || undefined,
         core_concern_id:    coreConcernIds.length ? coreConcernIds : undefined,
         risk_level:         riskLevels.length    ? riskLevels    : undefined,
-        aging:              agingFilter.length   ? agingFilter   : undefined,
+        aging:              ageingFilter.length  ? ageingFilter  : undefined,
       },
     }).then(r => r.data),
   })
@@ -197,7 +197,7 @@ export default function Dashboard() {
   const resetFilters = () => {
     setProjectIds([]); setBuildingId('')
     if (!isContractor) setSelectedContractors([])
-    setCoreConcernIds([]); setRiskLevels([]); setAgingFilter([])
+    setCoreConcernIds([]); setRiskLevels([]); setAgeingFilter([])
     setDateFrom(''); setDateTo('')
   }
 
@@ -269,6 +269,107 @@ export default function Dashboard() {
         row.getCell(2).alignment = { horizontal: 'center' }
       })
     }
+
+    // Sheet 5 – Ageing Report
+    const ws5 = wb.addWorksheet('Ageing Report')
+
+    // Summary header — set columns before adding rows
+    ws5.columns = [{ width: 22 }, { width: 10 }, { width: 14 }, { width: 16 }, { width: 22 }, { width: 22 }, { width: 16 }, { width: 14 }, { width: 10 }, { width: 18 }]
+    const summaryTitleRow = ws5.addRow(['Ageing Summary'])
+    ws5.mergeCells(`A${summaryTitleRow.number}:C${summaryTitleRow.number}`)
+    summaryTitleRow.getCell(1).font = { bold: true, size: 12, color: { argb: 'FF4F46E5' } }
+    summaryTitleRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }
+    summaryTitleRow.height = 22
+
+    const summaryHeaders = ws5.addRow(['Ageing Bucket', 'Count', 'Percentage'])
+    summaryHeaders.eachCell(cell => {
+      cell.fill = hFill('FF4F46E5'); cell.font = bold()
+      cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } } }
+    })
+    summaryHeaders.height = 20
+
+    const byAging = data?.byAging || {}
+    const agingBuckets = [
+      { key: 'on_time',        label: 'On Time'          },
+      { key: 'overdue_1_7',    label: 'Overdue 1-7 Days' },
+      { key: 'overdue_8_30',   label: 'Overdue 8-30 Days'},
+      { key: 'overdue_30_plus',label: 'Overdue 30+ Days' },
+      { key: 'no_target',      label: 'No Target Set'    },
+    ]
+    const agingTotal = agingBuckets.reduce((s, b) => s + (byAging[b.key] || 0), 0)
+    agingBuckets.forEach((b, i) => {
+      const cnt = byAging[b.key] || 0
+      const pct = agingTotal > 0 ? `${Math.round((cnt / agingTotal) * 100)}%` : '0%'
+      const row = ws5.addRow([b.label, cnt, pct])
+      row.getCell(1).fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF')
+      row.getCell(2).alignment = { horizontal: 'center' }
+      row.getCell(3).alignment = { horizontal: 'center' }
+    })
+    const totalRow = ws5.addRow(['Total', agingTotal, '100%'])
+    totalRow.eachCell(cell => { cell.font = { bold: true }; cell.alignment = { horizontal: 'center' } })
+    totalRow.getCell(1).alignment = { horizontal: 'left' }
+
+    ws5.addRow([])
+
+    // Detail header — add the row first so rowCount is stable
+    const detailTitleRow = ws5.addRow(['Ageing Detail'])
+    ws5.mergeCells(`A${detailTitleRow.number}:G${detailTitleRow.number}`)
+    const detailTitle = ws5.getCell(`A${detailTitleRow.number}`)
+    detailTitle.font = { bold: true, size: 12, color: { argb: 'FF4F46E5' } }
+    detailTitle.alignment = { horizontal: 'left', vertical: 'middle' }
+    detailTitleRow.height = 22
+
+    const detailCols = ['Obs ID', 'Project', 'Contractor', 'Status', 'Target Date', 'Days', 'Ageing Bucket']
+    const detailHeaders = ws5.addRow(detailCols)
+    detailHeaders.eachCell(cell => {
+      cell.fill = hFill('FF4F46E5'); cell.font = bold()
+      cell.alignment = { horizontal: 'center', vertical: 'middle' }
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FFD0D0D0' } } }
+    })
+    detailHeaders.height = 20
+
+    try {
+      const obsResp = await api.get('/observations/', {
+        params: {
+          project_id:         projectIds.length           ? projectIds           : undefined,
+          building_id:        buildingId                  || undefined,
+          contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
+          date_from:          dateFrom              || undefined,
+          date_to:            dateTo                || undefined,
+          core_concern_id:    coreConcernIds.length  ? coreConcernIds  : undefined,
+          risk_level:         riskLevels.length     ? riskLevels      : undefined,
+          aging:              ageingFilter.length   ? ageingFilter    : undefined,
+          limit: 10000,
+        }
+      })
+      const allObs: any[] = obsResp.data?.items ?? obsResp.data ?? []
+      const today = new Date(); today.setHours(0, 0, 0, 0)
+
+      allObs.forEach((o: any, i: number) => {
+        let bucket = 'No Target Set', daysStr: number | string = ''
+        if (o.target_date_actual) {
+          const target = new Date(o.target_date_actual); target.setHours(0, 0, 0, 0)
+          const diff = Math.floor((today.getTime() - target.getTime()) / 86_400_000)
+          if (diff <= 0) { bucket = 'On Time'; daysStr = Math.abs(diff) }
+          else if (diff <= 7)  { bucket = 'Overdue 1-7 Days';  daysStr = diff }
+          else if (diff <= 30) { bucket = 'Overdue 8-30 Days'; daysStr = diff }
+          else                 { bucket = 'Overdue 30+ Days';  daysStr = diff }
+        }
+        const row = ws5.addRow([
+          o.observation_id,
+          o.project_name || '',
+          o.contractor_name || '',
+          o.status || '',
+          o.target_date_actual || 'Not set',
+          daysStr,
+          bucket,
+        ])
+        row.eachCell(cell => { cell.fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF') })
+        row.getCell(6).alignment = { horizontal: 'center' }
+        row.getCell(7).alignment = { horizontal: 'center' }
+      })
+    } catch { /* skip detail if fetch fails */ }
 
     const buf = await wb.xlsx.writeBuffer()
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
@@ -391,8 +492,8 @@ export default function Dashboard() {
             onChange={v => setRiskLevels(v as string[])} placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
           <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}
             onChange={v => setCoreConcernIds(v as number[])} placeholder="Core Concern" className="w-full sm:w-auto sm:min-w-[130px]" />
-          <MultiSelectFilter size="sm" options={AGING_FILTER_OPTIONS} value={agingFilter}
-            onChange={v => setAgingFilter(v as string[])} placeholder="Aging" className="w-full sm:w-auto sm:min-w-[130px]" />
+          <MultiSelectFilter size="sm" options={AGEING_FILTER_OPTIONS} value={ageingFilter}
+            onChange={v => setAgeingFilter(v as string[])} placeholder="Ageing" className="w-full sm:w-auto sm:min-w-[130px]" />
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date from" />
@@ -614,13 +715,13 @@ export default function Dashboard() {
             {/* Aging donut */}
             {(() => {
               const byAging = data?.byAging || {}
-              const agingPie = Object.entries(AGING_LABELS)
+              const agingPie = Object.entries(AGEING_LABELS)
                 .map(([key, label]) => ({ name: label, value: byAging[key] || 0, key }))
                 .filter(d => d.value > 0)
               const agingTotal = agingPie.reduce((s, d) => s + d.value, 0)
               return (
                 <div id="dash-aging-donut" className="card">
-                  <h2 className="font-semibold text-gray-900 mb-1">Aging Distribution</h2>
+                  <h2 className="font-semibold text-gray-900 mb-1">Ageing Distribution</h2>
                   <p className="text-[10px] text-gray-400 mb-3">Days past target rectification date</p>
                   {agingPie.length > 0 ? (
                     <>
@@ -650,7 +751,7 @@ export default function Dashboard() {
                               }}
                             >
                               {agingPie.map((d) => (
-                                <Cell key={d.key} fill={AGING_COLORS[d.key] || '#94a3b8'} />
+                                <Cell key={d.key} fill={AGEING_COLORS[d.key] || '#94a3b8'} />
                               ))}
                             </Pie>
                             <Tooltip formatter={(v, n) => [v, n]} />
@@ -667,7 +768,7 @@ export default function Dashboard() {
                         {agingPie.map((d) => (
                           <div key={d.key} className="flex items-center justify-between text-xs">
                             <div className="flex items-center gap-1.5">
-                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: AGING_COLORS[d.key] }} />
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: AGEING_COLORS[d.key] }} />
                               <span className="text-gray-600">{d.name}</span>
                             </div>
                             <span className="font-semibold text-gray-900">{d.value}</span>

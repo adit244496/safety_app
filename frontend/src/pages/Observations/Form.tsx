@@ -143,7 +143,7 @@ export default function ObservationForm() {
     exact_location: '',
     obs_time: now.toTimeString().slice(0, 5),          // auto HH:MM
     obs_date: now.toISOString().slice(0, 10),           // auto today
-    contractor_user_ids: [] as number[], contractor_companies: [] as string[], to_be_rectified_by: '', observer_name: user?.name || '',
+    contractor_user_ids: [] as number[], contractor_company: '', to_be_rectified_by: '', observer_name: user?.name || '',
     core_concern_id: '', specific_concern_id: '', specific_concern_text: '',
     possible_outcome: '', severity: '', probability: '',
     root_cause_category_id: '', root_cause_specific_id: '',
@@ -194,8 +194,8 @@ export default function ObservationForm() {
     return (contractors || []).filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
   }, [contractors])
   const companyWorkers: any[] = useMemo(() =>
-    (contractors || []).filter((c: any) => form.contractor_companies.includes(c.name)),
-    [contractors, form.contractor_companies]
+    (contractors || []).filter((c: any) => c.name === form.contractor_company),
+    [contractors, form.contractor_company]
   )
 
   // placeholderData keeps previous data while new key fetches → prevents dropdown from going blank → no layout shift
@@ -233,7 +233,7 @@ export default function ObservationForm() {
         contractor_user_ids: existing.contractor_user_ids?.length
           ? existing.contractor_user_ids
           : (existing.contractor_user_id ? [existing.contractor_user_id] : []),
-        contractor_companies: existing.contractor_name ? [existing.contractor_name] : [],
+        contractor_company: existing.contractor_name || '',
         to_be_rectified_by: existing.to_be_rectified_by || '',
         observer_name: existing.observer_name || '',
         core_concern_id: existing.core_concern_id?.toString() || '',
@@ -284,7 +284,7 @@ export default function ObservationForm() {
       const missing: string[] = []
       if (!form.building_id)                    missing.push('Building / Tower')
       if (!form.floor_id)                       missing.push('Floor')
-      if (!form.contractor_companies.length)    missing.push('Contractor')
+      if (!form.contractor_company)             missing.push('Contractor')
       if (!form.contractor_user_ids.length)     missing.push('To Be Rectified By')
       if (!form.core_concern_id)                missing.push('Core Concern')
       if (!form.specific_concern_id)  missing.push('Specific Concern')
@@ -302,8 +302,10 @@ export default function ObservationForm() {
     setError('')
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { contractor_company: _cc, ...formRest } = form
       const payload = {
-        ...form,
+        ...formRest,
         status: isDraft ? 'Draft' : (overrideStatus ?? (form.status === 'Draft' ? 'Open' : form.status)),
         project_id: Number(form.project_id),
         building_id: form.building_id ? Number(form.building_id) : null,
@@ -507,30 +509,22 @@ export default function ObservationForm() {
             <input className="input" value={form.observer_name} onChange={e => set('observer_name', e.target.value)} />
           </Field>
           <Field label="Contractor Company" required>
-            <MultiSelectFilter
-              size="md"
-              options={contractorCompanies.map((c: any) => ({ value: c.name, label: c.name }))}
-              value={form.contractor_companies}
-              onChange={selected => {
-                const names = selected as string[]
-                set('contractor_companies', names)
-                // keep only workers belonging to still-selected companies
-                const validIds = new Set((contractors || [])
-                  .filter((c: any) => names.includes(c.name))
-                  .map((c: any) => c.id))
-                const filteredIds = form.contractor_user_ids.filter((id: number) => validIds.has(id))
-                set('contractor_user_ids', filteredIds)
-                // auto-fill to_be_rectified_by if only one worker remains
-                if (filteredIds.length === 1) {
-                  const w = (contractors || []).find((c: any) => c.id === filteredIds[0])
-                  set('to_be_rectified_by', [w?.mobile, w?.email].filter(Boolean).join(' / '))
-                } else if (!filteredIds.length) {
-                  set('to_be_rectified_by', '')
-                }
+            <select
+              className="select"
+              value={form.contractor_company}
+              onChange={e => {
+                const name = e.target.value
+                set('contractor_company', name)
+                // reset workers when company changes
+                set('contractor_user_ids', [])
+                set('to_be_rectified_by', '')
               }}
-              placeholder="Select contractor(s)…"
-              className="w-full"
-            />
+            >
+              <option value="">Select contractor company…</option>
+              {contractorCompanies.map((c: any) => (
+                <option key={c.name} value={c.name}>{c.name}</option>
+              ))}
+            </select>
           </Field>
           {/* Date + Time on same row */}
           <div className="flex gap-2">
@@ -544,7 +538,7 @@ export default function ObservationForm() {
             </div>
           </div>
           <Field label="To Be Rectified By" required>
-            {form.contractor_companies.length > 0 ? (
+            {form.contractor_company ? (
               <MultiSelectFilter
                 size="md"
                 options={companyWorkers.map((c: any) => ({
@@ -566,7 +560,7 @@ export default function ObservationForm() {
             ) : (
               <input
                 className="input text-gray-400"
-                placeholder="Select contractor(s) first"
+                placeholder="Select contractor company first"
                 readOnly
                 value=""
               />

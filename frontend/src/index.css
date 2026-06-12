@@ -95,10 +95,11 @@ select, input, textarea { scroll-margin: 0; }
 
 /* ── Section card (form sections) ───────────────── */
 .section-card {
-  @apply bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden;
+  @apply bg-white rounded-2xl border border-slate-100 shadow-sm;
+  /* no overflow:hidden — allows dropdown menus inside to be visible */
 }
 .section-card-header {
-  @apply px-5 py-3 border-b border-slate-100/80 flex items-center gap-2.5;
+  @apply px-5 py-3 border-b border-slate-100/80 flex items-center gap-2.5 rounded-t-2xl;
   background: linear-gradient(135deg, #eef2ff 0%, #f8faff 100%);
 }
 .section-card-header h2 {

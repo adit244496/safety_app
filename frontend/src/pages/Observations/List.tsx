@@ -13,27 +13,27 @@ const STABLE = { staleTime: 5 * 60 * 1000 } as const
 const STATUS_OPTIONS:   MSOption[] = STATUSES.map(s => ({ value: s, label: s }))
 const RISK_OPTIONS:     MSOption[] = ['High', 'Medium', 'Low'].map(r => ({ value: r, label: r }))
 
-const AGING_OPTIONS: MSOption[] = [
+const AGEING_OPTIONS: MSOption[] = [
   { value: 'overdue', label: 'Overdue' },
   { value: 'due_soon', label: 'Due within 7 days' },
   { value: 'on_time', label: 'On time / Closed on time' },
 ]
 
-function calcAgingDays(obs: any): number | null {
+function calcAgeingDays(obs: any): number | null {
   if (!obs.target_date_actual) return null
   const target = new Date(obs.target_date_actual)
   const end = obs.closed_at ? new Date(obs.closed_at) : new Date()
   return Math.floor((end.getTime() - target.getTime()) / 86_400_000)
 }
 
-function fmtAging(days: number | null): string {
+function fmtAgeing(days: number | null): string {
   if (days === null) return '—'
   if (days < 0) return `${Math.abs(days)}d early`
   if (days === 0) return 'On time'
   return `+${days}d overdue`
 }
 
-function agingClass(days: number | null): string {
+function ageingClass(days: number | null): string {
   if (days === null) return 'text-gray-300 text-xs'
   if (days < 0) return 'text-emerald-600 text-xs font-medium'
   if (days === 0) return 'text-blue-600 text-xs font-medium'
@@ -65,7 +65,7 @@ export default function ObservationsList() {
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
   const [coreConcernIds,    setCoreConcernIds]    = useState<number[]>([])
   const [specificConcernIds, setSpecificConcernIds] = useState<number[]>([])
-  const [agingFilter,        setAgingFilter]        = useState<string[]>([])
+  const [ageingFilter,       setAgeingFilter]       = useState<string[]>([])
   const [dateFrom,           setDateFrom]           = useState('')
   const [dateTo,             setDateTo]             = useState('')
   const [page,               setPage]               = useState(1)
@@ -77,7 +77,7 @@ export default function ObservationsList() {
     (riskLevels.length        > 0 ? 1 : 0) +
     (coreConcernIds.length    > 0 ? 1 : 0) +
     (specificConcernIds.length > 0 ? 1 : 0) +
-    (agingFilter.length       > 0 ? 1 : 0) +
+    (ageingFilter.length      > 0 ? 1 : 0) +
     (dateFrom                 ? 1 : 0) +
     (dateTo                   ? 1 : 0)
 
@@ -174,22 +174,22 @@ export default function ObservationsList() {
   const clearFilters = () => {
     setStatuses([]); setProjectIds([])
     if (!isContractor) setSelectedContractors([])
-    setRiskLevels([]); setCoreConcernIds([]); setSpecificConcernIds([]); setAgingFilter([]); setDateFrom(''); setDateTo(''); setPage(1)
+    setRiskLevels([]); setCoreConcernIds([]); setSpecificConcernIds([]); setAgeingFilter([]); setDateFrom(''); setDateTo(''); setPage(1)
   }
   const resetPage = () => setPage(1)
 
   const visibleObs = useMemo(() => {
-    if (agingFilter.length === 0) return obs
+    if (ageingFilter.length === 0) return obs
     return obs.filter((o: any) => {
-      const days = calcAgingDays(o)
-      return agingFilter.some(f => {
+      const days = calcAgeingDays(o)
+      return ageingFilter.some(f => {
         if (f === 'overdue') return days !== null && days > 0
         if (f === 'due_soon') return days !== null && days <= 0 && days >= -7
         if (f === 'on_time') return days !== null && days <= 0
         return true
       })
     })
-  }, [obs, agingFilter])
+  }, [obs, ageingFilter])
 
   return (
     <div className="space-y-5">
@@ -294,9 +294,9 @@ export default function ObservationsList() {
               <X className="w-3 h-3" /> Clear filters
             </button>
           )}
-          <MultiSelectFilter size="sm" options={AGING_OPTIONS} value={agingFilter}
-            onChange={v => { setAgingFilter(v as string[]); resetPage() }}
-            placeholder="Aging" className="w-full sm:w-auto sm:min-w-[140px]" />
+          <MultiSelectFilter size="sm" options={AGEING_OPTIONS} value={ageingFilter}
+            onChange={v => { setAgeingFilter(v as string[]); resetPage() }}
+            placeholder="Ageing" className="w-full sm:w-auto sm:min-w-[140px]" />
 
         </div>
       </div>
@@ -405,7 +405,7 @@ export default function ObservationsList() {
                   <th className="th">Date</th>
                   <th className="th">Risk</th>
                   <th className="th">Status</th>
-                  <th className="th">Aging</th>
+                  <th className="th">Ageing</th>
                   <th className="th w-20"></th>
                 </tr>
               </thead>
@@ -447,7 +447,7 @@ export default function ObservationsList() {
                       <span className={getStatusClass(o.status)}>{o.status}</span>
                     </td>
                     <td className="td whitespace-nowrap">
-                      <span className={agingClass(calcAgingDays(o))}>{fmtAging(calcAgingDays(o))}</span>
+                      <span className={ageingClass(calcAgeingDays(o))}>{fmtAgeing(calcAgeingDays(o))}</span>
                     </td>
                     <td className="td">
                       <div className="flex items-center gap-1.5 justify-end">
