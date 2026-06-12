@@ -71,9 +71,20 @@ def list_contractors(
 ):
     q = db.query(models.User).filter(models.User.role == "Contractor")
     if project_id:
-        q = q.join(models.UserProject, models.User.id == models.UserProject.user_id).filter(
-            models.UserProject.project_id.in_(project_id)
-        ).distinct()
+        # Include contractors explicitly assigned to the project OR with no assignments (= all-project access)
+        assigned_to_project = (
+            db.query(models.UserProject.user_id)
+            .filter(models.UserProject.project_id.in_(project_id))
+            .distinct()
+        )
+        has_any_assignment = (
+            db.query(models.UserProject.user_id)
+            .distinct()
+        )
+        q = q.filter(
+            models.User.id.in_(assigned_to_project) |
+            ~models.User.id.in_(has_any_assignment)
+        )
     return [user_to_dict(u) for u in q.order_by(models.User.name).all()]
 
 
