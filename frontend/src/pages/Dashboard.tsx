@@ -339,7 +339,6 @@ export default function Dashboard() {
           date_to:            dateTo                || undefined,
           core_concern_id:    coreConcernIds.length  ? coreConcernIds  : undefined,
           risk_level:         riskLevels.length     ? riskLevels      : undefined,
-          aging:              ageingFilter.length   ? ageingFilter    : undefined,
           limit: 10000,
         }
       })
