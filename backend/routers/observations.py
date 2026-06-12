@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, case, nullslast
-from datetime import datetime
+from datetime import datetime, date
 from database import get_db
 import models
 from auth import get_current_user, require_admin
@@ -143,6 +143,48 @@ class CommentBody(BaseModel):
     comment: str
 
 
+def _days_aging(target_str: Optional[str], closed_at, today: date) -> Optional[int]:
+    """Return days between target date and closure (or today). Positive = overdue."""
+    if not target_str:
+        return None
+    try:
+        target = date.fromisoformat(target_str)
+    except ValueError:
+        return None
+    if closed_at:
+        end = closed_at.date() if isinstance(closed_at, datetime) else date.fromisoformat(str(closed_at)[:10])
+    else:
+        end = today
+    return (end - target).days
+
+
+def _aging_bucket(days: Optional[int]) -> str:
+    if days is None:
+        return "no_target"
+    if days <= 0:
+        return "on_time"
+    if days <= 7:
+        return "overdue_1_7"
+    if days <= 30:
+        return "overdue_8_30"
+    return "overdue_30_plus"
+
+
+def _matches_aging_filter(days: Optional[int], aging_filter: List[str]) -> bool:
+    if not aging_filter:
+        return True
+    for f in aging_filter:
+        if f == "no_target" and days is None:
+            return True
+        if f == "overdue" and days is not None and days > 0:
+            return True
+        if f == "due_soon" and days is not None and -7 <= days <= 0:
+            return True
+        if f == "on_time" and days is not None and days <= -7:
+            return True
+    return False
+
+
 @router.get("/stats/summary")
 def stats(
     project_id: List[int] = Query(default=[]),
@@ -152,10 +194,12 @@ def stats(
     date_to: Optional[str] = Query(None),
     core_concern_id: List[int] = Query(default=[]),
     risk_level: List[str] = Query(default=[]),
+    aging: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
     allowed = get_allowed_project_ids(user)
+    today = date.today()
 
     def apply_filters(q):
         if allowed is not None:
@@ -176,14 +220,41 @@ def stats(
             q = q.filter(models.Observation.risk_level.in_(risk_level))
         return q
 
-    q = apply_filters(db.query(models.Observation)).filter(models.Observation.status != 'Draft')
+    # Resolve aging filter → set of eligible observation IDs
+    aging_ids: Optional[set] = None
+    if aging:
+        rows = (
+            apply_filters(db.query(models.Observation.id, models.Observation.target_date_actual, models.Observation.closed_at))
+            .filter(models.Observation.status != 'Draft')
+            .all()
+        )
+        aging_ids = {r[0] for r in rows if _matches_aging_filter(_days_aging(r[1], r[2], today), aging)}
+
+    def apply_all(q):
+        q = apply_filters(q)
+        if aging_ids is not None:
+            q = q.filter(models.Observation.id.in_(aging_ids))
+        return q
+
+    q = apply_all(db.query(models.Observation)).filter(models.Observation.status != 'Draft')
     total = q.count()
 
-    by_status = apply_filters(
+    # Aging breakdown (always computed from base filters, ignoring aging filter for the donut itself)
+    aging_rows = (
+        apply_filters(db.query(models.Observation.target_date_actual, models.Observation.closed_at))
+        .filter(models.Observation.status != 'Draft')
+        .all()
+    )
+    aging_buckets: dict = {"no_target": 0, "on_time": 0, "overdue_1_7": 0, "overdue_8_30": 0, "overdue_30_plus": 0}
+    for target_str, closed_at in aging_rows:
+        bucket = _aging_bucket(_days_aging(target_str, closed_at, today))
+        aging_buckets[bucket] = aging_buckets.get(bucket, 0) + 1
+
+    by_status = apply_all(
         db.query(models.Observation.status, func.count().label("count"))
     ).filter(models.Observation.status != 'Draft').group_by(models.Observation.status).all()
 
-    by_risk = apply_filters(
+    by_risk = apply_all(
         db.query(models.Observation.risk_level, func.count().label("count"))
     ).filter(models.Observation.status != 'Draft').group_by(models.Observation.risk_level).all()
 
@@ -192,7 +263,7 @@ def stats(
     # Monthly trend — use obs_date (YYYY-MM-DD string); substr gives YYYY-MM reliably
     month_expr = func.substr(models.Observation.obs_date, 1, 7)
     by_month = (
-        apply_filters(db.query(month_expr.label("month"), func.count().label("count")))
+        apply_all(db.query(month_expr.label("month"), func.count().label("count")))
         .filter(models.Observation.status != 'Draft')
         .filter(models.Observation.obs_date.isnot(None))
         .filter(models.Observation.obs_date != "")
@@ -203,7 +274,7 @@ def stats(
 
     # Monthly trend broken down by status
     by_month_status_rows = (
-        apply_filters(
+        apply_all(
             db.query(
                 month_expr.label("month"),
                 models.Observation.status,
@@ -234,6 +305,7 @@ def stats(
         "byRisk": [{"risk_level": r, "count": c} for r, c in by_risk if r],
         "byMonth": [{"month": m, "count": c} for m, c in by_month if m],
         "byMonthStatus": by_month_status,
+        "byAging": aging_buckets,
         "recent": [
             {
                 "observation_id": o.observation_id,

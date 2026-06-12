@@ -949,7 +949,7 @@ function EvaluationCriteria() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <ClipboardList className="w-5 h-5 text-indigo-600" />
-              <h2 className="font-semibold text-gray-900 text-lg">SHE Evaluation Criteria</h2>
+              <h2 className="font-semibold text-gray-900 text-lg">SHE Performance</h2>
             </div>
             <p className="text-xs text-slate-400">
               Scoring: Yes → full · Tending Yes → ½ · Tending No → ¼ · No → 0 · NA → excluded
@@ -1187,7 +1187,7 @@ export default function Summary() {
   const tabs: { id: Tab; label: string }[] = [
     { id: 'ease', label: 'SHE Score' },
     { id: 'compliance', label: 'Compliance Analysis' },
-    { id: 'criteria', label: 'Evaluation Criteria' },
+    { id: 'criteria', label: 'SHE Performance' },
   ]
 
   return (

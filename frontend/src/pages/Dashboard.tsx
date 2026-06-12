@@ -29,6 +29,28 @@ const PRIORITY_OPTIONS: MSOption[] = [
   { value: 'Low',    label: 'Low'    },
 ]
 
+const AGING_FILTER_OPTIONS: MSOption[] = [
+  { value: 'overdue',   label: 'Overdue'           },
+  { value: 'due_soon',  label: 'Due within 7 days' },
+  { value: 'on_time',   label: 'On time'           },
+  { value: 'no_target', label: 'No target date'    },
+]
+
+const AGING_COLORS: Record<string, string> = {
+  on_time:       '#10b981',
+  overdue_1_7:   '#f59e0b',
+  overdue_8_30:  '#f97316',
+  overdue_30_plus: '#ef4444',
+  no_target:     '#94a3b8',
+}
+const AGING_LABELS: Record<string, string> = {
+  on_time:       'On Time',
+  overdue_1_7:   'Overdue ≤7d',
+  overdue_8_30:  'Overdue 8-30d',
+  overdue_30_plus: 'Overdue 30+d',
+  no_target:     'No Target Set',
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -44,6 +66,7 @@ export default function Dashboard() {
   )
   const [coreConcernIds, setCoreConcernIds] = useState<number[]>([])
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
+  const [agingFilter,    setAgingFilter]    = useState<string[]>([])
   const [dateFrom,       setDateFrom]       = useState('')
   const [dateTo,         setDateTo]         = useState('')
 
@@ -53,6 +76,7 @@ export default function Dashboard() {
     (!isContractor && selectedContractors.length > 0 ? 1 : 0) +
     (coreConcernIds.length > 0 ? 1 : 0) +
     (riskLevels.length    > 0 ? 1 : 0) +
+    (agingFilter.length   > 0 ? 1 : 0) +
     (dateFrom             ? 1 : 0) +
     (dateTo               ? 1 : 0)
 
@@ -113,7 +137,7 @@ export default function Dashboard() {
 
   // ── Stats query ─────────────────────────────────────────────────────────
   const { data, isLoading } = useQuery({
-    queryKey: ['stats', projectIds, buildingId, selectedContractors, dateFrom, dateTo, coreConcernIds, riskLevels],
+    queryKey: ['stats', projectIds, buildingId, selectedContractors, dateFrom, dateTo, coreConcernIds, riskLevels, agingFilter],
     queryFn: () => api.get('/observations/stats/summary', {
       params: {
         project_id:         projectIds.length          ? projectIds          : undefined,
@@ -123,6 +147,7 @@ export default function Dashboard() {
         date_to:            dateTo               || undefined,
         core_concern_id:    coreConcernIds.length ? coreConcernIds : undefined,
         risk_level:         riskLevels.length    ? riskLevels    : undefined,
+        aging:              agingFilter.length   ? agingFilter   : undefined,
       },
     }).then(r => r.data),
   })
@@ -172,7 +197,7 @@ export default function Dashboard() {
   const resetFilters = () => {
     setProjectIds([]); setBuildingId('')
     if (!isContractor) setSelectedContractors([])
-    setCoreConcernIds([]); setRiskLevels([])
+    setCoreConcernIds([]); setRiskLevels([]); setAgingFilter([])
     setDateFrom(''); setDateTo('')
   }
 
@@ -366,6 +391,8 @@ export default function Dashboard() {
             onChange={v => setRiskLevels(v as string[])} placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
           <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}
             onChange={v => setCoreConcernIds(v as number[])} placeholder="Core Concern" className="w-full sm:w-auto sm:min-w-[130px]" />
+          <MultiSelectFilter size="sm" options={AGING_FILTER_OPTIONS} value={agingFilter}
+            onChange={v => setAgingFilter(v as string[])} placeholder="Aging" className="w-full sm:w-auto sm:min-w-[130px]" />
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date from" />
@@ -580,8 +607,77 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Risk + Recent */}
+          {/* Aging + Risk + Recent */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* Aging donut */}
+            {(() => {
+              const byAging = data?.byAging || {}
+              const agingPie = Object.entries(AGING_LABELS)
+                .map(([key, label]) => ({ name: label, value: byAging[key] || 0, key }))
+                .filter(d => d.value > 0)
+              const agingTotal = agingPie.reduce((s, d) => s + d.value, 0)
+              return (
+                <div id="dash-aging-donut" className="card">
+                  <h2 className="font-semibold text-gray-900 mb-1">Aging Distribution</h2>
+                  <p className="text-[10px] text-gray-400 mb-3">Days past target rectification date</p>
+                  {agingPie.length > 0 ? (
+                    <>
+                      <div className="relative">
+                        <ResponsiveContainer width="100%" height={190}>
+                          <PieChart>
+                            <Pie
+                              data={agingPie}
+                              dataKey="value"
+                              nameKey="name"
+                              cx="50%" cy="50%"
+                              innerRadius={52}
+                              outerRadius={75}
+                              labelLine={false}
+                              label={({ cx, cy, midAngle, innerRadius, outerRadius, value, percent }) => {
+                                if (!percent || percent < 0.06 || midAngle == null) return null
+                                const RADIAN = Math.PI / 180
+                                const r = innerRadius + (outerRadius - innerRadius) * 0.5
+                                const x = (cx as number) + r * Math.cos(-midAngle * RADIAN)
+                                const y = (cy as number) + r * Math.sin(-midAngle * RADIAN)
+                                return (
+                                  <text x={x} y={y} fill="white" textAnchor="middle"
+                                    dominantBaseline="central" fontSize={11} fontWeight={700}>
+                                    {value}
+                                  </text>
+                                )
+                              }}
+                            >
+                              {agingPie.map((d) => (
+                                <Cell key={d.key} fill={AGING_COLORS[d.key] || '#94a3b8'} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(v, n) => [v, n]} />
+                          </PieChart>
+                        </ResponsiveContainer>
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-gray-900">{agingTotal}</p>
+                            <p className="text-[10px] text-gray-400">Total</p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5 mt-2">
+                        {agingPie.map((d) => (
+                          <div key={d.key} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: AGING_COLORS[d.key] }} />
+                              <span className="text-gray-600">{d.name}</span>
+                            </div>
+                            <span className="font-semibold text-gray-900">{d.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : <div className="h-40 flex items-center justify-center text-gray-400 text-sm">No data</div>}
+                </div>
+              )
+            })()}
+
             {/* Risk bars */}
             <div className="card">
               <h2 className="font-semibold text-gray-900 mb-4">Risk Distribution</h2>
