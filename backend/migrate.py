@@ -29,6 +29,13 @@ with engine.begin() as conn:
     else:
         print("users.mobile already exists")
 
+    # ── observations.contractor_user_ids ──────────────────────────────────────
+    if not col_exists("observations", "contractor_user_ids"):
+        conn.execute(text(f"ALTER TABLE observations ADD COLUMN contractor_user_ids {VARCHAR}"))
+        print("Added observations.contractor_user_ids")
+    else:
+        print("observations.contractor_user_ids already exists")
+
     # ── observations.target_date_actual ───────────────────────────────────────
     if not col_exists("observations", "target_date_actual"):
         conn.execute(text(f"ALTER TABLE observations ADD COLUMN target_date_actual {VARCHAR}"))

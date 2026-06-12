@@ -18,7 +18,11 @@ def list_projects(db: Session = Depends(get_db), user: models.User = Depends(get
         projects = db.query(models.Project).order_by(models.Project.name).all()
     else:
         project_ids = [up.project_id for up in user.user_projects]
-        projects = db.query(models.Project).filter(models.Project.id.in_(project_ids)).order_by(models.Project.name).all()
+        if not project_ids:
+            # No specific assignments → full access (same as admin intent when no project selected)
+            projects = db.query(models.Project).order_by(models.Project.name).all()
+        else:
+            projects = db.query(models.Project).filter(models.Project.id.in_(project_ids)).order_by(models.Project.name).all()
     return [{"id": p.id, "name": p.name, "created_at": p.created_at.isoformat() if p.created_at else None} for p in projects]
 
 

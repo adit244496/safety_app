@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import api from '../../lib/api'
 import { calcRisk, STATUSES } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
+import { MultiSelectFilter } from '../../components/MultiSelectFilter'
 
 const DEFAULT_SEVERITY: Record<number, string> = {
   1: '1 – First Aid only',
@@ -142,7 +143,7 @@ export default function ObservationForm() {
     exact_location: '',
     obs_time: now.toTimeString().slice(0, 5),          // auto HH:MM
     obs_date: now.toISOString().slice(0, 10),           // auto today
-    contractor_user_id: '', contractor_company: '', to_be_rectified_by: '', observer_name: user?.name || '',
+    contractor_user_ids: [] as number[], contractor_companies: [] as string[], to_be_rectified_by: '', observer_name: user?.name || '',
     core_concern_id: '', specific_concern_id: '', specific_concern_text: '',
     possible_outcome: '', severity: '', probability: '',
     root_cause_category_id: '', root_cause_specific_id: '',
@@ -193,8 +194,8 @@ export default function ObservationForm() {
     return (contractors || []).filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
   }, [contractors])
   const companyWorkers: any[] = useMemo(() =>
-    (contractors || []).filter((c: any) => c.name === form.contractor_company),
-    [contractors, form.contractor_company]
+    (contractors || []).filter((c: any) => form.contractor_companies.includes(c.name)),
+    [contractors, form.contractor_companies]
   )
 
   // placeholderData keeps previous data while new key fetches → prevents dropdown from going blank → no layout shift
@@ -229,8 +230,10 @@ export default function ObservationForm() {
         exact_location: existing.exact_location || '',
         obs_time: existing.obs_time || '',
         obs_date: existing.obs_date || '',
-        contractor_user_id: existing.contractor_user_id?.toString() || '',
-        contractor_company: existing.contractor_name || '',
+        contractor_user_ids: existing.contractor_user_ids?.length
+          ? existing.contractor_user_ids
+          : (existing.contractor_user_id ? [existing.contractor_user_id] : []),
+        contractor_companies: existing.contractor_name ? [existing.contractor_name] : [],
         to_be_rectified_by: existing.to_be_rectified_by || '',
         observer_name: existing.observer_name || '',
         core_concern_id: existing.core_concern_id?.toString() || '',
@@ -279,11 +282,11 @@ export default function ObservationForm() {
 
     if (!isDraft) {
       const missing: string[] = []
-      if (!form.building_id)          missing.push('Building / Tower')
-      if (!form.floor_id)             missing.push('Floor')
-      if (!form.contractor_company)   missing.push('Contractor')
-      if (!form.contractor_user_id)   missing.push('To Be Rectified By')
-      if (!form.core_concern_id)      missing.push('Core Concern')
+      if (!form.building_id)                    missing.push('Building / Tower')
+      if (!form.floor_id)                       missing.push('Floor')
+      if (!form.contractor_companies.length)    missing.push('Contractor')
+      if (!form.contractor_user_ids.length)     missing.push('To Be Rectified By')
+      if (!form.core_concern_id)                missing.push('Core Concern')
       if (!form.specific_concern_id)  missing.push('Specific Concern')
       if (!form.violation_id)         missing.push('Violation Caused Due To')
       if (!form.target_date_actual)    missing.push('Target Date for Rectification')
@@ -305,7 +308,8 @@ export default function ObservationForm() {
         project_id: Number(form.project_id),
         building_id: form.building_id ? Number(form.building_id) : null,
         floor_id: form.floor_id ? Number(form.floor_id) : null,
-        contractor_user_id: form.contractor_user_id ? Number(form.contractor_user_id) : null,
+        contractor_user_ids: form.contractor_user_ids,
+        contractor_user_id: form.contractor_user_ids[0] ?? null,
         core_concern_id: form.core_concern_id ? Number(form.core_concern_id) : null,
         specific_concern_id: form.specific_concern_id ? Number(form.specific_concern_id) : null,
         root_cause_category_id: form.root_cause_category_id ? Number(form.root_cause_category_id) : null,
@@ -415,94 +419,6 @@ export default function ObservationForm() {
         </div>
       )}
 
-      {/* ── Site Information ─────────────────────── */}
-      <SectionCard title="Site Information" icon={<MapPin className="w-3.5 h-3.5" />}>
-        <div className={G3}>
-          <Field label="Project" required>
-            <select className="select" value={form.project_id} onChange={e => { set('project_id', e.target.value); set('building_id', ''); set('floor_id', ''); set('contractor_company', ''); set('contractor_user_id', '') }} required>
-              <option value="">Select project…</option>
-              {(projects || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Building / Tower">
-            <select className="select" value={form.building_id} onChange={e => { set('building_id', e.target.value); set('floor_id', '') }} disabled={!form.project_id}>
-              <option value="">{form.project_id ? 'Select building…' : 'Select project first…'}</option>
-              {(buildings || []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Floor">
-            <select className="select" value={form.floor_id} onChange={e => set('floor_id', e.target.value)} disabled={!form.building_id || !(floors?.length)}>
-              <option value="">
-                {!form.building_id ? 'Select building first…' : !(floors?.length) ? 'No floors configured' : 'Select floor…'}
-              </option>
-              {prepareFloors(floors || []).map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
-          </Field>
-          <Field label="Exact Location">
-            <input className="input" placeholder="e.g. Near Gate 3, Basement" value={form.exact_location} onChange={e => set('exact_location', e.target.value)} />
-          </Field>
-          <Field label="Observer Name">
-            <input className="input" value={form.observer_name} onChange={e => set('observer_name', e.target.value)} />
-          </Field>
-          <Field label="Contractor Company">
-            <select
-              className="select"
-              value={form.contractor_company}
-              onChange={e => {
-                const company = e.target.value
-                const workers = (contractors || []).filter((c: any) => c.name === company)
-                const firstWorker = workers[0]
-                set('contractor_company', company)
-                set('contractor_user_id', firstWorker ? String(firstWorker.id) : '')
-                // auto-fill contact info if only one worker; clear otherwise so user picks
-                set('to_be_rectified_by', workers.length === 1 ? [firstWorker?.mobile, firstWorker?.email].filter(Boolean).join(' / ') : '')
-              }}
-            >
-              <option value="">Select contractor…</option>
-              {contractorCompanies.map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
-            </select>
-          </Field>
-          {/* Date + Time on same row */}
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <label className="label">Date</label>
-              <input type="date" className="input" value={form.obs_date} onChange={e => set('obs_date', e.target.value)} />
-            </div>
-            <div className="w-32">
-              <label className="label">Time</label>
-              <input type="time" className="input" value={form.obs_time} onChange={e => set('obs_time', e.target.value)} />
-            </div>
-          </div>
-          <Field label="To Be Rectified By">
-            {form.contractor_company && companyWorkers.length > 1 ? (
-              <select
-                className="select"
-                value={form.contractor_user_id}
-                onChange={e => {
-                  const userId = e.target.value
-                  const worker = companyWorkers.find((c: any) => String(c.id) === userId)
-                  set('contractor_user_id', userId)
-                  set('to_be_rectified_by', [worker?.mobile, worker?.email].filter(Boolean).join(' / '))
-                }}
-              >
-                <option value="">Select individual…</option>
-                {companyWorkers.map((c: any) => {
-                  const label = [c.mobile, c.email].filter(Boolean).join(' / ')
-                  return <option key={c.id} value={String(c.id)}>{label}</option>
-                })}
-              </select>
-            ) : (
-              <input
-                className="input"
-                placeholder={form.contractor_company ? 'Auto-filled from contractor' : 'Select contractor first'}
-                value={form.to_be_rectified_by}
-                onChange={e => set('to_be_rectified_by', e.target.value)}
-              />
-            )}
-          </Field>
-        </div>
-      </SectionCard>
-
       {/* ── Photos ───────────────────────────────── */}
       <SectionCard title="Photos" icon={<ImagePlus className="w-3.5 h-3.5" />}>
         {isEdit && existing?.images?.length > 0 && (
@@ -559,6 +475,104 @@ export default function ObservationForm() {
             ))}
           </div>
         )}
+      </SectionCard>
+
+      {/* ── Site Information ─────────────────────── */}
+      <SectionCard title="Site Information" icon={<MapPin className="w-3.5 h-3.5" />}>
+        <div className={G3}>
+          <Field label="Project" required>
+            <select className="select" value={form.project_id} onChange={e => { set('project_id', e.target.value); set('building_id', ''); set('floor_id', ''); set('contractor_company', ''); set('contractor_user_id', '') }} required>
+              <option value="">Select project…</option>
+              {(projects || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Building / Tower">
+            <select className="select" value={form.building_id} onChange={e => { set('building_id', e.target.value); set('floor_id', '') }} disabled={!form.project_id}>
+              <option value="">{form.project_id ? 'Select building…' : 'Select project first…'}</option>
+              {(buildings || []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Floor">
+            <select className="select" value={form.floor_id} onChange={e => set('floor_id', e.target.value)} disabled={!form.building_id || !(floors?.length)}>
+              <option value="">
+                {!form.building_id ? 'Select building first…' : !(floors?.length) ? 'No floors configured' : 'Select floor…'}
+              </option>
+              {prepareFloors(floors || []).map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Exact Location">
+            <input className="input" placeholder="e.g. Near Gate 3, Basement" value={form.exact_location} onChange={e => set('exact_location', e.target.value)} />
+          </Field>
+          <Field label="Observer Name">
+            <input className="input" value={form.observer_name} onChange={e => set('observer_name', e.target.value)} />
+          </Field>
+          <Field label="Contractor Company" required>
+            <MultiSelectFilter
+              size="md"
+              options={contractorCompanies.map((c: any) => ({ value: c.name, label: c.name }))}
+              value={form.contractor_companies}
+              onChange={selected => {
+                const names = selected as string[]
+                set('contractor_companies', names)
+                // keep only workers belonging to still-selected companies
+                const validIds = new Set((contractors || [])
+                  .filter((c: any) => names.includes(c.name))
+                  .map((c: any) => c.id))
+                const filteredIds = form.contractor_user_ids.filter((id: number) => validIds.has(id))
+                set('contractor_user_ids', filteredIds)
+                // auto-fill to_be_rectified_by if only one worker remains
+                if (filteredIds.length === 1) {
+                  const w = (contractors || []).find((c: any) => c.id === filteredIds[0])
+                  set('to_be_rectified_by', [w?.mobile, w?.email].filter(Boolean).join(' / '))
+                } else if (!filteredIds.length) {
+                  set('to_be_rectified_by', '')
+                }
+              }}
+              placeholder="Select contractor(s)…"
+              className="w-full"
+            />
+          </Field>
+          {/* Date + Time on same row */}
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="label">Date</label>
+              <input type="date" className="input" value={form.obs_date} onChange={e => set('obs_date', e.target.value)} />
+            </div>
+            <div className="w-32">
+              <label className="label">Time</label>
+              <input type="time" className="input" value={form.obs_time} onChange={e => set('obs_time', e.target.value)} />
+            </div>
+          </div>
+          <Field label="To Be Rectified By" required>
+            {form.contractor_companies.length > 0 ? (
+              <MultiSelectFilter
+                size="md"
+                options={companyWorkers.map((c: any) => ({
+                  value: c.id,
+                  label: [c.name, c.mobile, c.email].filter(Boolean).join(' · '),
+                }))}
+                value={form.contractor_user_ids}
+                onChange={selected => {
+                  const ids = selected as number[]
+                  set('contractor_user_ids', ids)
+                  const contacts = (contractors || [])
+                    .filter((c: any) => ids.includes(c.id))
+                    .map((c: any) => [c.mobile, c.email].filter(Boolean).join(' / '))
+                  set('to_be_rectified_by', contacts.join(', '))
+                }}
+                placeholder="Select individual(s)…"
+                className="w-full"
+              />
+            ) : (
+              <input
+                className="input text-gray-400"
+                placeholder="Select contractor(s) first"
+                readOnly
+                value=""
+              />
+            )}
+          </Field>
+        </div>
       </SectionCard>
 
       {/* ── Observation Details ──────────────────── */}

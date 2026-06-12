@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from typing import Optional, List
+import json
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, case, nullslast
 from datetime import datetime, date
@@ -45,7 +46,10 @@ def get_allowed_project_ids(user: models.User) -> Optional[List[int]]:
     if user.role in ("SuperAdmin", "Admin", "PIC", "AIC"):
         return None
     # HO, PSO, Observer, Contractor — scoped to assigned projects
-    return [up.project_id for up in user.user_projects]
+    project_ids = [up.project_id for up in user.user_projects]
+    if not project_ids:
+        return None  # no assignments = full access (admin intent: "all projects")
+    return project_ids
 
 
 def obs_to_dict(obs: models.Observation, db: Session) -> dict:
@@ -64,6 +68,7 @@ def obs_to_dict(obs: models.Observation, db: Session) -> dict:
         "obs_time": obs.obs_time,
         "obs_date": obs.obs_date,
         "contractor_user_id": obs.contractor_user_id,
+        "contractor_user_ids": json.loads(obs.contractor_user_ids) if obs.contractor_user_ids else [],
         "contractor_name": obs.contractor.name if obs.contractor else None,
         "to_be_rectified_by": obs.to_be_rectified_by,
         "observer_name": obs.observer_name,
@@ -120,6 +125,7 @@ class ObsCreate(BaseModel):
     obs_time: Optional[str] = None
     obs_date: Optional[str] = None
     contractor_user_id: Optional[int] = None
+    contractor_user_ids: Optional[List[int]] = None   # all selected contractor user IDs
     to_be_rectified_by: Optional[str] = None
     observer_name: Optional[str] = None
     core_concern_id: Optional[int] = None
@@ -601,6 +607,7 @@ def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: mod
         obs_time=body.obs_time,
         obs_date=body.obs_date,
         contractor_user_id=body.contractor_user_id,
+        contractor_user_ids=json.dumps(body.contractor_user_ids) if body.contractor_user_ids else None,
         to_be_rectified_by=body.to_be_rectified_by,
         observer_name=body.observer_name,
         core_concern_id=body.core_concern_id,
@@ -627,17 +634,17 @@ def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: mod
     if obs.status == 'Draft':
         return {"id": obs.id, "observation_id": obs.observation_id, "risk_factor": factor, "risk_level": level}
 
-    # In-app notification to assigned contractor
-    if body.contractor_user_id:
-        project_name = obs.project.name if obs.project else ""
-        notif = models.Notification(
-            user_id=body.contractor_user_id,
+    # In-app notifications to all assigned contractors
+    notif_ids = body.contractor_user_ids or ([body.contractor_user_id] if body.contractor_user_id else [])
+    project_name = obs.project.name if obs.project else ""
+    for uid in notif_ids:
+        db.add(models.Notification(
+            user_id=uid,
             observation_id=obs.id,
             obs_ref=obs.observation_id,
             message=f"New observation {obs.observation_id} assigned to you on project '{project_name}'.",
             is_read=False,
-        )
-        db.add(notif)
+        ))
         db.commit()
 
     # Email notification
@@ -651,10 +658,15 @@ def _send_obs_email(obs: models.Observation, db: Session):
     if not smtp or not smtp.enabled:
         return
 
-    # TO: contractor
+    # TO: all assigned contractors
     to_emails: List[str] = []
-    if obs.contractor:
-        to_emails.append(obs.contractor.email)
+    contractor_ids = json.loads(obs.contractor_user_ids) if obs.contractor_user_ids else (
+        [obs.contractor_user_id] if obs.contractor_user_id else []
+    )
+    for cid in contractor_ids:
+        u = db.query(models.User).filter(models.User.id == cid).first()
+        if u and u.email and u.email not in to_emails:
+            to_emails.append(u.email)
 
     # CC: all project members (PIC, AIC, HO, PSO, Observer) + all Admin users
     CC_PROJECT_ROLES = {"PIC", "AIC", "HO", "PSO", "Observer"}
@@ -707,7 +719,12 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
     prev_status = obs.status
     factor, level = calc_risk(body.severity or obs.severity or 1, body.probability or obs.probability or 1)
 
-    for field, val in body.model_dump(exclude_unset=True).items():
+    body_dict = body.model_dump(exclude_unset=True)
+    # Serialize contractor_user_ids list → JSON string before setting on model
+    if 'contractor_user_ids' in body_dict:
+        ids = body_dict.pop('contractor_user_ids')
+        obs.contractor_user_ids = json.dumps(ids) if ids else None
+    for field, val in body_dict.items():
         setattr(obs, field, val)
 
     obs.risk_factor = factor
@@ -720,16 +737,17 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
 
     # Send notifications when a draft is being submitted (converted to non-Draft)
     if was_draft and obs.status != 'Draft':
-        if obs.contractor_user_id:
+        all_cids = json.loads(obs.contractor_user_ids) if obs.contractor_user_ids else (
+            [obs.contractor_user_id] if obs.contractor_user_id else []
+        )
+        if all_cids:
             project_name = obs.project.name if obs.project else ""
-            notif = models.Notification(
-                user_id=obs.contractor_user_id,
-                observation_id=obs.id,
-                obs_ref=obs.observation_id,
-                message=f"New observation {obs.observation_id} assigned to you on project '{project_name}'.",
-                is_read=False,
-            )
-            db.add(notif)
+            for cid in all_cids:
+                db.add(models.Notification(
+                    user_id=cid, observation_id=obs.id, obs_ref=obs.observation_id,
+                    message=f"New observation {obs.observation_id} assigned to you on project '{project_name}'.",
+                    is_read=False,
+                ))
             db.commit()
         _send_obs_email(obs, db)
 

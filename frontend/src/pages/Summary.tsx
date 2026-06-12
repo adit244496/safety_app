@@ -196,7 +196,7 @@ function EaseScoreView() {
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{easeActiveCount}</span>
           )}
           <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
-          <div className="relative ml-2" ref={easeDlRef} onClick={e => e.stopPropagation()}>
+          <div className="relative ml-2 sm:pointer-events-auto" ref={easeDlRef} onClick={e => e.stopPropagation()}>
             <button
               onClick={() => setShowEaseDlMenu(v => !v)}
               className="hidden sm:flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-2.5 py-1 rounded-lg transition-colors"
@@ -635,7 +635,7 @@ function ComplianceAnalysis() {
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{compActiveCount}</span>
           )}
           <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
-          <div className="relative ml-2" ref={dlRef} onClick={e => e.stopPropagation()}>
+          <div className="relative ml-2 sm:pointer-events-auto" ref={dlRef} onClick={e => e.stopPropagation()}>
             <button
               onClick={() => setShowDlMenu(v => !v)}
               className="hidden sm:flex items-center gap-1 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-2.5 py-1 rounded-lg transition-colors"

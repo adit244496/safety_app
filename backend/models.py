@@ -130,7 +130,8 @@ class Observation(Base):
     exact_location = Column(String, nullable=True)
     obs_time = Column(String, nullable=True)
     obs_date = Column(String, nullable=True)
-    contractor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    contractor_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)   # primary (first selected)
+    contractor_user_ids = Column(Text, nullable=True)   # JSON array of all selected contractor user IDs
     to_be_rectified_by = Column(String, nullable=True)
     observer_name = Column(String, nullable=True)
     core_concern_id = Column(Integer, ForeignKey("core_concerns.id"), nullable=True)
