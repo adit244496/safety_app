@@ -343,7 +343,7 @@ export default function Dashboard() {
           limit: 10000,
         }
       })
-      const allObs: any[] = obsResp.data?.items ?? obsResp.data ?? []
+      const allObs: any[] = obsResp.data?.observations ?? obsResp.data?.items ?? []
       const today = new Date(); today.setHours(0, 0, 0, 0)
 
       allObs.forEach((o: any, i: number) => {
