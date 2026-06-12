@@ -459,7 +459,6 @@ def update_smtp_settings(body: SmtpBody, db: Session = Depends(get_db), _=Depend
 
 # ── Severity Labels ──────────────────────────────────────────────────────────
 class RiskLabelBody(BaseModel):
-    level: int
     label: str
 
 @router.get("/severity-labels")

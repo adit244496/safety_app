@@ -394,7 +394,7 @@ export default function ObservationsList() {
 
         {/* Desktop table — hidden on small screens */}
         {!isLoading && visibleObs.length > 0 && (
-          <div className="hidden sm:block overflow-x-auto overflow-y-auto max-h-[65vh]">
+          <div className="hidden sm:block overflow-x-auto overflow-y-auto max-h-[75vh]">
             <table className="w-full min-w-[860px]">
               <thead className="sticky top-0 z-10 bg-white">
                 <tr className="border-b border-gray-100">
@@ -418,7 +418,7 @@ export default function ObservationsList() {
                   >
                     <td className="td">
                       <div className="flex items-center gap-1.5">
-                        <span className={`font-mono text-xs font-bold px-2 py-1 rounded-md ${o.status === 'Draft' ? 'text-red-700 bg-red-100' : 'text-indigo-700 bg-indigo-50'}`}>
+                        <span className={`font-mono text-[11px] font-bold px-1.5 py-0.5 rounded-md ${o.status === 'Draft' ? 'text-red-700 bg-red-100' : 'text-indigo-700 bg-indigo-50'}`}>
                           {o.observation_id}
                         </span>
                         {o.status === 'Draft' && (
