@@ -329,6 +329,7 @@ export default function ObservationForm() {
         root_cause_category_id: form.root_cause_category_id ? Number(form.root_cause_category_id) : null,
         root_cause_specific_id: form.root_cause_specific_id ? Number(form.root_cause_specific_id) : null,
         violation_id: form.violation_id ? Number(form.violation_id) : null,
+        eic_user_id: form.eic_user_id ? Number(form.eic_user_id) : null,
         target_date_actual: form.target_date_actual || null,
         severity: form.severity ? Number(form.severity) : null,
         probability: form.probability ? Number(form.probability) : null,
