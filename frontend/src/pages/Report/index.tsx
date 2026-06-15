@@ -412,7 +412,7 @@ async function exportInspectionExcel(
     styled(rn, 6, 8,  `${obs.risk_level || '—'} | ${obs.possible_outcome || '—'}`, riskArgb, riskFontA, true, 8)
     styled(rn, 9, 9,  obs.contractor_name || '—',                       'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 10, 10, obs.observer_name || obs.created_by_name || '—', 'FFFFFF00', 'FF000000', true, 8)
-    styled(rn, 11, 12, [obs.target_date_name, fmtD(obs.target_date_actual)].filter(Boolean).join('\n') || '—', 'FFFFFF00', 'FF000000', true, 8)
+    styled(rn, 11, 12, fmtD(obs.target_date_actual) || obs.target_date_name || '—', 'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 13, 13, xlClosedDate || '—',                xlClosedDate ? 'FFC6EFCE' : 'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 14, 14, obs.status || '—',                               'FFFFFF00', 'FF000000', true, 8)
     ws.getRow(rn).height = 14; rn++
@@ -876,12 +876,7 @@ function ObsBlock({ obs, idx }: { obs: any; idx: number }) {
         <td className={riskCls} colSpan={3}>{obs.risk_level || '—'} | {obs.possible_outcome || '—'}</td>
         <td>{obs.contractor_name || '—'}</td>
         <td>{obs.observer_name || obs.created_by_name || '—'}</td>
-        <td colSpan={2}>
-          {obs.target_date_name || '—'}
-          {obs.target_date_actual && (
-            <div style={{ fontSize: '7pt', color: '#555', marginTop: 2 }}>{fmtD(obs.target_date_actual)}</div>
-          )}
-        </td>
+        <td colSpan={2}>{fmtD(obs.target_date_actual) || obs.target_date_name || '—'}</td>
         <td style={{ background: closedByDate ? '#c6efce' : '#ffff00', color: '#000' }}>
           {closedByDate || '—'}
         </td>
