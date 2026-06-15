@@ -350,16 +350,14 @@ async function exportInspectionExcel(
 
     const riskArgb   = obs.risk_level === 'High' ? 'FFFF0000' : obs.risk_level === 'Medium' ? 'FFFFC000' : 'FF92D050'
     const riskFontA  = obs.risk_level === 'High' ? 'FFFFFFFF' : 'FF000000'
-    const contractorComments = (obs.comments || []).filter((c: any) => c.user_role === 'Contractor')
-    const lastCC     = contractorComments[contractorComments.length - 1]
-    const compDate   = lastCC?.created_at ? fmtD(lastCC.created_at) : null
     const xlClosingComment = obs.status === 'Closed'
       ? [...(obs.comments || [])]
           .filter((c: any) => c.comment && /Status changed to "Closed"/i.test(c.comment))
           .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
       : null
+    const xlClosedByRole  = xlClosingComment?.user_role ?? null
     const xlClosedByLabel = xlClosingComment?.user_name
-      ? `${xlClosingComment.user_name}${xlClosingComment.user_role ? ` (${xlClosingComment.user_role})` : ''}`
+      ? `${xlClosingComment.user_name}${xlClosedByRole ? ` (${xlClosedByRole})` : ''}`
       : null
     const xlClosedDate = xlClosingComment?.created_at
       ? fmtD(xlClosingComment.created_at)
@@ -414,8 +412,8 @@ async function exportInspectionExcel(
     styled(rn, 6, 8,  `${obs.risk_level || '—'} | ${obs.possible_outcome || '—'}`, riskArgb, riskFontA, true, 8)
     styled(rn, 9, 9,  obs.contractor_name || '—',                       'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 10, 10, obs.observer_name || obs.created_by_name || '—', 'FFFFFF00', 'FF000000', true, 8)
-    styled(rn, 11, 12, obs.target_date_name || '—',                     'FFFFFF00', 'FF000000', true, 8)
-    styled(rn, 13, 13, compDate || xlClosedDate || '—',    (compDate || xlClosedDate) ? 'FFC6EFCE' : 'FFFFFF00', 'FF000000', true, 8)
+    styled(rn, 11, 12, [obs.target_date_name, fmtD(obs.target_date_actual)].filter(Boolean).join('\n') || '—', 'FFFFFF00', 'FF000000', true, 8)
+    styled(rn, 13, 13, xlClosedDate || '—',                xlClosedDate ? 'FFC6EFCE' : 'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 14, 14, obs.status || '—',                               'FFFFFF00', 'FF000000', true, 8)
     ws.getRow(rn).height = 14; rn++
 
@@ -450,12 +448,12 @@ async function exportInspectionExcel(
 
     // Compliance info M
     const compInfoCell = ws.getRow(contentRn).getCell(13)
-    const compInfoLines: string[] = []
-    if (compDate) compInfoLines.push(`✓ Contractor closed:\n${compDate}`)
-    if (xlClosedDate) compInfoLines.push(`Obs closed by ${xlClosedByLabel ?? 'EIC'}:\n${xlClosedDate}`)
-    compInfoCell.value     = compInfoLines.length ? compInfoLines.join('\n') : 'Pending'
+    const closerLabel = xlClosedByRole === 'Contractor'
+      ? '✓ Contractor closed'
+      : `Closed by ${xlClosedByLabel ?? 'EIC'}`
+    compInfoCell.value     = xlClosedDate ? `${closerLabel}:\n${xlClosedDate}` : 'Pending'
     compInfoCell.fill      = fill('FFFFFFF0')
-    compInfoCell.font      = fnt(compInfoLines.length ? 'FF375623' : 'FFaaaaaa', !!compInfoLines.length, 8)
+    compInfoCell.font      = fnt(xlClosedDate ? 'FF375623' : 'FFaaaaaa', !!xlClosedDate, 8)
     compInfoCell.alignment = aLeft
     compInfoCell.border    = brd
 
@@ -806,28 +804,20 @@ function ObsBlock({ obs, idx }: { obs: any; idx: number }) {
   const curF = findingImgs[safeF]
   const curC = complianceImgs[safeC]
 
-  // Compliance date: last comment from Contractor role
-  const contractorComments = (obs.comments || []).filter((c: any) => c.user_role === 'Contractor')
-  const lastContractorComment = contractorComments.length
-    ? contractorComments[contractorComments.length - 1]
-    : null
-  const complianceDate = lastContractorComment?.created_at
-    ? fmtD(lastContractorComment.created_at)
-    : null
-
-  // Obs closed date: updated_at when status is Closed
-  const obsClosedDate = obs.status === 'Closed' && obs.updated_at ? fmtD(obs.updated_at) : null
-
-  // Who closed the observation — look for a status-change comment
+  // Who closed the observation — find the "Status changed to Closed" comment
   const closingComment = obs.status === 'Closed'
     ? [...(obs.comments || [])]
         .filter((c: any) => c.comment && /Status changed to "Closed"/i.test(c.comment))
         .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
     : null
-  const closedByLabel = closingComment?.user_name
-    ? `${closingComment.user_name}${closingComment.user_role ? ` (${closingComment.user_role})` : ''}`
+  const closedByRole  = closingComment?.user_role ?? null
+  const closedByName  = closingComment?.user_name ?? null
+  const closedByLabel = closedByName
+    ? `${closedByName}${closedByRole ? ` (${closedByRole})` : ''}`
     : null
-  const closedByDate = closingComment?.created_at ? fmtD(closingComment.created_at) : obsClosedDate
+  const closedByDate  = closingComment?.created_at
+    ? fmtD(closingComment.created_at)
+    : (obs.status === 'Closed' && obs.updated_at ? fmtD(obs.updated_at) : null)
 
   const riskCls = obs.risk_level === 'High' ? 'she-risk-h' : obs.risk_level === 'Medium' ? 'she-risk-m' : obs.risk_level ? 'she-risk-l' : ''
 
@@ -886,9 +876,14 @@ function ObsBlock({ obs, idx }: { obs: any; idx: number }) {
         <td className={riskCls} colSpan={3}>{obs.risk_level || '—'} | {obs.possible_outcome || '—'}</td>
         <td>{obs.contractor_name || '—'}</td>
         <td>{obs.observer_name || obs.created_by_name || '—'}</td>
-        <td colSpan={2}>{obs.target_date_name || '—'}</td>
-        <td style={{ background: complianceDate ? '#c6efce' : '#ffff00', color: '#000' }}>
-          {complianceDate || (obs.status === 'Closed' ? obsClosedDate || '—' : '—')}
+        <td colSpan={2}>
+          {obs.target_date_name || '—'}
+          {obs.target_date_actual && (
+            <div style={{ fontSize: '7pt', color: '#555', marginTop: 2 }}>{fmtD(obs.target_date_actual)}</div>
+          )}
+        </td>
+        <td style={{ background: closedByDate ? '#c6efce' : '#ffff00', color: '#000' }}>
+          {closedByDate || '—'}
         </td>
         <td>{obs.status || '—'}</td>
       </tr>
@@ -952,15 +947,11 @@ function ObsBlock({ obs, idx }: { obs: any; idx: number }) {
         {/* Compliance date + info */}
         <td className="she-compl">
           <div className="she-compl-inner">
-            {complianceDate && (
-              <div className="she-compl-date">✓ Contractor closed:<br />{complianceDate}</div>
-            )}
-            {closedByDate && (
-              <div className="she-compl-date-closed">
-                Obs closed by {closedByLabel ?? 'EIC'}:<br />{closedByDate}
+            {closedByDate ? (
+              <div className={closedByRole === 'Contractor' ? 'she-compl-date' : 'she-compl-date-closed'}>
+                {closedByRole === 'Contractor' ? '✓ Contractor' : (closedByLabel ?? 'EIC')} closed:<br />{closedByDate}
               </div>
-            )}
-            {!complianceDate && !closedByDate && (
+            ) : (
               <div style={{ color: '#aaa', fontSize: '7pt', fontStyle: 'italic' }}>Pending</div>
             )}
           </div>
