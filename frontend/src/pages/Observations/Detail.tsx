@@ -16,7 +16,7 @@ import { useAuth } from '../../store/authStore'
 const ROLE: Record<string, { avatarBg: string; badgeBg: string; badgeText: string; borderColor: string }> = {
   Admin:      { avatarBg: 'bg-rose-500',   badgeBg: 'bg-rose-100',   badgeText: 'text-rose-800',   borderColor: '#f43f5e' },
   PIC:        { avatarBg: 'bg-indigo-500', badgeBg: 'bg-indigo-100', badgeText: 'text-indigo-800', borderColor: '#6366f1' },
-  AIC:        { avatarBg: 'bg-blue-500',   badgeBg: 'bg-blue-100',   badgeText: 'text-blue-800',   borderColor: '#3b82f6' },
+  EIC:        { avatarBg: 'bg-blue-500',   badgeBg: 'bg-blue-100',   badgeText: 'text-blue-800',   borderColor: '#3b82f6' },
   HO:         { avatarBg: 'bg-violet-500', badgeBg: 'bg-violet-100', badgeText: 'text-violet-800', borderColor: '#8b5cf6' },
   PSO:        { avatarBg: 'bg-sky-500',    badgeBg: 'bg-sky-100',    badgeText: 'text-sky-800',    borderColor: '#0ea5e9' },
   Contractor: { avatarBg: 'bg-amber-500',  badgeBg: 'bg-amber-100',  badgeText: 'text-amber-800',  borderColor: '#f59e0b' },

@@ -24,7 +24,7 @@ export const getRoleClass = (role?: string) => {
     SuperAdmin: 'bg-red-100 text-red-800',
     Admin: 'bg-purple-100 text-purple-800',
     PIC: 'bg-indigo-100 text-indigo-800',
-    AIC: 'bg-blue-100 text-blue-800',
+    EIC: 'bg-blue-100 text-blue-800',
     HO: 'bg-cyan-100 text-cyan-800',
     PSO: 'bg-sky-100 text-sky-800',
     Contractor: 'bg-orange-100 text-orange-800',
@@ -49,4 +49,4 @@ export const calcRisk = (s: number, p: number) => {
 }
 
 export const STATUSES = ['Draft', 'Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed']
-export const ROLES = ['SuperAdmin', 'Admin', 'PIC', 'AIC', 'HO', 'PSO', 'Contractor', 'Observer']
+export const ROLES = ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Contractor', 'Observer']

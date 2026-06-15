@@ -44,7 +44,7 @@ const GRADATION_BG: Record<string, string> = {
 function EaseScoreView() {
   const last90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today  = new Date().toISOString().slice(0, 10)
-  const [projectFilter, setProjectFilter] = useState('')
+  const [projectFilter, setProjectFilter] = useState<string[]>([])
   const [dateFrom, setDateFrom] = useState(last90)
   const [dateTo, setDateTo]     = useState(today)
   const [showFilters, setShowFilters] = useState(false)
@@ -58,7 +58,7 @@ function EaseScoreView() {
     queryKey: ['ease-scores', projectFilter, dateFrom, dateTo],
     queryFn: () => api.get('/ease-score/', {
       params: {
-        project_name: projectFilter || undefined,
+        project_name: projectFilter.length ? projectFilter : undefined,
         date_from: dateFrom,
         date_to: dateTo,
       },
@@ -167,7 +167,7 @@ function EaseScoreView() {
     )
   }
 
-  const easeActiveCount = (projectFilter ? 1 : 0) + (dateFrom !== last90 ? 1 : 0) + (dateTo !== today ? 1 : 0)
+  const easeActiveCount = (projectFilter.length > 0 ? 1 : 0) + (dateFrom !== last90 ? 1 : 0) + (dateTo !== today ? 1 : 0)
 
   const [showEaseDlMenu, setShowEaseDlMenu] = useState(false)
   const easeDlRef = useRef<HTMLDivElement>(null)
@@ -176,7 +176,7 @@ function EaseScoreView() {
     await generateEasePdf({
       overallScore: aggregatedOverall,
       overallGrade: aggregatedGrad,
-      filterDesc: `${projectFilter || 'All projects'}  |  ${dateFrom} to ${dateTo}`,
+      filterDesc: `${projectFilter.length ? projectFilter.join(', ') : 'All projects'}  |  ${dateFrom} to ${dateTo}`,
       projectCount: projectChartData.length,
       periodCount: periods.length,
     })
@@ -217,9 +217,9 @@ function EaseScoreView() {
           <MultiSelectFilter
             size="sm"
             options={(easeProjects || []).map((p: string) => ({ value: p, label: p }))}
-            value={projectFilter ? [projectFilter] : []}
-            onChange={v => setProjectFilter((v as string[])[0] ?? '')}
-            placeholder="Project"
+            value={projectFilter}
+            onChange={v => setProjectFilter(v as string[])}
+            placeholder="All Projects"
             className="w-full sm:w-auto sm:min-w-[130px]"
           />
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
@@ -230,7 +230,7 @@ function EaseScoreView() {
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date to" />
           </div>
           {easeActiveCount > 0 && (
-            <button onClick={() => { setProjectFilter(''); setDateFrom(last90); setDateTo(today) }}
+            <button onClick={() => { setProjectFilter([]); setDateFrom(last90); setDateTo(today) }}
               className="col-span-2 sm:col-auto flex items-center justify-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors border border-red-100 sm:border-0">
               <X className="w-3 h-3" /> Clear filters
             </button>
@@ -261,7 +261,7 @@ function EaseScoreView() {
               <GradBadge g={aggregatedGrad} />
             </div>
             <div className="ml-auto text-xs text-slate-400 text-right">
-              {periods.length} period{periods.length !== 1 ? 's' : ''} · {projectFilter || 'All projects'}
+              {periods.length} period{periods.length !== 1 ? 's' : ''} · {projectFilter.length ? projectFilter.join(', ') : 'All projects'}
             </div>
           </div>
 

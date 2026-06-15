@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from database import get_db
 import models
@@ -40,7 +40,7 @@ def get_ease_projects(
 
 @router.get("/")
 def get_ease_scores(
-    project_name: Optional[str] = Query(None),
+    project_name: Optional[List[str]] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
@@ -48,7 +48,7 @@ def get_ease_scores(
 ):
     q = db.query(models.EaseScoreEntry)
     if project_name:
-        q = q.filter(models.EaseScoreEntry.project_name == project_name)
+        q = q.filter(models.EaseScoreEntry.project_name.in_(project_name))
 
     # Filter by period using date_from/date_to mapped to year-month
     if date_from:

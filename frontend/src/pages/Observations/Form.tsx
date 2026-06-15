@@ -147,7 +147,7 @@ export default function ObservationForm() {
     core_concern_id: '', specific_concern_id: '', specific_concern_text: '',
     possible_outcome: '', severity: '', probability: '',
     root_cause_category_id: '', root_cause_specific_id: '',
-    violation_id: '', target_date_actual: '', status: 'Open',
+    violation_id: '', target_date_actual: '', eic_user_id: '', status: 'Open',
   })
   const [pendingFiles,  setPendingFiles]  = useState<File[]>([])
   const [previewUrls,   setPreviewUrls]   = useState<string[]>([])
@@ -167,6 +167,7 @@ export default function ObservationForm() {
   const { data: rootCatList } = useQuery({ queryKey: ['root-cause-categories'],queryFn: () => api.get('/admin/root-cause-categories').then(r => r.data), ...STABLE })
   const { data: violations }      = useQuery({ queryKey: ['violations'],          queryFn: () => api.get('/admin/violations').then(r => r.data), ...STABLE })
   const { data: outcomes }        = useQuery({ queryKey: ['possible-outcomes'],   queryFn: () => api.get('/admin/possible-outcomes').then(r => r.data), ...STABLE })
+  const { data: eicUsers }        = useQuery({ queryKey: ['eic-users', form.project_id], queryFn: () => api.get('/users/eic', { params: { project_id: form.project_id } }).then(r => r.data), enabled: !!form.project_id, staleTime: 30_000 })
   const { data: severityLabels }  = useQuery({ queryKey: ['severity-labels'],     queryFn: () => api.get('/admin/severity-labels').then(r => r.data), ...STABLE })
   const { data: probabilityLabels } = useQuery({ queryKey: ['probability-labels'], queryFn: () => api.get('/admin/probability-labels').then(r => r.data), ...STABLE })
 
@@ -278,8 +279,18 @@ export default function ObservationForm() {
   async function doSave(overrideStatus?: string) {
     if (isSavingRef.current) return   // block double-tap before re-render disables the button
     isSavingRef.current = true
-    if (!form.project_id) { setError('Project is required'); isSavingRef.current = false; return }
     const isDraft = overrideStatus === 'Draft'
+
+    // Project is the only field the backend strictly requires (all other fields are nullable).
+    // For drafts: show a gentle prompt and scroll to project instead of blocking hard.
+    if (!form.project_id) {
+      const msg = isDraft
+        ? 'Please select a Project — it is the only required field to save a draft.'
+        : 'Project is required'
+      setError(msg)
+      isSavingRef.current = false
+      return
+    }
 
     if (!isDraft) {
       const missing: string[] = []
@@ -608,6 +619,12 @@ export default function ObservationForm() {
           </Field>
           <Field label="Target Date for Rectification">
             <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
+          </Field>
+          <Field label="Concerned EIC/PIC">
+            <select className="select" value={form.eic_user_id} onChange={e => set('eic_user_id', e.target.value)} disabled={!form.project_id}>
+              <option value="">{form.project_id ? 'Select EIC/PIC…' : 'Select project first…'}</option>
+              {(eicUsers || []).map((u: any) => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+            </select>
           </Field>
           <div className="lg:col-span-3">
             <Field label="Additional Details">

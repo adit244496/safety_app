@@ -43,7 +43,7 @@ def _assert_obs_access(obs: models.Observation, user: models.User, write_roles: 
 
 
 def get_allowed_project_ids(user: models.User) -> Optional[List[int]]:
-    if user.role in ("SuperAdmin", "Admin", "PIC", "AIC"):
+    if user.role in ("SuperAdmin", "Admin", "PIC", "EIC"):
         return None
     # HO, PSO, Observer, Contractor — scoped to assigned projects
     project_ids = [up.project_id for up in user.user_projects]
@@ -91,6 +91,8 @@ def obs_to_dict(obs: models.Observation, db: Session) -> dict:
         "target_date_id": obs.target_date_id,
         "target_date_name": obs.target_date.name if obs.target_date else None,
         "target_date_actual": obs.target_date_actual,
+        "eic_user_id": obs.eic_user_id,
+        "eic_user_name": obs.eic_user.name if obs.eic_user else None,
         "closed_at": obs.closed_at.isoformat() if obs.closed_at else None,
         "status": obs.status,
         "created_by": obs.created_by,
@@ -139,6 +141,7 @@ class ObsCreate(BaseModel):
     violation_id: Optional[int] = None
     target_date_id: Optional[int] = None
     target_date_actual: Optional[str] = None   # YYYY-MM-DD calendar date
+    eic_user_id: Optional[int] = None
     status: Optional[str] = None
 
 
@@ -562,6 +565,7 @@ def get_report_data(
         q = q.filter(models.Observation.obs_date >= date_from)
     if date_to:
         q = q.filter(models.Observation.obs_date <= date_to)
+    q = q.filter(models.Observation.status != 'Draft')
     if status:
         q = q.filter(models.Observation.status.in_(status))
     if contractor_user_id:
@@ -623,6 +627,7 @@ def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: mod
         violation_id=body.violation_id,
         target_date_id=body.target_date_id,
         target_date_actual=body.target_date_actual,
+        eic_user_id=body.eic_user_id,
         status=body.status or "Open",
         created_by=user.id,
     )
@@ -668,8 +673,8 @@ def _send_obs_email(obs: models.Observation, db: Session):
         if u and u.email and u.email not in to_emails:
             to_emails.append(u.email)
 
-    # CC: all project members (PIC, AIC, HO, PSO, Observer) + all Admin users
-    CC_PROJECT_ROLES = {"PIC", "AIC", "HO", "PSO", "Observer"}
+    # CC: all project members (PIC, EIC, HO, PSO, Observer) + all Admin users
+    CC_PROJECT_ROLES = {"PIC", "EIC", "HO", "PSO", "Observer"}
     cc_emails: List[str] = []
     project_users = (
         db.query(models.User)

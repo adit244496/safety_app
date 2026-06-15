@@ -193,7 +193,28 @@ export default function UsersTab() {
               </div>
 
               <div>
-                <label className="label">Project Access</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="label mb-0">Project Access</label>
+                  {(projects || []).length > 0 && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => set('project_ids', (projects || []).map((p: any) => p.id))}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-xs text-gray-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => set('project_ids', [])}
+                        className="text-xs text-gray-500 hover:text-gray-700 font-medium"
+                      >
+                        Clear All
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <p className="text-xs text-gray-400 mb-2">Select which projects this user can access. Leave all unselected for full access.</p>
                 <div className="flex flex-wrap gap-2">
                   {(projects || []).map((p: any) => (

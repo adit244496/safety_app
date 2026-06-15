@@ -37,4 +37,11 @@ def init_db():
     if DATABASE_URL.startswith("sqlite"):
         with engine.connect() as conn:
             conn.execute(text("PRAGMA foreign_keys = ON"))
-            conn.commit()
+            # Add eic_user_id column if it doesn't exist yet (safe no-op if already present)
+            try:
+                conn.execute(text(
+                    "ALTER TABLE observations ADD COLUMN eic_user_id INTEGER REFERENCES users(id)"
+                ))
+                conn.commit()
+            except Exception:
+                pass  # column already exists

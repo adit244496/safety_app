@@ -9,7 +9,7 @@ Every day at 08:00 it finds observations that:
   - have an assigned contractor
 
 It then sends an escalation email to the contractor (TO) with the project's
-PIC, AIC, HO, and Observer users in CC.
+PIC, EIC, HO, and Observer users in CC.
 
 Subsequent reminders include "Reminder #N" in the subject so recipients can
 track how many escalations have been sent.
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 _scheduler: BackgroundScheduler | None = None
 
-CC_ROLES = {"PIC", "AIC", "HO", "PSO", "Observer"}
+CC_ROLES = {"PIC", "EIC", "HO", "PSO", "Observer"}
 
 
 def _build_escalation_html(obs: models.Observation, reminder_number: int) -> str:
@@ -117,7 +117,7 @@ def _run_escalation_check():
             if not to_emails:
                 continue
 
-            # CC: PIC, AIC, HO, Observer roles on the same project
+            # CC: PIC, EIC, HO, Observer roles on the same project
             cc_emails: list[str] = []
             project_users = (
                 db.query(models.User)

@@ -14,7 +14,7 @@ class ProjectBody(BaseModel):
 
 @router.get("/")
 def list_projects(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
-    if user.role in ("SuperAdmin", "Admin", "PIC", "AIC"):
+    if user.role in ("SuperAdmin", "Admin", "PIC", "EIC"):
         projects = db.query(models.Project).order_by(models.Project.name).all()
     else:
         project_ids = [up.project_id for up in user.user_projects]

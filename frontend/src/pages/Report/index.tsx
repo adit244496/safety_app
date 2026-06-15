@@ -198,7 +198,7 @@ async function exportTrackerExcel(
       obs.risk_factor ?? '', obs.risk_level || '',
       obs.violation_name || obs.specific_concern_name || '',
       obs.to_be_rectified_by || obs.contractor_name || '',
-      obs.observer_name || obs.created_by_name || '',
+      obs.eic_user_name || '',
       obs.target_date_name || '', action, closureDate,
       delay, remarks,
     ]
@@ -412,7 +412,7 @@ async function exportInspectionExcel(
     styled(rn, 5, 5,  String(obs.risk_factor ?? '—'),                   riskArgb,   riskFontA,  true, 8)
     styled(rn, 6, 8,  `${obs.risk_level || '—'} | ${obs.possible_outcome || '—'}`, riskArgb, riskFontA, true, 8)
     styled(rn, 9, 9,  obs.contractor_name || '—',                       'FFFFFF00', 'FF000000', true, 8)
-    styled(rn, 10, 10, obs.observer_name || obs.created_by_name || '—', 'FFFFFF00', 'FF000000', true, 8)
+    styled(rn, 10, 10, obs.eic_user_name || '—', 'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 11, 12, fmtD(obs.target_date_actual) || obs.target_date_name || '—', 'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 13, 13, xlClosedDate || '—',                xlClosedDate ? 'FFC6EFCE' : 'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 14, 14, obs.status || '—',                               'FFFFFF00', 'FF000000', true, 8)
@@ -563,6 +563,18 @@ function LightboxZoom({ src, label, onClose }: { src: string; label?: string; on
 const STYLE = `
 /* ── Screen hide/show ── */
 .she-print-only { display: none !important; }
+
+/* ── PDF capture mode (html2canvas) — mirrors what @media print does ── */
+.she-exporting .she-carousel { display: none !important; }
+.she-exporting .she-carousel-nav { display: none !important; }
+.she-exporting .she-zoom-hint { display: none !important; }
+.she-exporting .she-img-type { display: none !important; }
+.she-exporting .she-print-grid { display: grid !important; }
+.she-exporting .she-print-grid.single { grid-template-columns: 1fr !important; }
+.she-exporting .she-print-only { display: block !important; }
+.she-exporting .no-print { display: none !important; }
+.she-exporting .she-view-link { display: none !important; }
+.she-exporting .she-finding-scroll { max-height: none !important; overflow-y: visible !important; }
 
 /* ── Print mode ── */
 @page { size: A4 landscape; margin: 5mm; }
@@ -876,7 +888,7 @@ function ObsBlock({ obs, idx }: { obs: any; idx: number }) {
         <td className={riskCls}>{obs.risk_factor ?? '—'}</td>
         <td className={riskCls} colSpan={3}>{obs.risk_level || '—'} | {obs.possible_outcome || '—'}</td>
         <td>{obs.contractor_name || '—'}</td>
-        <td>{obs.observer_name || obs.created_by_name || '—'}</td>
+        <td>{obs.eic_user_name || '—'}</td>
         <td colSpan={2}>{fmtD(obs.target_date_actual) || obs.target_date_name || '—'}</td>
         <td style={{ background: closedByDate ? '#c6efce' : '#ffff00', color: '#000' }}>
           {closedByDate || '—'}
@@ -1174,7 +1186,7 @@ function SHETrackerTab({
                   <td className={riskCls}>{obs.risk_level || '—'}</td>
                   <td>{obs.violation_name || obs.specific_concern_name || '—'}</td>
                   <td>{obs.to_be_rectified_by || obs.contractor_name || '—'}</td>
-                  <td>{obs.observer_name || obs.created_by_name || '—'}</td>
+                  <td>{obs.eic_user_name || '—'}</td>
                   <td className="trk-center">{obs.target_date_name || '—'}</td>
                   <td style={{ fontSize: '7pt' }}>{action}</td>
                   <td className="trk-center">
@@ -1416,8 +1428,16 @@ export default function ReportPage() {
                 <button
                   onClick={async () => {
                     setExportingPdfInsp(true)
-                    try { await generateHtmlReportPdf('she-report-root', `SHE_Inspection_${new Date().toISOString().slice(0, 10)}.pdf`, 'a4') }
-                    finally { setExportingPdfInsp(false) }
+                    try {
+                      await generateHtmlReportPdf(
+                        'she-report-root',
+                        `SHE_Inspection_${new Date().toISOString().slice(0, 10)}.pdf`,
+                        'a4',
+                        el => el.classList.add('she-exporting'),
+                        el => el.classList.remove('she-exporting'),
+                        '.she-sep',
+                      )
+                    } finally { setExportingPdfInsp(false) }
                   }}
                   disabled={exportingPdfInsp}
                   className="btn-primary btn-sm flex-1 sm:flex-none justify-center"

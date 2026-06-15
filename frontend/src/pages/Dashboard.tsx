@@ -390,8 +390,8 @@ export default function Dashboard() {
     ].filter(Boolean)
     const filterDesc = filterParts.length ? filterParts.join(' | ') : 'All data — no filters applied'
 
-    // Fetch compliance summary for the same filter scope
-    let complianceData: { projectRows: any[]; contractorRows: any[] } | undefined
+    // Fetch compliance summary + top observers
+    let complianceData: { projectRows: any[]; contractorRows: any[]; topObservers: any[] } | undefined
     try {
       const res = await api.get('/observations/stats/summary-details', {
         params: {
@@ -404,17 +404,53 @@ export default function Dashboard() {
       complianceData = {
         projectRows:    res.data?.projectSummary    || [],
         contractorRows: res.data?.contractorSummary || [],
+        topObservers:   res.data?.topObservers      || [],
       }
-    } catch { /* skip compliance pages if fetch fails */ }
+    } catch { /* skip if fetch fails */ }
+
+    // Fetch SHE score data for last 3 months
+    let sheScoreByProject: Array<{ name: string; avgScore: number }> = []
+    let sheScoreByCategory: Array<{ name: string; avgScore: number }> = []
+    try {
+      const now = new Date()
+      const from = new Date(now.getFullYear(), now.getMonth() - 2, 1)
+      const dateFrom3m = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-01`
+      const easeResp = await api.get('/ease-score/', { params: { date_from: dateFrom3m } })
+      const easeEntries: any[] = easeResp.data || []
+
+      const projMap = new Map<string, { total: number; count: number }>()
+      const catMap  = new Map<string, { total: number; count: number }>()
+      for (const entry of easeEntries) {
+        if (entry.overall_score != null) {
+          const cur = projMap.get(entry.project_name) || { total: 0, count: 0 }
+          cur.total += entry.overall_score; cur.count += 1
+          projMap.set(entry.project_name, cur)
+        }
+        for (const cat of (entry.categories || [])) {
+          if (cat.score != null) {
+            const cur = catMap.get(cat.category) || { total: 0, count: 0 }
+            cur.total += cat.score; cur.count += 1
+            catMap.set(cat.category, cur)
+          }
+        }
+      }
+      sheScoreByProject = Array.from(projMap.entries())
+        .map(([name, { total, count }]) => ({ name, avgScore: Math.round(total / count) }))
+        .sort((a, b) => b.avgScore - a.avgScore)
+      sheScoreByCategory = Array.from(catMap.entries())
+        .map(([name, { total, count }]) => ({ name, avgScore: Math.round(total / count) }))
+        .sort((a, b) => b.avgScore - a.avgScore)
+    } catch { /* skip if no ease score data */ }
 
     await generateDashboardPdf({
       cards: cards.map(c => ({ label: c.label, value: c.value })),
       statusPie,
       riskBars,
-      recent: data?.recent || [],
+      ageingData: data?.byAging || {},
       filterDesc,
-      viewMode,
       complianceData,
+      sheScoreByProject,
+      sheScoreByCategory,
     })
   }
 

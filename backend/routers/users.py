@@ -9,7 +9,7 @@ from auth import get_current_user, require_admin, require_super_admin, hash_pass
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
-VALID_ROLES = {"SuperAdmin", "Admin", "PIC", "AIC", "HO", "PSO", "Contractor", "Observer"}
+VALID_ROLES = {"SuperAdmin", "Admin", "PIC", "EIC", "HO", "PSO", "Contractor", "Observer"}
 
 
 class UserCreate(BaseModel):
@@ -62,6 +62,29 @@ def user_to_dict(user: models.User):
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "projects": [{"id": up.project_id, "name": up.project.name} for up in user.user_projects],
     }
+
+
+EIC_ROLES = {"PIC", "EIC"}
+
+@router.get("/eic")
+def list_eic_users(
+    project_id: List[int] = Query(default=[]),
+    db: Session = Depends(get_db),
+    _user: models.User = Depends(get_current_user),
+):
+    """Return PIC/EIC users assigned to the given project(s)."""
+    q = db.query(models.User).filter(models.User.role.in_(EIC_ROLES))
+    if project_id:
+        assigned_to_project = (
+            db.query(models.UserProject.user_id)
+            .filter(models.UserProject.project_id.in_(project_id))
+            .distinct()
+        )
+        q = q.filter(models.User.id.in_(assigned_to_project))
+    return [
+        {"id": u.id, "name": u.name, "role": u.role}
+        for u in q.order_by(models.User.name).all()
+    ]
 
 
 @router.get("/contractors")
