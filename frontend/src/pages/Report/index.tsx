@@ -352,8 +352,17 @@ async function exportInspectionExcel(
     const riskFontA  = obs.risk_level === 'High' ? 'FFFFFFFF' : 'FF000000'
     const contractorComments = (obs.comments || []).filter((c: any) => c.user_role === 'Contractor')
     const lastCC     = contractorComments[contractorComments.length - 1]
-    const compDate   = lastCC?.created_at
-      ? fmtD(lastCC.created_at)
+    const compDate   = lastCC?.created_at ? fmtD(lastCC.created_at) : null
+    const xlClosingComment = obs.status === 'Closed'
+      ? [...(obs.comments || [])]
+          .filter((c: any) => c.comment && /Status changed to "Closed"/i.test(c.comment))
+          .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+      : null
+    const xlClosedByLabel = xlClosingComment?.user_name
+      ? `${xlClosingComment.user_name}${xlClosingComment.user_role ? ` (${xlClosingComment.user_role})` : ''}`
+      : null
+    const xlClosedDate = xlClosingComment?.created_at
+      ? fmtD(xlClosingComment.created_at)
       : (obs.status === 'Closed' && obs.updated_at ? fmtD(obs.updated_at) : '')
     const action     = obs.to_be_rectified_by
       ? `Ensure immediate rectification of the identified hazard. Responsible party: ${obs.to_be_rectified_by}. Target completion: ${obs.target_date_name || 'As directed by EIC'}.`
@@ -406,7 +415,7 @@ async function exportInspectionExcel(
     styled(rn, 9, 9,  obs.contractor_name || '—',                       'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 10, 10, obs.observer_name || obs.created_by_name || '—', 'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 11, 12, obs.target_date_name || '—',                     'FFFFFF00', 'FF000000', true, 8)
-    styled(rn, 13, 13, compDate || '—',                    compDate ? 'FFC6EFCE' : 'FFFFFF00', 'FF000000', true, 8)
+    styled(rn, 13, 13, compDate || xlClosedDate || '—',    (compDate || xlClosedDate) ? 'FFC6EFCE' : 'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 14, 14, obs.status || '—',                               'FFFFFF00', 'FF000000', true, 8)
     ws.getRow(rn).height = 14; rn++
 
@@ -441,9 +450,12 @@ async function exportInspectionExcel(
 
     // Compliance info M
     const compInfoCell = ws.getRow(contentRn).getCell(13)
-    compInfoCell.value     = compDate ? `✓ Contractor closed:\n${compDate}` : 'Pending'
+    const compInfoLines: string[] = []
+    if (compDate) compInfoLines.push(`✓ Contractor closed:\n${compDate}`)
+    if (xlClosedDate) compInfoLines.push(`Obs closed by ${xlClosedByLabel ?? 'EIC'}:\n${xlClosedDate}`)
+    compInfoCell.value     = compInfoLines.length ? compInfoLines.join('\n') : 'Pending'
     compInfoCell.fill      = fill('FFFFFFF0')
-    compInfoCell.font      = fnt(compDate ? 'FF375623' : 'FFaaaaaa', !!compDate, 8)
+    compInfoCell.font      = fnt(compInfoLines.length ? 'FF375623' : 'FFaaaaaa', !!compInfoLines.length, 8)
     compInfoCell.alignment = aLeft
     compInfoCell.border    = brd
 
@@ -806,6 +818,17 @@ function ObsBlock({ obs, idx }: { obs: any; idx: number }) {
   // Obs closed date: updated_at when status is Closed
   const obsClosedDate = obs.status === 'Closed' && obs.updated_at ? fmtD(obs.updated_at) : null
 
+  // Who closed the observation — look for a status-change comment
+  const closingComment = obs.status === 'Closed'
+    ? [...(obs.comments || [])]
+        .filter((c: any) => c.comment && /Status changed to "Closed"/i.test(c.comment))
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
+    : null
+  const closedByLabel = closingComment?.user_name
+    ? `${closingComment.user_name}${closingComment.user_role ? ` (${closingComment.user_role})` : ''}`
+    : null
+  const closedByDate = closingComment?.created_at ? fmtD(closingComment.created_at) : obsClosedDate
+
   const riskCls = obs.risk_level === 'High' ? 'she-risk-h' : obs.risk_level === 'Medium' ? 'she-risk-m' : obs.risk_level ? 'she-risk-l' : ''
 
   const finding     = obs.specific_concern_text || ''
@@ -932,10 +955,12 @@ function ObsBlock({ obs, idx }: { obs: any; idx: number }) {
             {complianceDate && (
               <div className="she-compl-date">✓ Contractor closed:<br />{complianceDate}</div>
             )}
-            {obsClosedDate && (
-              <div className="she-compl-date-closed">Obs closed by EIC:<br />{obsClosedDate}</div>
+            {closedByDate && (
+              <div className="she-compl-date-closed">
+                Obs closed by {closedByLabel ?? 'EIC'}:<br />{closedByDate}
+              </div>
             )}
-            {!complianceDate && !obsClosedDate && (
+            {!complianceDate && !closedByDate && (
               <div style={{ color: '#aaa', fontSize: '7pt', fontStyle: 'italic' }}>Pending</div>
             )}
           </div>

@@ -4,6 +4,7 @@ from typing import Optional, List
 from sqlalchemy.orm import Session
 from database import get_db
 import models
+import json
 from auth import get_current_user, require_admin, require_super_admin, hash_password
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -148,6 +149,29 @@ def delete_user(user_id: int, db: Session = Depends(get_db), current=Depends(req
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
+
+    created_count = db.query(models.Observation).filter(models.Observation.created_by == user_id).count()
+    if created_count > 0:
+        raise HTTPException(
+            400,
+            f"Cannot delete user: they created {created_count} observation(s). Delete those observations first."
+        )
+
+    # Null out contractor references on observations
+    contractor_obs = db.query(models.Observation).filter(models.Observation.contractor_user_id == user_id).all()
+    for obs in contractor_obs:
+        obs.contractor_user_id = None
+        if obs.contractor_user_ids:
+            ids = [i for i in json.loads(obs.contractor_user_ids) if i != user_id]
+            obs.contractor_user_ids = json.dumps(ids) if ids else None
+
+    # Null out other nullable user references
+    db.query(models.ObservationImage).filter(models.ObservationImage.uploaded_by == user_id).update({"uploaded_by": None})
+    db.query(models.ObservationComment).filter(models.ObservationComment.user_id == user_id).update({"user_id": None})
+
+    # Remove project assignments
+    db.query(models.UserProject).filter(models.UserProject.user_id == user_id).delete()
+
     db.delete(user)
     db.commit()
     return {"success": True}

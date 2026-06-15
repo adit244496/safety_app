@@ -463,11 +463,10 @@ export default function ObservationDetail() {
   const changeStatus = useMutation({
     mutationFn: async ({ status, comment }: { status: string; comment: string }) => {
       await api.patch(`/observations/${obs?.id}/status`, { status })
-      if (comment.trim()) {
-        await api.post(`/observations/${obs?.id}/comments`, {
-          comment: `Status changed to "${status}". ${comment}`.trim(),
-        })
-      }
+      const commentText = comment.trim()
+        ? `Status changed to "${status}". ${comment}`.trim()
+        : `Status changed to "${status}".`
+      await api.post(`/observations/${obs?.id}/comments`, { comment: commentText })
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['observation', id] })
