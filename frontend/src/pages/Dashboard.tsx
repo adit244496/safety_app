@@ -390,6 +390,23 @@ export default function Dashboard() {
     ].filter(Boolean)
     const filterDesc = filterParts.length ? filterParts.join(' | ') : 'All data — no filters applied'
 
+    // Fetch compliance summary for the same filter scope
+    let complianceData: { projectRows: any[]; contractorRows: any[] } | undefined
+    try {
+      const res = await api.get('/observations/stats/summary-details', {
+        params: {
+          project_id:         projectIds.length            ? projectIds            : undefined,
+          contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
+          date_from:          dateFrom || undefined,
+          date_to:            dateTo   || undefined,
+        },
+      })
+      complianceData = {
+        projectRows:    res.data?.projectSummary    || [],
+        contractorRows: res.data?.contractorSummary || [],
+      }
+    } catch { /* skip compliance pages if fetch fails */ }
+
     await generateDashboardPdf({
       cards: cards.map(c => ({ label: c.label, value: c.value })),
       statusPie,
@@ -397,6 +414,7 @@ export default function Dashboard() {
       recent: data?.recent || [],
       filterDesc,
       viewMode,
+      complianceData,
     })
   }
 

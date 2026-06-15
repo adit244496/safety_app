@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../store/authStore'
 import { FileText, AlertTriangle, ZoomIn, ZoomOut, X, Download, LayoutList } from 'lucide-react'
 import ExcelJS from 'exceljs'
+import { generateHtmlReportPdf } from '../../lib/printPdf'
 import api from '../../lib/api'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
 
@@ -1038,6 +1039,7 @@ function SHETrackerTab({
   dateRange: string; reportDate: string; trackerNo: string
 }) {
   const fRef = buildFRef(observations)
+  const [exportingPdf, setExportingPdf] = useState(false)
 
   const cols = [
     { label: '#',                     w: '1.5%' },
@@ -1087,8 +1089,18 @@ function SHETrackerTab({
           >
             <Download className="w-4 h-4" /> Download Excel
           </button>
-          <button onClick={() => window.print()} className="btn-primary btn-sm">
-            <Download className="w-4 h-4" /> Download PDF
+          <button
+            onClick={async () => {
+              setExportingPdf(true)
+              try { await generateHtmlReportPdf('tracker-print-root', `SHE_Tracker_${new Date().toISOString().slice(0, 10)}.pdf`, 'a3') }
+              finally { setExportingPdf(false) }
+            }}
+            disabled={exportingPdf}
+            className="btn-primary btn-sm"
+          >
+            {exportingPdf
+              ? <><span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Generating…</>
+              : <><Download className="w-4 h-4" /> Download PDF</>}
           </button>
         </div>
       </div>
@@ -1202,6 +1214,7 @@ export default function ReportPage() {
   const [trackerNo,       setTrackerNo]       = useState('')
   const [generated,       setGenerated]       = useState(false)
   const [exportingExcel,  setExportingExcel]  = useState(false)
+  const [exportingPdfInsp, setExportingPdfInsp] = useState(false)
 
   const { data: projects } = useQuery({
     queryKey: ['projects'], queryFn: () => api.get('/projects/').then(r => r.data), ...STALE,
@@ -1400,8 +1413,18 @@ export default function ReportPage() {
                     ? <><span className="animate-spin w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full" /> Exporting…</>
                     : <><Download className="w-4 h-4" /> Excel</>}
                 </button>
-                <button onClick={() => window.print()} className="btn-primary btn-sm flex-1 sm:flex-none justify-center">
-                  <Download className="w-4 h-4" /> PDF
+                <button
+                  onClick={async () => {
+                    setExportingPdfInsp(true)
+                    try { await generateHtmlReportPdf('she-report-root', `SHE_Inspection_${new Date().toISOString().slice(0, 10)}.pdf`, 'a4') }
+                    finally { setExportingPdfInsp(false) }
+                  }}
+                  disabled={exportingPdfInsp}
+                  className="btn-primary btn-sm flex-1 sm:flex-none justify-center"
+                >
+                  {exportingPdfInsp
+                    ? <><span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Generating…</>
+                    : <><Download className="w-4 h-4" /> PDF</>}
                 </button>
               </div>
             )}
@@ -1417,7 +1440,7 @@ export default function ReportPage() {
       </div>
 
       {/* ── SHE Inspection Report output ── */}
-      {generated && observations.length > 0 && activeTab === 'inspection' && (
+      {generated && !isFetching && observations.length > 0 && activeTab === 'inspection' && (
         <div id="she-report-root" style={{ overflowX: 'auto' }}>
           <table className="she-table" style={{ minWidth: 1050 }}>
             <colgroup>
@@ -1474,7 +1497,7 @@ export default function ReportPage() {
       )}
 
       {/* ── SHE Tracker output ── */}
-      {generated && observations.length > 0 && activeTab === 'tracker' && (
+      {generated && !isFetching && observations.length > 0 && activeTab === 'tracker' && (
         <SHETrackerTab
           observations={observations}
           projectLabel={projectLabel}

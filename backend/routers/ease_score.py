@@ -34,7 +34,7 @@ def get_ease_projects(
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    projects = db.query(models.EaseScoreEntry.project_name).distinct().all()
+    projects = db.query(models.Project.name).order_by(models.Project.name).all()
     return [p[0] for p in projects]
 
 

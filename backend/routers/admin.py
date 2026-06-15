@@ -97,6 +97,12 @@ def update_core_concern(id: int, body: CCBody, db: Session = Depends(get_db), _=
 def delete_core_concern(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.CoreConcern).filter(models.CoreConcern.id == id).first()
     if not r: raise HTTPException(404)
+    sc_ids = [sc.id for sc in r.specific_concerns]
+    if sc_ids:
+        db.query(models.Observation).filter(models.Observation.specific_concern_id.in_(sc_ids)).update(
+            {"specific_concern_id": None}, synchronize_session=False)
+    db.query(models.Observation).filter(models.Observation.core_concern_id == id).update(
+        {"core_concern_id": None}, synchronize_session=False)
     db.delete(r); db.commit()
     return {"success": True}
 
@@ -128,6 +134,8 @@ def update_specific_concern(id: int, body: SCBody, db: Session = Depends(get_db)
 def delete_specific_concern(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.SpecificConcern).filter(models.SpecificConcern.id == id).first()
     if not r: raise HTTPException(404)
+    db.query(models.Observation).filter(models.Observation.specific_concern_id == id).update(
+        {"specific_concern_id": None}, synchronize_session=False)
     db.delete(r); db.commit()
     return {"success": True}
 
@@ -153,6 +161,8 @@ def update_violation(id: int, body: NameBody, db: Session = Depends(get_db), _=D
 def delete_violation(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.Violation).filter(models.Violation.id == id).first()
     if not r: raise HTTPException(404)
+    db.query(models.Observation).filter(models.Observation.violation_id == id).update(
+        {"violation_id": None}, synchronize_session=False)
     db.delete(r); db.commit()
     return {"success": True}
 
@@ -178,6 +188,12 @@ def update_rcc(id: int, body: NameBody, db: Session = Depends(get_db), _=Depends
 def delete_rcc(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.RootCauseCategory).filter(models.RootCauseCategory.id == id).first()
     if not r: raise HTTPException(404)
+    rcs_ids = [s.id for s in r.specifics]
+    if rcs_ids:
+        db.query(models.Observation).filter(models.Observation.root_cause_specific_id.in_(rcs_ids)).update(
+            {"root_cause_specific_id": None}, synchronize_session=False)
+    db.query(models.Observation).filter(models.Observation.root_cause_category_id == id).update(
+        {"root_cause_category_id": None}, synchronize_session=False)
     db.delete(r); db.commit()
     return {"success": True}
 
@@ -209,6 +225,8 @@ def update_rcs(id: int, body: RCSBody, db: Session = Depends(get_db), _=Depends(
 def delete_rcs(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.RootCauseSpecific).filter(models.RootCauseSpecific.id == id).first()
     if not r: raise HTTPException(404)
+    db.query(models.Observation).filter(models.Observation.root_cause_specific_id == id).update(
+        {"root_cause_specific_id": None}, synchronize_session=False)
     db.delete(r); db.commit()
     return {"success": True}
 
@@ -259,6 +277,8 @@ def update_target_date(id: int, body: NameBody, db: Session = Depends(get_db), _
 def delete_target_date(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.TargetDate).filter(models.TargetDate.id == id).first()
     if not r: raise HTTPException(404)
+    db.query(models.Observation).filter(models.Observation.target_date_id == id).update(
+        {"target_date_id": None}, synchronize_session=False)
     db.delete(r); db.commit()
     return {"success": True}
 
@@ -337,6 +357,12 @@ def update_building(id: int, body: BuildingBody, db: Session = Depends(get_db), 
 def delete_building(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.Building).filter(models.Building.id == id).first()
     if not r: raise HTTPException(404)
+    floor_ids = [f.id for f in r.floors]
+    if floor_ids:
+        db.query(models.Observation).filter(models.Observation.floor_id.in_(floor_ids)).update(
+            {"floor_id": None}, synchronize_session=False)
+    db.query(models.Observation).filter(models.Observation.building_id == id).update(
+        {"building_id": None}, synchronize_session=False)
     db.delete(r); db.commit()
     return {"success": True}
 
@@ -368,6 +394,8 @@ def update_floor(id: int, body: FloorBody, db: Session = Depends(get_db), _=Depe
 def delete_floor(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
     r = db.query(models.Floor).filter(models.Floor.id == id).first()
     if not r: raise HTTPException(404)
+    db.query(models.Observation).filter(models.Observation.floor_id == id).update(
+        {"floor_id": None}, synchronize_session=False)
     db.delete(r); db.commit()
     return {"success": True}
 

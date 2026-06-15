@@ -60,6 +60,9 @@ def delete_project(project_id: int, db: Session = Depends(get_db), _=Depends(req
     p = db.query(models.Project).filter(models.Project.id == project_id).first()
     if not p:
         raise HTTPException(404, "Not found")
+    count = db.query(models.Observation).filter(models.Observation.project_id == project_id).count()
+    if count > 0:
+        raise HTTPException(400, f"Cannot delete project: it has {count} observation(s). Delete those observations first.")
     db.delete(p)
     db.commit()
     return {"success": True}

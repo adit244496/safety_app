@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Shield, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, AlertCircle } from 'lucide-react'
 import { useAuth } from '../store/authStore'
 import api from '../lib/api'
+import logoUrl from '../assets/logo.png'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -31,24 +32,31 @@ export default function Login() {
     <div className="min-h-screen flex">
 
       {/* ── Desktop left panel ───────────────────────────────────────────── */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-slate-900 via-blue-900 to-blue-800 flex-col justify-between p-12 relative overflow-hidden">
+      <div
+        className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 relative overflow-hidden"
+        style={{ background: 'linear-gradient(160deg, #0d2740 0%, #1a3a5c 45%, #0f2d1f 100%)' }}
+      >
+        {/* Subtle dot grid */}
         <div className="absolute inset-0 opacity-10"
-          style={{ backgroundImage: 'radial-gradient(circle at 20% 80%, white 1px, transparent 1px), radial-gradient(circle at 80% 20%, white 1px, transparent 1px)', backgroundSize: '60px 60px' }}
+          style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '48px 48px' }}
         />
-        <div className="relative">
-          <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm">
-              <Shield className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-white font-bold text-lg">Neo SHE</span>
+
+        {/* Logo */}
+        <div className="relative flex flex-col items-center gap-6">
+          <img
+            src={logoUrl}
+            alt="Neo SHE"
+            className="w-64 drop-shadow-2xl"
+            style={{ filter: 'drop-shadow(0 8px 24px rgba(0,0,0,0.4))' }}
+          />
+          <div className="text-center">
+            <p className="text-blue-200 text-lg leading-relaxed max-w-sm">
+              Capture, track and resolve safety observations across all your construction sites in real time.
+            </p>
           </div>
-          <h1 className="text-4xl font-bold text-white leading-tight mb-4">
-            Neo SHE<br />Safety App
-          </h1>
-          <p className="text-blue-200 text-lg leading-relaxed">
-            Capture, track and resolve safety observations across all your construction sites in real time.
-          </p>
         </div>
+
+        {/* Feature list */}
         <div className="relative space-y-4">
           {[
             { icon: '📸', text: 'Capture photos from site instantly' },
@@ -64,22 +72,19 @@ export default function Login() {
       </div>
 
       {/* ── Right panel ─────────────────────────────────────────────────── */}
-      {/* Desktop: centered card. Mobile: full-screen column layout */}
       <div className="flex-1 flex flex-col lg:items-center lg:justify-center lg:p-8 bg-slate-50">
 
         {/* Mobile top branding bar */}
         <div
-          className="lg:hidden flex items-center gap-3 px-5 py-4 shadow-md flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg, #0f0d2a 0%, #1a1050 100%)' }}
+          className="lg:hidden flex items-center justify-center px-5 py-4 shadow-md flex-shrink-0"
+          style={{ background: 'linear-gradient(160deg, #0d2740 0%, #1a3a5c 100%)' }}
         >
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center shadow-sm flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' }}>
-            <Shield className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <p className="text-white font-bold text-sm leading-tight">Neo SHE</p>
-            <p className="text-indigo-300 text-xs">Safety Observation App</p>
-          </div>
+          <img
+            src={logoUrl}
+            alt="Neo SHE"
+            className="h-16 w-auto object-contain"
+            style={{ filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3))' }}
+          />
         </div>
 
         {/* Form area */}
@@ -88,7 +93,7 @@ export default function Login() {
           {/* Heading */}
           <div className="mb-5 lg:mb-8">
             <h2 className="text-xl lg:text-2xl font-bold text-gray-900">Welcome back</h2>
-            <p className="text-gray-500 mt-0.5 text-sm">Sign in to continue</p>
+            <p className="text-gray-500 mt-0.5 text-sm">Sign in to your Neo SHE account</p>
           </div>
 
           {/* Card */}
@@ -130,7 +135,8 @@ export default function Login() {
 
               <button
                 type="submit" disabled={loading}
-                className="btn-primary w-full justify-center py-2.5 mt-1 text-base"
+                className="w-full flex items-center justify-center gap-2 py-2.5 mt-1 text-base font-semibold text-white rounded-xl transition-opacity disabled:opacity-60"
+                style={{ background: 'linear-gradient(135deg, #1a3a5c 0%, #0d2740 100%)' }}
               >
                 {loading
                   ? <><span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Signing in…</>
@@ -140,12 +146,15 @@ export default function Login() {
             </form>
           </div>
 
-          {/* Spacer pushes logo to bottom on mobile */}
+          {/* Spacer pushes tagline to bottom on mobile */}
           <div className="flex-1 lg:hidden" />
 
-          {/* Ambuja logo — below sign-in, pushed to bottom */}
-          <div className="flex justify-center pt-2 pb-8 lg:mt-8">
-            <img src="/ambuja-logo.png" alt="Ambuja" className="h-8 lg:h-9 w-auto object-contain opacity-75" />
+          {/* Tagline */}
+          <div className="flex flex-col items-center pt-2 pb-8 lg:mt-8 gap-1">
+            <p className="text-xs text-gray-400 tracking-widest uppercase">
+              Safety &nbsp;|&nbsp; Health &nbsp;|&nbsp; Environment
+            </p>
+            <p className="text-xs text-gray-400">An initiative by <span className="font-semibold text-gray-500">Ambuja Neotia</span></p>
           </div>
         </div>
       </div>

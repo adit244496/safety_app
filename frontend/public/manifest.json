@@ -1,11 +1,11 @@
 {
   "name": "Neo SHE",
   "short_name": "Neo SHE",
-  "description": "Safety Observation App",
+  "description": "Safety Health Environment - An initiative by Ambuja Neotia",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f0d2a",
-  "theme_color": "#6366f1",
+  "background_color": "#ffffff",
+  "theme_color": "#1a3a5c",
   "icons": [
     {
       "src": "/logo-192.png",
@@ -17,12 +17,12 @@
       "src": "/logo-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     },
     {
-      "src": "/logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
+      "src": "/logo.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
       "purpose": "any"
     }
   ]
