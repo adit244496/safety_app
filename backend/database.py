@@ -26,6 +26,43 @@ def get_db():
         db.close()
 
 
+def _run_migrations():
+    """Apply schema migrations that create_all cannot handle (new columns on existing tables)."""
+    is_sqlite = DATABASE_URL.startswith("sqlite")
+
+    # Each entry: (table, column, sql_type_sqlite, sql_type_pg)
+    # Using None for sql_type_pg means same as sqlite type (no FK syntax differences needed here).
+    _obs_columns = [
+        ("observations", "contractor_user_ids", "TEXT",                                None),
+        ("observations", "target_date_actual",  "VARCHAR",                             None),
+        ("observations", "closed_at",           "DATETIME",                            "TIMESTAMP"),
+        ("observations", "eic_user_id",         "INTEGER REFERENCES users(id)",        "INTEGER REFERENCES users(id)"),
+    ]
+    _user_columns = [
+        ("users", "mobile", "VARCHAR", None),
+    ]
+    all_migrations = _obs_columns + _user_columns
+
+    with engine.connect() as conn:
+        if is_sqlite:
+            conn.execute(text("PRAGMA foreign_keys = ON"))
+
+        for table, column, sqlite_type, pg_type in all_migrations:
+            col_type = sqlite_type if is_sqlite else (pg_type or sqlite_type)
+            if is_sqlite:
+                try:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+                    conn.commit()
+                except Exception:
+                    pass  # column already exists
+            else:
+                try:
+                    conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"))
+                    conn.commit()
+                except Exception:
+                    pass
+
+
 def init_db():
     from models import Base as ModelBase
     from sqlalchemy.exc import ProgrammingError, IntegrityError
@@ -34,14 +71,4 @@ def init_db():
     except (ProgrammingError, IntegrityError):
         # Another worker already created the tables (race condition with --workers 2)
         pass
-    if DATABASE_URL.startswith("sqlite"):
-        with engine.connect() as conn:
-            conn.execute(text("PRAGMA foreign_keys = ON"))
-            # Add eic_user_id column if it doesn't exist yet (safe no-op if already present)
-            try:
-                conn.execute(text(
-                    "ALTER TABLE observations ADD COLUMN eic_user_id INTEGER REFERENCES users(id)"
-                ))
-                conn.commit()
-            except Exception:
-                pass  # column already exists
+    _run_migrations()

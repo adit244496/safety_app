@@ -1,7 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ClipboardList, PlusCircle,
-  Settings, Shield, X, ChevronRight, ChevronsLeft, ChevronRightSquare,
+  Settings, X, ChevronRight, ChevronsLeft, ChevronRightSquare,
   LogOut, FileBarChart2, BarChart3,
 } from 'lucide-react'
 import { useAuth } from '../store/authStore'
@@ -60,9 +60,8 @@ export default function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggle
         {/* Logo / Brand */}
         <div className={`relative flex items-center border-b border-white/8 flex-shrink-0 h-16 ${collapsed ? 'justify-center px-2' : 'px-4'}`}>
           <div className={`flex items-center gap-3 min-w-0 flex-1 ${collapsed ? 'justify-center' : ''}`}>
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-lg flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)' }}>
-              <Shield className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-lg flex-shrink-0 bg-white/10 flex items-center justify-center">
+              <img src="/logo_small.png" alt="Neo SHE" className="w-8 h-8 object-contain" />
             </div>
             {!collapsed && (
               <div className="min-w-0">
