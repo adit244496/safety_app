@@ -81,19 +81,6 @@ const C = {
   blue:    [59,  130, 246] as RGB,   // neutral accent (Open)
 }
 
-const RISK_RGB: Record<string, RGB> = { High: C.red, Medium: C.amber, Low: C.green }
-
-const AGEING_LABELS: Record<string, string> = {
-  on_time:        'On Time',
-  overdue_1_7:    'Overdue <=7d',
-  overdue_8_30:   'Overdue 8-30d',
-  overdue_30_plus:'Overdue 30+d',
-  no_target:      'No Target Set',
-}
-const AGEING_COLORS: Record<string, RGB> = {
-  on_time: C.green, overdue_1_7: C.amber, overdue_8_30: [249,115,22] as RGB,
-  overdue_30_plus: C.red, no_target: C.gray400,
-}
 
 function gradeOf(score: number | null): string {
   if (score == null) return 'N/A'
@@ -206,43 +193,6 @@ function compactTable(
   return y
 }
 
-// ── Horizontal score bars (page 3) ────────────────────────────────────────────
-function scoreSection(
-  pdf: jsPDF,
-  items: Array<{ name: string; avgScore: number }>,
-  x: number, y: number, w: number, maxH: number,
-) {
-  if (items.length === 0) {
-    tc(pdf, C.gray400); pdf.setFont('helvetica', 'italic'); pdf.setFontSize(7)
-    pdf.text('No data available', x + w / 2, y + 20, { align: 'center' })
-    return
-  }
-  const nameW = Math.min(w * 0.38, 72)
-  const scoreW = 18
-  const barW = w - nameW - scoreW - 4
-  const rowH = 9
-  const maxRows = Math.floor(maxH / rowH)
-  const shown = items.slice(0, maxRows)
-
-  shown.forEach((item, i) => {
-    const pct = Math.min(item.avgScore / 100, 1)
-    const color: RGB = item.avgScore >= 75 ? C.green : item.avgScore >= 60 ? C.amber : C.red
-    const rowBg: RGB = i % 2 === 0 ? C.white : C.gray100
-    fc(pdf, rowBg); pdf.rect(x, y, w, rowH, 'F')
-
-    tc(pdf, C.gray700); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(6.5)
-    const nm = item.name.length > 28 ? item.name.slice(0, 25) + '…' : item.name
-    pdf.text(nm, x + 2, y + 6.5)
-
-    fc(pdf, C.gray200); pdf.roundedRect(x + nameW, y + 2, barW, rowH - 4, 1.5, 1.5, 'F')
-    if (pct > 0.01) {
-      fc(pdf, color); pdf.roundedRect(x + nameW, y + 2, Math.max(pct * barW, 3), rowH - 4, 1.5, 1.5, 'F')
-    }
-    tc(pdf, color); pdf.setFont('helvetica', 'bold'); pdf.setFontSize(6.5)
-    pdf.text(`${item.avgScore}%`, x + nameW + barW + 3, y + 6.5)
-    y += rowH
-  })
-}
 
 // ── Capture helper (for SHE Score PDF only) ────────────────────────────────────
 async function captureChart(id: string): Promise<{ dataUrl: string; pw: number; ph: number } | null> {
