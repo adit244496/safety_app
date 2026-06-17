@@ -390,7 +390,7 @@ export default function Dashboard() {
   }
 
   // ── Quarter label helper ────────────────────────────────────────────────
-  function computeQuarterLabel(from?: string, to?: string): string {
+  function computeQuarterLabel(from?: string, _to?: string): string {
     const d = from ? new Date(from) : new Date()
     const m = d.getMonth() + 1
     const y = d.getFullYear()
