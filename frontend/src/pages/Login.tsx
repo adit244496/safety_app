@@ -46,12 +46,13 @@ export default function Login() {
 
         {/* Logo + headline */}
         <div className="relative flex flex-col items-center gap-8 mt-4">
-          <img
-            src="/logo.png"
-            alt="Neo SHE"
-            className="w-72 drop-shadow-2xl"
-            style={{ filter: 'drop-shadow(0 12px 32px rgba(0,0,0,0.5))' }}
-          />
+          <div className="bg-white rounded-3xl p-4 shadow-2xl">
+            <img
+              src="/logo.png"
+              alt="Neo SHE"
+              className="w-64 object-contain"
+            />
+          </div>
           <div className="text-center space-y-2">
             <p className="text-blue-200/80 text-base leading-relaxed max-w-xs">
               Capture, track and resolve safety observations across all your construction sites in real time.

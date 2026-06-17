@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useCallback } from 'react'
 import { usePageTitle } from '../store/pageTitleContext'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
@@ -67,8 +67,20 @@ export default function Dashboard() {
   const [coreConcernIds, setCoreConcernIds] = useState<number[]>([])
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
   const [ageingFilter,   setAgeingFilter]   = useState<string[]>([])
-  const [dateFrom,       setDateFrom]       = useState('')
-  const [dateTo,         setDateTo]         = useState('')
+  const [dateFrom, setDateFrom] = useState(() => {
+    const now = new Date(), m = now.getMonth() + 1, y = now.getFullYear()
+    if (m >= 4 && m <= 6)   return `${y}-04-01`
+    if (m >= 7 && m <= 9)   return `${y}-07-01`
+    if (m >= 10 && m <= 12) return `${y}-10-01`
+    return `${y}-01-01`
+  })
+  const [dateTo, setDateTo] = useState(() => {
+    const now = new Date(), m = now.getMonth() + 1, y = now.getFullYear()
+    if (m >= 4 && m <= 6)   return `${y}-06-30`
+    if (m >= 7 && m <= 9)   return `${y}-09-30`
+    if (m >= 10 && m <= 12) return `${y}-12-31`
+    return `${y}-03-31`
+  })
 
   const activeFilterCount =
     (projectIds.length    > 0 ? 1 : 0) +
@@ -377,82 +389,198 @@ export default function Dashboard() {
     a.click(); URL.revokeObjectURL(url)
   }
 
-  async function downloadPdf() {
-    const filterParts = [
-      projectIds.length
-        ? `Projects: ${projectIds.map(id => (projects as any[] || []).find((p: any) => p.id === id)?.name || id).join(', ')}`
-        : null,
-      isContractor
-        ? `Contractor: ${user?.name}`
-        : selectedContractors.length ? `Contractors: ${selectedContractors.join(', ')}` : null,
-      riskLevels.length ? `Risk: ${riskLevels.join(', ')}` : null,
-      dateFrom || dateTo ? `${dateFrom || 'start'} → ${dateTo || 'today'}` : null,
-    ].filter(Boolean)
-    const filterDesc = filterParts.length ? filterParts.join(' | ') : 'All data — no filters applied'
+  // ── Quarter label helper ────────────────────────────────────────────────
+  function computeQuarterLabel(from?: string, to?: string): string {
+    const d = from ? new Date(from) : new Date()
+    const m = d.getMonth() + 1
+    const y = d.getFullYear()
+    let qNum: number, qName: string
+    if (m >= 4 && m <= 6)   { qNum = 1; qName = 'Apr to June' }
+    else if (m >= 7 && m <= 9)  { qNum = 2; qName = 'Jul to Sep'  }
+    else if (m >= 10 && m <= 12) { qNum = 3; qName = 'Oct to Dec' }
+    else                         { qNum = 4; qName = 'Jan to Mar'  }
+    const fyStart = m >= 4 ? y : y - 1
+    return `Quarter - ${qNum} (${qName}), ${fyStart}-${String(fyStart + 1).slice(2)}`
+  }
 
-    // Fetch compliance summary + top observers
-    let complianceData: { projectRows: any[]; contractorRows: any[]; topObservers: any[] } | undefined
+  function toFyQuarterLabel(year: number, month: number): string {
+    if (month >= 4) {
+      const q = month <= 6 ? 'Q-1' : month <= 9 ? 'Q-2' : 'Q-3'
+      return `${q} (${String(year).slice(2)}-${String(year + 1).slice(2)})`
+    }
+    return `Q-4 (${String(year - 1).slice(2)}-${String(year).slice(2)})`
+  }
+
+  function quarterSortKey(label: string): number {
+    const m = label.match(/Q-(\d)\s*\((\d{2})-/)
+    if (!m) return 0
+    return (2000 + parseInt(m[2])) * 10 + parseInt(m[1])
+  }
+
+  // ── PDF download ────────────────────────────────────────────────────────
+  const [pdfGenerating, setPdfGenerating] = useState(false)
+
+  const startPdfDownload = useCallback(async () => {
+    setPdfGenerating(true)
     try {
-      const res = await api.get('/observations/stats/summary-details', {
-        params: {
-          project_id:         projectIds.length            ? projectIds            : undefined,
-          contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
-          date_from:          dateFrom || undefined,
-          date_to:            dateTo   || undefined,
-        },
-      })
-      complianceData = {
-        projectRows:    res.data?.projectSummary    || [],
-        contractorRows: res.data?.contractorSummary || [],
-        topObservers:   res.data?.topObservers      || [],
-      }
-    } catch { /* skip if fetch fails */ }
+      const filterParts = [
+        projectIds.length
+          ? `Projects: ${projectIds.map(id => (projects as any[] || []).find((p: any) => p.id === id)?.name || id).join(', ')}`
+          : null,
+        isContractor
+          ? `Contractor: ${user?.name}`
+          : selectedContractors.length ? `Contractors: ${selectedContractors.join(', ')}` : null,
+        riskLevels.length ? `Risk: ${riskLevels.join(', ')}` : null,
+        dateFrom || dateTo ? `${dateFrom || 'start'} → ${dateTo || 'today'}` : null,
+      ].filter(Boolean)
+      const filterDesc = filterParts.length ? filterParts.join(' | ') : 'All data — no filters applied'
+      const quarterLabel = computeQuarterLabel(dateFrom, dateTo)
 
-    // Fetch SHE score data for last 3 months
-    let sheScoreByProject: Array<{ name: string; avgScore: number }> = []
-    let sheScoreByCategory: Array<{ name: string; avgScore: number }> = []
-    try {
-      const now = new Date()
-      const from = new Date(now.getFullYear(), now.getMonth() - 2, 1)
-      const dateFrom3m = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-01`
-      const easeResp = await api.get('/ease-score/', { params: { date_from: dateFrom3m } })
-      const easeEntries: any[] = easeResp.data || []
-
-      const projMap = new Map<string, { total: number; count: number }>()
-      const catMap  = new Map<string, { total: number; count: number }>()
-      for (const entry of easeEntries) {
-        if (entry.overall_score != null) {
-          const cur = projMap.get(entry.project_name) || { total: 0, count: 0 }
-          cur.total += entry.overall_score; cur.count += 1
-          projMap.set(entry.project_name, cur)
+      // Fetch compliance summary
+      let complianceData: { projectRows: any[]; contractorRows: any[]; topObservers: any[] } | undefined
+      try {
+        const res = await api.get('/observations/stats/summary-details', {
+          params: {
+            project_id:         projectIds.length            ? projectIds            : undefined,
+            contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
+            date_from: dateFrom || undefined,
+            date_to:   dateTo   || undefined,
+          },
+        })
+        complianceData = {
+          projectRows:    res.data?.projectSummary    || [],
+          contractorRows: res.data?.contractorSummary || [],
+          topObservers:   res.data?.topObservers      || [],
         }
-        for (const cat of (entry.categories || [])) {
-          if (cat.score != null) {
-            const cur = catMap.get(cat.category) || { total: 0, count: 0 }
-            cur.total += cat.score; cur.count += 1
-            catMap.set(cat.category, cur)
+      } catch { /* skip */ }
+
+      // Fetch ease-score entries — 18 months for 4 full FY quarters of history
+      let sheScoreByProject: Array<{ name: string; avgScore: number }> = []
+      let sheScoreByCategory: Array<{ name: string; avgScore: number }> = []
+      let projectSheHistory: Array<{ name: string; quarters: Array<{ label: string; score: number }> }> = []
+      try {
+        const now  = new Date()
+        const from = new Date(now.getFullYear() - 1, now.getMonth() - 6, 1) // 18 months back
+        const dateFrom18m = `${from.getFullYear()}-${String(from.getMonth() + 1).padStart(2, '0')}-01`
+        const easeResp = await api.get('/ease-score/', { params: { date_from: dateFrom18m } })
+        const entries: any[] = easeResp.data || []
+
+        // Current FY quarter label (for P1 SHE-score-by-project chart)
+        const refDate = dateFrom ? new Date(dateFrom + 'T00:00:00') : now
+        const currentQLabel = toFyQuarterLabel(refDate.getFullYear(), refDate.getMonth() + 1)
+
+        const projMapCur = new Map<string, { total: number; count: number }>()
+        const catMapCur  = new Map<string, { total: number; count: number }>()
+        const projQMap   = new Map<string, Map<string, number[]>>()
+
+        for (const e of entries) {
+          const eqLabel = toFyQuarterLabel(e.period_year, e.period_month)
+
+          // All quarters → P2 mini-chart history
+          if (e.overall_score != null) {
+            if (!projQMap.has(e.project_name)) projQMap.set(e.project_name, new Map())
+            const qmap = projQMap.get(e.project_name)!
+            if (!qmap.has(eqLabel)) qmap.set(eqLabel, [])
+            qmap.get(eqLabel)!.push(e.overall_score)
+          }
+
+          // Current quarter only → P1 SHE score bars & category bars
+          if (eqLabel === currentQLabel) {
+            if (e.overall_score != null) {
+              const cur = projMapCur.get(e.project_name) || { total: 0, count: 0 }
+              cur.total += e.overall_score; cur.count += 1
+              projMapCur.set(e.project_name, cur)
+            }
+            for (const cat of (e.categories || [])) {
+              if (cat.score != null) {
+                const cur = catMapCur.get(cat.category) || { total: 0, count: 0 }
+                cur.total += cat.score; cur.count += 1
+                catMapCur.set(cat.category, cur)
+              }
+            }
           }
         }
-      }
-      sheScoreByProject = Array.from(projMap.entries())
-        .map(([name, { total, count }]) => ({ name, avgScore: Math.round(total / count) }))
-        .sort((a, b) => b.avgScore - a.avgScore)
-      sheScoreByCategory = Array.from(catMap.entries())
-        .map(([name, { total, count }]) => ({ name, avgScore: Math.round(total / count) }))
-        .sort((a, b) => b.avgScore - a.avgScore)
-    } catch { /* skip if no ease score data */ }
 
-    await generateDashboardPdf({
-      cards: cards.map(c => ({ label: c.label, value: c.value })),
-      statusPie,
-      riskBars,
-      ageingData: data?.byAging || {},
-      filterDesc,
-      complianceData,
-      sheScoreByProject,
-      sheScoreByCategory,
-    })
-  }
+        // Fallback: if current quarter has no data, use latest available quarter per project
+        const useProjMap = projMapCur.size > 0 ? projMapCur : (() => {
+          const m = new Map<string, { total: number; count: number }>()
+          for (const [name, qmap] of projQMap.entries()) {
+            const sorted = Array.from(qmap.entries()).sort((a, b) => quarterSortKey(a[0]) - quarterSortKey(b[0]))
+            const [, scores] = sorted[sorted.length - 1]
+            const avg = scores.reduce((s, v) => s + v, 0) / scores.length
+            m.set(name, { total: avg, count: 1 })
+          }
+          return m
+        })()
+        const useCatMap = catMapCur.size > 0 ? catMapCur : new Map<string, { total: number; count: number }>()
+
+        sheScoreByProject = Array.from(useProjMap.entries())
+          .map(([name, { total, count }]) => ({ name, avgScore: Math.round(total / count) }))
+          .sort((a, b) => b.avgScore - a.avgScore)
+        sheScoreByCategory = Array.from(useCatMap.entries())
+          .map(([name, { total, count }]) => ({ name, avgScore: Math.round(total / count) }))
+
+        // P2 mini-charts: last 4 FY quarters per project
+        projectSheHistory = Array.from(projQMap.entries()).map(([name, qmap]) => ({
+          name,
+          quarters: Array.from(qmap.entries())
+            .map(([label, scores]) => ({
+              label,
+              score: Math.round(scores.reduce((s, v) => s + v, 0) / scores.length),
+            }))
+            .sort((a, b) => quarterSortKey(a.label) - quarterSortKey(b.label))
+            .slice(-4),
+        }))
+      } catch { /* skip */ }
+
+      // Fetch SHE report stats
+      let sheReport: any
+      try {
+        const rr = await api.get('/observations/stats/she-report', {
+          params: {
+            project_id: projectIds.length ? projectIds : undefined,
+            date_from:  dateFrom || undefined,
+            date_to:    dateTo   || undefined,
+          },
+        })
+        sheReport = rr.data
+      } catch { /* skip */ }
+
+      // Build manpower from localStorage (set via Summary → Man Power Details tab)
+      const stored: { name: string; manHours: number; avgPersons: number }[] = (() => {
+        try { return JSON.parse(localStorage.getItem('she_manpower_data') || '[]') } catch { return [] }
+      })()
+      const mpProjectNames: string[] = (
+        sheReport?.projectRectification?.map((r: any) => r.project_name)
+        ?? complianceData?.projectRows?.map((r: any) => r.project_name)
+        ?? sheScoreByProject.map(p => p.name)
+      ).filter((n: string) => n && n !== 'Unknown')
+      const manpower = mpProjectNames.map((name: string) => {
+        const found = stored.find(s => s.name === name)
+        return { name, manHours: found?.manHours ?? 0, avgPersons: found?.avgPersons ?? 0 }
+      })
+
+      await generateDashboardPdf({
+        cards: cards.map(c => ({ label: c.label, value: c.value })),
+        statusPie,
+        riskBars,
+        ageingData: data?.byAging || {},
+        filterDesc,
+        quarterLabel,
+        complianceData,
+        sheScoreByProject,
+        sheScoreByCategory,
+        projectSheHistory,
+        sheReport,
+        manpower,
+      })
+    } finally {
+      setPdfGenerating(false)
+    }
+  }, [
+    projectIds, isContractor, user, selectedContractors, riskLevels, dateFrom, dateTo,
+    expandedContractorIds, cards, statusPie, riskBars, data, projects,
+  ])
 
   const [showDownloadMenu, setShowDownloadMenu] = useState(false)
   const dlRef = useRef<HTMLDivElement>(null)
@@ -478,8 +606,8 @@ export default function Dashboard() {
               <button onClick={() => { downloadExcel(); setShowDownloadMenu(false) }} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2">
                 <span>📊</span> Excel (.xlsx)
               </button>
-              <button onClick={() => { downloadPdf(); setShowDownloadMenu(false) }} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2">
-                <span>📄</span> PDF (Print)
+              <button onClick={() => { startPdfDownload(); setShowDownloadMenu(false) }} disabled={pdfGenerating} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2 disabled:opacity-50">
+                <span>📄</span> {pdfGenerating ? 'Generating…' : 'PDF Report'}
               </button>
             </div>
           )}
@@ -908,6 +1036,7 @@ export default function Dashboard() {
           </div>
         </>
       )}
+
     </div>
   )
 }

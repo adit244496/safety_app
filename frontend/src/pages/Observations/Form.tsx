@@ -79,10 +79,11 @@ export default function ObservationForm() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { user } = useAuth()
-  const fileRef      = useRef<HTMLInputElement>(null)
-  const cameraRef    = useRef<HTMLInputElement>(null)
-  const formRef      = useRef<HTMLFormElement>(null)
-  const isSavingRef  = useRef(false)   // prevents double-tap double-submit on mobile
+  const fileRef         = useRef<HTMLInputElement>(null)
+  const cameraRef       = useRef<HTMLInputElement>(null)
+  const formRef         = useRef<HTMLFormElement>(null)
+  const isSavingRef     = useRef(false)   // prevents double-tap double-submit on mobile
+  const formLoadedRef   = useRef(false)   // prevent background-refetch from resetting user edits
 
   // Prevent select / input focus + change from scrolling the page.
   // Phase 1 (mousedown/touchstart): snapshot scroll before browser acts.
@@ -223,7 +224,10 @@ export default function ObservationForm() {
   })
 
   useEffect(() => {
-    if (existing) {
+    // Only populate the form on first load — subsequent background refetches must NOT
+    // reset the form or the user's unsaved edits will be silently wiped out.
+    if (existing && !formLoadedRef.current) {
+      formLoadedRef.current = true
       setForm({
         project_id: existing.project_id?.toString() || '',
         building_id: existing.building_id?.toString() || '',
@@ -248,6 +252,7 @@ export default function ObservationForm() {
         root_cause_specific_id: existing.root_cause_specific_id?.toString() || '',
         violation_id: existing.violation_id?.toString() || '',
         target_date_actual: existing.target_date_actual || '',
+        eic_user_id: existing.eic_user_id?.toString() || '',
         status: existing.status || 'Open',
       })
     }
@@ -355,6 +360,7 @@ export default function ObservationForm() {
 
       qc.invalidateQueries({ queryKey: ['observations'] })
       qc.invalidateQueries({ queryKey: ['stats'] })
+      if (isEdit) qc.invalidateQueries({ queryKey: ['observation', id] })
       if (isDraft) {
         toast.success('Draft saved successfully')
       } else {
@@ -413,7 +419,7 @@ export default function ObservationForm() {
           <button type="button" onClick={() => navigate(-1)} className="btn-secondary btn-sm flex-1 sm:flex-none justify-center">
             Cancel
           </button>
-          {!isEdit && (
+          {(!isEdit || form.status === 'Draft') && (
             <button type="button" onClick={handleSaveDraft} disabled={savingDraft || saving} className="btn-secondary btn-sm flex-1 sm:flex-none justify-center">
               {savingDraft
                 ? <><span className="animate-spin w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full" /> Saving…</>
@@ -702,7 +708,7 @@ export default function ObservationForm() {
       {/* Bottom actions */}
       <div className="flex items-center justify-end gap-3 pb-4 flex-wrap">
         <button type="button" onClick={() => navigate(-1)} className="btn-secondary">Cancel</button>
-        {!isEdit && (
+        {(!isEdit || form.status === 'Draft') && (
           <button type="button" onClick={handleSaveDraft} disabled={savingDraft || saving} className="btn-secondary">
             {savingDraft
               ? <><span className="animate-spin w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full" /> Saving Draft…</>

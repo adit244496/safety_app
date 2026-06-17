@@ -60,8 +60,8 @@ export default function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggle
         {/* Logo / Brand */}
         <div className={`relative flex items-center border-b border-white/8 flex-shrink-0 h-16 ${collapsed ? 'justify-center px-2' : 'px-4'}`}>
           <div className={`flex items-center gap-3 min-w-0 flex-1 ${collapsed ? 'justify-center' : ''}`}>
-            <div className="w-9 h-9 rounded-xl overflow-hidden shadow-lg flex-shrink-0 bg-white/10 flex items-center justify-center">
-              <img src="/logo_small.png" alt="Neo SHE" className="w-8 h-8 object-contain" />
+            <div className="w-11 h-11 rounded-xl overflow-hidden shadow-lg flex-shrink-0 bg-white flex items-center justify-center p-0.5">
+              <img src="/logo_small.png" alt="Neo SHE" className="w-full h-full object-contain" />
             </div>
             {!collapsed && (
               <div className="min-w-0">

@@ -544,6 +544,146 @@ def list_observations(
     }
 
 
+@router.get("/stats/she-report")
+def she_report_stats(
+    project_id: List[int] = Query(default=[]),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Comprehensive SHE performance data for the 7-page report PDF."""
+    from collections import defaultdict
+
+    allowed = get_allowed_project_ids(user)
+    today = date.today()
+
+    conditions = [models.Observation.status != "Draft"]
+    if allowed is not None:
+        conditions.append(models.Observation.project_id.in_(allowed))
+    if project_id:
+        conditions.append(models.Observation.project_id.in_(project_id))
+    if date_from:
+        conditions.append(models.Observation.obs_date >= date_from)
+    if date_to:
+        conditions.append(models.Observation.obs_date <= date_to)
+
+    obs_list = db.query(models.Observation).filter(*conditions).all()
+
+    # ── Per-project rectification stats ──────────────────────────────────
+    proj_stats: dict = defaultdict(lambda: {
+        "project_name": "", "raised": 0, "rectified": 0, "not_rectified": 0,
+        "timely": 0, "delayed": 0, "total_delay_days": 0,
+    })
+
+    for obs in obs_list:
+        pname = obs.project.name if obs.project else "Unknown"
+        ps = proj_stats[obs.project_id or 0]
+        ps["project_name"] = pname
+        ps["raised"] += 1
+        if obs.status == "Closed":
+            ps["rectified"] += 1
+            if obs.closed_at and obs.target_date_actual:
+                try:
+                    target = date.fromisoformat(obs.target_date_actual)
+                    closed_d = obs.closed_at.date() if hasattr(obs.closed_at, "date") else obs.closed_at
+                    delay = (closed_d - target).days
+                    if delay <= 0:
+                        ps["timely"] += 1
+                    else:
+                        ps["delayed"] += 1
+                        ps["total_delay_days"] += delay
+                except (ValueError, AttributeError):
+                    ps["timely"] += 1
+            else:
+                ps["timely"] += 1
+        else:
+            ps["not_rectified"] += 1
+            if obs.target_date_actual:
+                try:
+                    target = date.fromisoformat(obs.target_date_actual)
+                    if today > target:
+                        ps["total_delay_days"] += (today - target).days
+                except ValueError:
+                    pass
+
+    project_rectification = sorted([
+        {
+            "project_name": ps["project_name"],
+            "raised": ps["raised"],
+            "rectified": ps["rectified"],
+            "not_rectified": ps["not_rectified"],
+            "timely": ps["timely"],
+            "delayed": ps["delayed"],
+            "total_delay_days": ps["total_delay_days"],
+            "avg_delay": round(ps["total_delay_days"] / ps["raised"], 2) if ps["raised"] else 0,
+        }
+        for ps in proj_stats.values()
+    ], key=lambda x: -x["raised"])
+
+    # ── Consequence distribution (possible_outcome field) ─────────────────
+    consequence_counts: dict = defaultdict(int)
+    for obs in obs_list:
+        if obs.possible_outcome:
+            consequence_counts[obs.possible_outcome.strip()] += 1
+    total_cons = sum(consequence_counts.values()) or 1
+    consequence_distribution = sorted([
+        {"name": k, "count": v, "pct": round(v / total_cons * 100)}
+        for k, v in consequence_counts.items()
+    ], key=lambda x: -x["count"])
+
+    # ── Root cause distribution ───────────────────────────────────────────
+    root_cause_counts: dict = defaultdict(int)
+    for obs in obs_list:
+        if obs.root_cause_category:
+            root_cause_counts[obs.root_cause_category.name] += 1
+    total_rc = sum(root_cause_counts.values()) or 1
+    root_cause_distribution = sorted([
+        {"name": k, "count": v, "pct": round(v / total_rc * 100)}
+        for k, v in root_cause_counts.items()
+    ], key=lambda x: -x["count"])
+
+    # ── Violation area distribution (core concern) ────────────────────────
+    violation_area_counts: dict = defaultdict(int)
+    for obs in obs_list:
+        if obs.core_concern:
+            violation_area_counts[obs.core_concern.name] += 1
+    total_va = sum(violation_area_counts.values()) or 1
+    violation_area_distribution = sorted([
+        {"name": k, "count": v, "pct": round(v / total_va * 100)}
+        for k, v in violation_area_counts.items()
+    ], key=lambda x: -x["count"])
+
+    # ── Per-project risk analysis ─────────────────────────────────────────
+    proj_risk: dict = defaultdict(lambda: {"project_name": "", "total": 0, "high": 0, "medium": 0, "low": 0})
+    for obs in obs_list:
+        pname = obs.project.name if obs.project else "Unknown"
+        pr = proj_risk[obs.project_id or 0]
+        pr["project_name"] = pname
+        pr["total"] += 1
+        if obs.risk_level == "High":
+            pr["high"] += 1
+        elif obs.risk_level == "Medium":
+            pr["medium"] += 1
+        elif obs.risk_level == "Low":
+            pr["low"] += 1
+
+    project_risk_analysis = sorted(proj_risk.values(), key=lambda x: -x["total"])
+
+    total_raised = sum(p["raised"] for p in project_rectification)
+    total_delay = sum(p["total_delay_days"] for p in project_rectification)
+
+    return {
+        "projectRectification": project_rectification,
+        "consequenceDistribution": consequence_distribution,
+        "rootCauseDistribution": root_cause_distribution,
+        "violationAreaDistribution": violation_area_distribution,
+        "projectRiskAnalysis": project_risk_analysis,
+        "avgDelayOverall": round(total_delay / total_raised, 2) if total_raised else 0,
+        "totalObservations": len(obs_list),
+    }
+
+
 @router.get("/report")
 def get_report_data(
     project_id: List[int] = Query(default=[]),
