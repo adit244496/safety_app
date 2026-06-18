@@ -627,10 +627,10 @@ export default function ObservationForm() {
           <Field label="Target Date for Rectification">
             <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
           </Field>
-          <Field label="Concerned EIC/PIC">
+          <Field label="Concerned EIC">
             <select className="select" value={form.eic_user_id} onChange={e => set('eic_user_id', e.target.value)} disabled={!form.project_id}>
-              <option value="">{form.project_id ? 'Select EIC/PIC…' : 'Select project first…'}</option>
-              {(eicUsers || []).map((u: any) => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+              <option value="">{form.project_id ? 'Select EIC…' : 'Select project first…'}</option>
+              {(eicUsers || []).map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </Field>
           <div className="lg:col-span-3">

@@ -64,7 +64,7 @@ def user_to_dict(user: models.User):
     }
 
 
-EIC_ROLES = {"PIC", "EIC"}
+EIC_ROLES = {"EIC"}
 
 @router.get("/eic")
 def list_eic_users(
@@ -72,7 +72,7 @@ def list_eic_users(
     db: Session = Depends(get_db),
     _user: models.User = Depends(get_current_user),
 ):
-    """Return PIC/EIC users assigned to the given project(s)."""
+    """Return EIC users assigned to the given project(s)."""
     q = db.query(models.User).filter(models.User.role.in_(EIC_ROLES))
     if project_id:
         assigned_to_project = (
