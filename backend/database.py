@@ -62,6 +62,36 @@ def _run_migrations():
                 except Exception:
                     pass
 
+        # PostgreSQL: ensure tables created without SERIAL have a proper id sequence
+        if not is_sqlite:
+            _tables_needing_seq = [
+                "root_cause_specifics",
+                "root_cause_categories",
+                "violations",
+                "possible_outcomes",
+                "target_dates",
+                "specific_concerns",
+                "core_concerns",
+            ]
+            for tbl in _tables_needing_seq:
+                try:
+                    conn.execute(text(f"""
+                        DO $$
+                        BEGIN
+                            IF NOT EXISTS (
+                                SELECT 1 FROM pg_class WHERE relname = '{tbl}_id_seq'
+                            ) THEN
+                                CREATE SEQUENCE {tbl}_id_seq;
+                                PERFORM setval('{tbl}_id_seq', COALESCE((SELECT MAX(id) FROM {tbl}), 0), true);
+                                ALTER TABLE {tbl} ALTER COLUMN id SET DEFAULT nextval('{tbl}_id_seq');
+                                ALTER SEQUENCE {tbl}_id_seq OWNED BY {tbl}.id;
+                            END IF;
+                        END $$;
+                    """))
+                    conn.commit()
+                except Exception:
+                    pass
+
 
 def init_db():
     from models import Base as ModelBase

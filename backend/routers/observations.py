@@ -526,10 +526,11 @@ def list_observations(
     if date_to:
         q = q.filter(models.Observation.obs_date <= date_to)
 
-    # Drafts are private — only visible to the creator
-    q = q.filter(
-        (models.Observation.status != 'Draft') | (models.Observation.created_by == user.id)
-    )
+    # Drafts are private — visible to creator or admins
+    if user.role not in ("SuperAdmin", "Admin"):
+        q = q.filter(
+            (models.Observation.status != 'Draft') | (models.Observation.created_by == user.id)
+        )
 
     total = q.count()
     obs_list = q.order_by(
