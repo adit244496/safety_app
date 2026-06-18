@@ -134,14 +134,20 @@ function HierarchicalList({
   const [editParentName, setEditParentName] = useState('')
   const [editChildId, setEditChildId] = useState<number | null>(null)
   const [editChildName, setEditChildName] = useState('')
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [busy, setBusy] = useState(false)
-
-  void busy // Intentionally unused, but setBusy is used in handlers
+  const [childSaveError, setChildSaveError] = useState('')
+  const [parentSaveError, setParentSaveError] = useState('')
 
   const toggle = (id: number) => setExpanded(s => {
     const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n
   })
+
+  const startAddChild = (parentId: number) => {
+    setAddingChildFor(parentId)
+    setNewChildName('')
+    setChildSaveError('')
+    setExpanded(s => { const n = new Set(s); n.add(parentId); return n })
+  }
 
   const childrenFor = (parentId: number) => children.filter(c => c[parentField] === parentId)
 
@@ -156,17 +162,29 @@ function HierarchicalList({
       </div>
 
       {addingParent && (
-        <div className="flex gap-1 mb-2 flex-shrink-0">
-          <input autoFocus className="input text-xs py-1 px-2 flex-1" value={newParentName}
-            onChange={e => setNewParentName(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') { setBusy(true); onAddParent(newParentName.trim()).then(() => { setAddingParent(false); setBusy(false) }) }
-              if (e.key === 'Escape') setAddingParent(false)
-            }}
-            placeholder="New group name..." />
-          <button onClick={() => { setBusy(true); onAddParent(newParentName.trim()).then(() => { setAddingParent(false); setBusy(false) }) }}
-            className="p-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700"><Save className="w-3 h-3" /></button>
-          <button onClick={() => setAddingParent(false)} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"><X className="w-3 h-3" /></button>
+        <div className="flex flex-col gap-1 mb-2 flex-shrink-0">
+          <div className="flex gap-1">
+            <input autoFocus className="input text-xs py-1 px-2 flex-1" value={newParentName}
+              onChange={e => setNewParentName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  setBusy(true); setParentSaveError('')
+                  onAddParent(newParentName.trim())
+                    .then(() => { setAddingParent(false); setParentSaveError(''); setBusy(false) })
+                    .catch((err: any) => { setParentSaveError(err.response?.data?.detail || 'Save failed'); setBusy(false) })
+                }
+                if (e.key === 'Escape') { setAddingParent(false); setParentSaveError('') }
+              }}
+              placeholder="New group name..." />
+            <button onClick={() => {
+              setBusy(true); setParentSaveError('')
+              onAddParent(newParentName.trim())
+                .then(() => { setAddingParent(false); setParentSaveError(''); setBusy(false) })
+                .catch((err: any) => { setParentSaveError(err.response?.data?.detail || 'Save failed'); setBusy(false) })
+            }} disabled={busy} className="p-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"><Save className="w-3 h-3" /></button>
+            <button onClick={() => { setAddingParent(false); setParentSaveError('') }} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded"><X className="w-3 h-3" /></button>
+          </div>
+          {parentSaveError && <p className="text-xs text-red-500 px-1">{parentSaveError}</p>}
         </div>
       )}
 
@@ -197,13 +215,15 @@ function HierarchicalList({
                   <span className="text-xs font-semibold text-gray-800 flex-1">{parent.name}</span>
                   <span className="text-xs text-gray-400 mr-1">{childrenFor(parent.id).length}</span>
                   <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => { setAddingChildFor(parent.id); setNewChildName('') }}
+                    <button onClick={() => startAddChild(parent.id)}
                       className="p-0.5 text-indigo-400 hover:text-indigo-600 rounded"><Plus className="w-3 h-3" /></button>
                     <button onClick={() => { setEditParentId(parent.id); setEditParentName(parent.name) }}
                       className="p-0.5 text-gray-400 hover:text-indigo-600 rounded"><Edit2 className="w-3 h-3" /></button>
                     {canDelete && (
-                      <button onClick={() => onDeleteParent(parent.id)}
-                        className="p-0.5 text-gray-400 hover:text-red-600 rounded"><Trash2 className="w-3 h-3" /></button>
+                      <button onClick={async () => {
+                        if (!confirm('Delete this group and all its items?')) return
+                        try { await onDeleteParent(parent.id) } catch (err: any) { alert(err.response?.data?.detail || 'Delete failed') }
+                      }} className="p-0.5 text-gray-400 hover:text-red-600 rounded"><Trash2 className="w-3 h-3" /></button>
                     )}
                   </div>
                 </>
@@ -214,17 +234,29 @@ function HierarchicalList({
             {expanded.has(parent.id) && (
               <div className="px-2 py-1 space-y-0.5">
                 {addingChildFor === parent.id && (
-                  <div className="flex gap-1 py-1">
-                    <input autoFocus className="input text-xs py-0.5 px-2 flex-1" value={newChildName}
-                      onChange={e => setNewChildName(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') { setBusy(true); onAddChild(parent.id, newChildName.trim()).then(() => { setAddingChildFor(null); setBusy(false) }) }
-                        if (e.key === 'Escape') setAddingChildFor(null)
-                      }}
-                      placeholder="New item..." />
-                    <button onClick={() => { setBusy(true); onAddChild(parent.id, newChildName.trim()).then(() => { setAddingChildFor(null); setBusy(false) }) }}
-                      className="p-1 bg-indigo-600 text-white rounded"><Save className="w-3 h-3" /></button>
-                    <button onClick={() => setAddingChildFor(null)} className="p-1 text-gray-500 hover:bg-gray-100 rounded"><X className="w-3 h-3" /></button>
+                  <div className="flex flex-col gap-1 py-1">
+                    <div className="flex gap-1">
+                      <input autoFocus className="input text-xs py-0.5 px-2 flex-1" value={newChildName}
+                        onChange={e => setNewChildName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            setBusy(true); setChildSaveError('')
+                            onAddChild(parent.id, newChildName.trim())
+                              .then(() => { setAddingChildFor(null); setChildSaveError(''); setBusy(false) })
+                              .catch((err: any) => { setChildSaveError(err.response?.data?.detail || 'Save failed'); setBusy(false) })
+                          }
+                          if (e.key === 'Escape') { setAddingChildFor(null); setChildSaveError('') }
+                        }}
+                        placeholder="New item..." />
+                      <button onClick={() => {
+                        setBusy(true); setChildSaveError('')
+                        onAddChild(parent.id, newChildName.trim())
+                          .then(() => { setAddingChildFor(null); setChildSaveError(''); setBusy(false) })
+                          .catch((err: any) => { setChildSaveError(err.response?.data?.detail || 'Save failed'); setBusy(false) })
+                      }} disabled={busy} className="p-1 bg-indigo-600 text-white rounded disabled:opacity-50"><Save className="w-3 h-3" /></button>
+                      <button onClick={() => { setAddingChildFor(null); setChildSaveError('') }} className="p-1 text-gray-500 hover:bg-gray-100 rounded"><X className="w-3 h-3" /></button>
+                    </div>
+                    {childSaveError && <p className="text-xs text-red-500 px-1">{childSaveError}</p>}
                   </div>
                 )}
                 {childrenFor(parent.id).map((child, idx) => (
@@ -249,8 +281,10 @@ function HierarchicalList({
                           <button onClick={() => { setEditChildId(child.id); setEditChildName(child.name) }}
                             className="p-0.5 text-gray-400 hover:text-indigo-600 rounded"><Edit2 className="w-3 h-3" /></button>
                           {canDelete && (
-                            <button onClick={() => onDeleteChild(child.id)}
-                              className="p-0.5 text-gray-400 hover:text-red-600 rounded"><Trash2 className="w-3 h-3" /></button>
+                            <button onClick={async () => {
+                              if (!confirm('Delete this item?')) return
+                              try { await onDeleteChild(child.id) } catch (err: any) { alert(err.response?.data?.detail || 'Delete failed') }
+                            }} className="p-0.5 text-gray-400 hover:text-red-600 rounded"><Trash2 className="w-3 h-3" /></button>
                           )}
                         </div>
                       </>

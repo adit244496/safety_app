@@ -153,10 +153,14 @@ export default function DataInputTab() {
 
   async function deleteItem(section: Section, id: number) {
     if (!confirm('Delete this entry? This cannot be undone.')) return
-    const endpoint = section === 'projects' ? `/projects/${id}` : `/admin/buildings/${id}`
-    await api.delete(endpoint)
-    qc.invalidateQueries({ queryKey: [section] })
-    qc.invalidateQueries({ queryKey: ['floors'] })
+    try {
+      const endpoint = section === 'projects' ? `/projects/${id}` : `/admin/buildings/${id}`
+      await api.delete(endpoint)
+      qc.invalidateQueries({ queryKey: [section] })
+      qc.invalidateQueries({ queryKey: ['floors'] })
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to delete entry')
+    }
   }
 
   const items: any[] = dataMap[section]
