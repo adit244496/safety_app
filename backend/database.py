@@ -62,7 +62,8 @@ def _run_migrations():
                 except Exception:
                     pass
 
-        # PostgreSQL: ensure tables created without SERIAL have a proper id sequence
+        # PostgreSQL: ensure tables created without SERIAL have a proper id sequence.
+        # Run each statement separately so a partial failure doesn't block the rest.
         if not is_sqlite:
             _tables_needing_seq = [
                 "root_cause_specifics",
@@ -74,23 +75,18 @@ def _run_migrations():
                 "core_concerns",
             ]
             for tbl in _tables_needing_seq:
-                try:
-                    conn.execute(text(f"""
-                        DO $$
-                        BEGIN
-                            IF NOT EXISTS (
-                                SELECT 1 FROM pg_class WHERE relname = '{tbl}_id_seq'
-                            ) THEN
-                                CREATE SEQUENCE {tbl}_id_seq;
-                                PERFORM setval('{tbl}_id_seq', COALESCE((SELECT MAX(id) FROM {tbl}), 0), true);
-                                ALTER TABLE {tbl} ALTER COLUMN id SET DEFAULT nextval('{tbl}_id_seq');
-                                ALTER SEQUENCE {tbl}_id_seq OWNED BY {tbl}.id;
-                            END IF;
-                        END $$;
-                    """))
-                    conn.commit()
-                except Exception:
-                    pass
+                seq = f"{tbl}_id_seq"
+                for stmt in [
+                    f"CREATE SEQUENCE IF NOT EXISTS {seq}",
+                    f"SELECT setval('{seq}', COALESCE((SELECT MAX(id) FROM {tbl}), 0), true)",
+                    f"ALTER TABLE {tbl} ALTER COLUMN id SET DEFAULT nextval('{seq}')",
+                    f"ALTER SEQUENCE {seq} OWNED BY {tbl}.id",
+                ]:
+                    try:
+                        conn.execute(text(stmt))
+                        conn.commit()
+                    except Exception:
+                        conn.rollback()  # clear failed transaction so next stmt can run
 
 
 def init_db():
