@@ -1,12 +1,110 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit2, Trash2, X, Save, Users } from 'lucide-react'
+import { Plus, Edit2, Trash2, X, Save, Users, ChevronDown, Search, Check } from 'lucide-react'
 import api from '../../lib/api'
 import { getRoleClass, ROLES } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
 
 interface UserForm { name: string; email: string; password: string; role: string; mobile: string; project_ids: number[] }
 const EMPTY: UserForm = { name: '', email: '', password: '', role: 'Observer', mobile: '', project_ids: [] }
+
+function FilterDropdown({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string
+  options: { value: string; label: string }[]
+  selected: string[]
+  onChange: (v: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
+  const toggle = (val: string) =>
+    onChange(selected.includes(val) ? selected.filter(v => v !== val) : [...selected, val])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen(v => !v); setSearch('') }}
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-sm font-medium transition-all whitespace-nowrap ${
+          selected.length > 0
+            ? 'border-indigo-400 bg-indigo-50 text-indigo-700'
+            : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+        }`}
+      >
+        {label}
+        {selected.length > 0 && (
+          <span className="bg-indigo-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center leading-none">
+            {selected.length}
+          </span>
+        )}
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-xl shadow-lg border border-gray-100 w-48 py-2">
+          <div className="px-2 pb-2">
+            <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-gray-50 border border-gray-200">
+              <Search className="w-3 h-3 text-gray-400 flex-shrink-0" />
+              <input
+                autoFocus
+                className="text-xs bg-transparent outline-none w-full text-gray-700 placeholder:text-gray-400"
+                placeholder="Search…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="max-h-48 overflow-y-auto thin-scroll">
+            {filtered.length === 0 && (
+              <p className="text-xs text-gray-400 px-3 py-2 italic">No results</p>
+            )}
+            {filtered.map(o => (
+              <button
+                key={o.value}
+                type="button"
+                onClick={() => toggle(o.value)}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors text-left"
+              >
+                <span className={`w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors ${
+                  selected.includes(o.value) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
+                }`}>
+                  {selected.includes(o.value) && <Check className="w-2.5 h-2.5 text-white" />}
+                </span>
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {selected.length > 0 && (
+            <div className="border-t border-gray-100 mt-1 pt-1 px-3">
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="text-xs text-gray-400 hover:text-gray-600"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function UsersTab() {
   const qc = useQueryClient()
@@ -15,6 +113,8 @@ export default function UsersTab() {
   const [form, setForm] = useState<UserForm>(EMPTY)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [filterRoles, setFilterRoles] = useState<string[]>([])
+  const [filterProjects, setFilterProjects] = useState<string[]>([])
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['users'],
@@ -26,6 +126,18 @@ export default function UsersTab() {
   })
 
   const set = (k: keyof UserForm, v: any) => setForm(f => ({ ...f, [k]: v }))
+
+  const filteredUsers = (users || []).filter((u: any) => {
+    if (filterRoles.length > 0 && !filterRoles.includes(u.role)) return false
+    if (filterProjects.length > 0) {
+      const userProjectIds = (u.projects || []).map((p: any) => String(p.id))
+      if (!filterProjects.some(pid => userProjectIds.includes(pid))) return false
+    }
+    return true
+  })
+
+  const roleOptions = ROLES.map(r => ({ value: r, label: r }))
+  const projectOptions = (projects || []).map((p: any) => ({ value: String(p.id), label: p.name }))
 
   const openCreate = () => { setForm(EMPTY); setError(''); setModal({ open: true }) }
   const openEdit = (u: any) => {
@@ -65,14 +177,32 @@ export default function UsersTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-gray-500 text-sm">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 text-gray-500 text-sm flex-shrink-0">
           <Users className="w-4 h-4" />
-          <span>{(users || []).length} users</span>
+          <span>
+            {filteredUsers.length === (users || []).length
+              ? `${(users || []).length} users`
+              : `${filteredUsers.length} of ${(users || []).length} users`}
+          </span>
         </div>
-        <button onClick={openCreate} className="btn-primary">
-          <Plus className="w-4 h-4" /> Add User
-        </button>
+        <div className="flex-1 flex items-center justify-end gap-2">
+          <FilterDropdown
+            label="Role"
+            options={roleOptions}
+            selected={filterRoles}
+            onChange={setFilterRoles}
+          />
+          <FilterDropdown
+            label="Project"
+            options={projectOptions}
+            selected={filterProjects}
+            onChange={setFilterProjects}
+          />
+          <button onClick={openCreate} className="btn-primary">
+            <Plus className="w-4 h-4" /> Add User
+          </button>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-gray-100 shadow-sm overflow-x-auto">
@@ -91,10 +221,12 @@ export default function UsersTab() {
             {isLoading && (
               <tr><td colSpan={6} className="td text-center py-10 text-gray-400">Loading users…</td></tr>
             )}
-            {!isLoading && (users || []).length === 0 && (
-              <tr><td colSpan={6} className="td text-center py-10 text-gray-400">No users yet</td></tr>
+            {!isLoading && filteredUsers.length === 0 && (
+              <tr><td colSpan={6} className="td text-center py-10 text-gray-400">
+                {(users || []).length === 0 ? 'No users yet' : 'No users match the selected filters'}
+              </td></tr>
             )}
-            {(users || []).map((u: any) => (
+            {filteredUsers.map((u: any) => (
               <tr key={u.id} className="tr">
                 <td className="td">
                   <div className="flex items-center gap-3">
