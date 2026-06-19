@@ -92,6 +92,7 @@ def obs_to_dict(obs: models.Observation, db: Session) -> dict:
         "target_date_name": obs.target_date.name if obs.target_date else None,
         "target_date_actual": obs.target_date_actual,
         "eic_user_id": obs.eic_user_id,
+        "eic_user_ids": json.loads(obs.eic_user_ids) if obs.eic_user_ids else [],
         "eic_user_name": obs.eic_user.name if obs.eic_user else None,
         "closed_at": obs.closed_at.isoformat() if obs.closed_at else None,
         "status": obs.status,
@@ -142,6 +143,7 @@ class ObsCreate(BaseModel):
     target_date_id: Optional[int] = None
     target_date_actual: Optional[str] = None   # YYYY-MM-DD calendar date
     eic_user_id: Optional[int] = None
+    eic_user_ids: Optional[List[int]] = None
     status: Optional[str] = None
 
 
@@ -768,7 +770,8 @@ def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: mod
         violation_id=body.violation_id,
         target_date_id=body.target_date_id,
         target_date_actual=body.target_date_actual,
-        eic_user_id=body.eic_user_id,
+        eic_user_id=body.eic_user_ids[0] if body.eic_user_ids else body.eic_user_id,
+        eic_user_ids=json.dumps(body.eic_user_ids) if body.eic_user_ids else None,
         status=body.status or "Open",
         created_by=user.id,
     )
@@ -866,10 +869,14 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
     factor, level = calc_risk(body.severity or obs.severity or 1, body.probability or obs.probability or 1)
 
     body_dict = body.model_dump(exclude_unset=True)
-    # Serialize contractor_user_ids list → JSON string before setting on model
+    # Serialize list fields → JSON string before setting on model
     if 'contractor_user_ids' in body_dict:
         ids = body_dict.pop('contractor_user_ids')
         obs.contractor_user_ids = json.dumps(ids) if ids else None
+    if 'eic_user_ids' in body_dict:
+        eids = body_dict.pop('eic_user_ids')
+        obs.eic_user_ids = json.dumps(eids) if eids else None
+        obs.eic_user_id = eids[0] if eids else body_dict.pop('eic_user_id', obs.eic_user_id)
     for field, val in body_dict.items():
         setattr(obs, field, val)
 

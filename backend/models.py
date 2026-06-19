@@ -147,7 +147,8 @@ class Observation(Base):
     violation_id = Column(Integer, ForeignKey("violations.id"), nullable=True)
     target_date_id = Column(Integer, ForeignKey("target_dates.id"), nullable=True)
     target_date_actual = Column(String, nullable=True)   # YYYY-MM-DD — actual calendar due date
-    eic_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Concerned EIC/PIC
+    eic_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)   # primary (first selected)
+    eic_user_ids = Column(Text, nullable=True)                             # JSON array of all selected EIC user IDs
     status = Column(String, nullable=False, default="Open")
     closed_at = Column(DateTime, nullable=True)           # set when status transitions to Closed
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)

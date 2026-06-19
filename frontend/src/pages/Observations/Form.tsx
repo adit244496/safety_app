@@ -148,7 +148,7 @@ export default function ObservationForm() {
     core_concern_id: '', specific_concern_id: '', specific_concern_text: '',
     possible_outcome: '', severity: '', probability: '',
     root_cause_category_id: '', root_cause_specific_id: '',
-    violation_id: '', target_date_actual: '', eic_user_id: '', status: 'Open',
+    violation_id: '', target_date_actual: '', eic_user_ids: [] as number[], status: 'Open',
   })
   const [pendingFiles,  setPendingFiles]  = useState<File[]>([])
   const [previewUrls,   setPreviewUrls]   = useState<string[]>([])
@@ -252,7 +252,9 @@ export default function ObservationForm() {
         root_cause_specific_id: existing.root_cause_specific_id?.toString() || '',
         violation_id: existing.violation_id?.toString() || '',
         target_date_actual: existing.target_date_actual || '',
-        eic_user_id: existing.eic_user_id?.toString() || '',
+        eic_user_ids: existing.eic_user_ids?.length
+          ? existing.eic_user_ids
+          : (existing.eic_user_id ? [existing.eic_user_id] : []),
         status: existing.status || 'Open',
       })
     }
@@ -334,7 +336,8 @@ export default function ObservationForm() {
         root_cause_category_id: form.root_cause_category_id ? Number(form.root_cause_category_id) : null,
         root_cause_specific_id: form.root_cause_specific_id ? Number(form.root_cause_specific_id) : null,
         violation_id: form.violation_id ? Number(form.violation_id) : null,
-        eic_user_id: form.eic_user_id ? Number(form.eic_user_id) : null,
+        eic_user_ids: form.eic_user_ids,
+        eic_user_id: form.eic_user_ids[0] ?? null,
         target_date_actual: form.target_date_actual || null,
         severity: form.severity ? Number(form.severity) : null,
         probability: form.probability ? Number(form.probability) : null,
@@ -628,10 +631,17 @@ export default function ObservationForm() {
             <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
           </Field>
           <Field label="Concerned EIC">
-            <select className="select" value={form.eic_user_id} onChange={e => set('eic_user_id', e.target.value)} disabled={!form.project_id}>
-              <option value="">{form.project_id ? 'Select EIC…' : 'Select project first…'}</option>
-              {(eicUsers || []).map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
+            {form.project_id ? (
+              <MultiSelectFilter
+                size="md"
+                options={(eicUsers || []).map((u: any) => ({ value: u.id, label: u.name }))}
+                value={form.eic_user_ids}
+                onChange={selected => set('eic_user_ids', selected as number[])}
+                placeholder="Select EIC…"
+              />
+            ) : (
+              <input className="input" disabled placeholder="Select project first…" />
+            )}
           </Field>
           <div className="lg:col-span-3">
             <Field label="Additional Details">
