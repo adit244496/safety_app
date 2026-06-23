@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Edit2, Trash2, X, Save, Users, ChevronDown, Search, Check } from 'lucide-react'
+import { Plus, Edit2, Trash2, X, Save, Users, ChevronDown, Search, Check, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, SkipForward } from 'lucide-react'
 import api from '../../lib/api'
 import { getRoleClass, ROLES } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
@@ -106,6 +106,159 @@ function FilterDropdown({
   )
 }
 
+interface UploadResult {
+  created_count: number
+  skipped_count: number
+  error_count: number
+  created: string[]
+  skipped: string[]
+  errors: string[]
+}
+
+function UploadModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const [file, setFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [result, setResult] = useState<UploadResult | null>(null)
+  const [uploadError, setUploadError] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function handleUpload() {
+    if (!file) return
+    setUploading(true)
+    setUploadError('')
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      const res = await api.post('/users/bulk-upload', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setResult(res.data)
+      if (res.data.created_count > 0) onDone()
+    } catch (e: any) {
+      setUploadError(e.response?.data?.detail || 'Upload failed')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="w-5 h-5 text-green-600" />
+            <h2 className="font-semibold text-gray-900">Upload Users from Excel</h2>
+          </div>
+          <button onClick={onClose} className="btn-icon"><X className="w-4 h-4" /></button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {!result && (
+            <>
+              <div className="text-sm text-gray-500 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-1">
+                <p className="font-medium text-blue-800">Expected Excel columns:</p>
+                <p>Project · Contractor · Mobile · Email</p>
+                <p className="text-xs text-blue-600 mt-1">Default password for all new users: <strong>123456</strong></p>
+              </div>
+
+              <div
+                onClick={() => fileRef.current?.click()}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                  file ? 'border-green-400 bg-green-50' : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50'
+                }`}
+              >
+                <Upload className={`w-8 h-8 mx-auto mb-2 ${file ? 'text-green-500' : 'text-gray-400'}`} />
+                {file ? (
+                  <p className="text-sm font-medium text-green-700">{file.name}</p>
+                ) : (
+                  <p className="text-sm text-gray-500">Click to select Excel file (.xlsx)</p>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={e => setFile(e.target.files?.[0] || null)}
+                />
+              </div>
+
+              {uploadError && (
+                <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-100 px-4 py-3 rounded-xl">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {uploadError}
+                </div>
+              )}
+            </>
+          )}
+
+          {result && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div className="bg-green-50 rounded-xl p-3">
+                  <p className="text-2xl font-bold text-green-700">{result.created_count}</p>
+                  <p className="text-xs text-green-600 mt-0.5">Created</p>
+                </div>
+                <div className="bg-amber-50 rounded-xl p-3">
+                  <p className="text-2xl font-bold text-amber-700">{result.skipped_count}</p>
+                  <p className="text-xs text-amber-600 mt-0.5">Skipped</p>
+                </div>
+                <div className="bg-red-50 rounded-xl p-3">
+                  <p className="text-2xl font-bold text-red-700">{result.error_count}</p>
+                  <p className="text-xs text-red-600 mt-0.5">Errors</p>
+                </div>
+              </div>
+
+              {result.created.length > 0 && (
+                <details className="text-sm">
+                  <summary className="cursor-pointer flex items-center gap-1.5 text-green-700 font-medium py-1">
+                    <CheckCircle2 className="w-4 h-4" /> Created ({result.created_count})
+                  </summary>
+                  <div className="mt-1 max-h-32 overflow-y-auto thin-scroll bg-green-50 rounded-lg p-2 space-y-0.5">
+                    {result.created.map((s, i) => <p key={i} className="text-xs text-green-800">{s}</p>)}
+                  </div>
+                </details>
+              )}
+
+              {result.skipped.length > 0 && (
+                <details className="text-sm">
+                  <summary className="cursor-pointer flex items-center gap-1.5 text-amber-700 font-medium py-1">
+                    <SkipForward className="w-4 h-4" /> Skipped ({result.skipped_count})
+                  </summary>
+                  <div className="mt-1 max-h-32 overflow-y-auto thin-scroll bg-amber-50 rounded-lg p-2 space-y-0.5">
+                    {result.skipped.map((s, i) => <p key={i} className="text-xs text-amber-800">{s}</p>)}
+                  </div>
+                </details>
+              )}
+
+              {result.errors.length > 0 && (
+                <details className="text-sm" open>
+                  <summary className="cursor-pointer flex items-center gap-1.5 text-red-700 font-medium py-1">
+                    <AlertCircle className="w-4 h-4" /> Errors ({result.error_count})
+                  </summary>
+                  <div className="mt-1 max-h-32 overflow-y-auto thin-scroll bg-red-50 rounded-lg p-2 space-y-0.5">
+                    {result.errors.map((s, i) => <p key={i} className="text-xs text-red-800">{s}</p>)}
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50 justify-end">
+          <button onClick={onClose} className="btn-secondary">
+            {result ? 'Close' : 'Cancel'}
+          </button>
+          {!result && (
+            <button onClick={handleUpload} disabled={!file || uploading} className="btn-primary">
+              {uploading ? 'Uploading…' : <><Upload className="w-4 h-4" /> Upload</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function UsersTab() {
   const qc = useQueryClient()
   const { isSuperAdmin } = useAuth()
@@ -115,6 +268,7 @@ export default function UsersTab() {
   const [error, setError] = useState('')
   const [filterRoles, setFilterRoles] = useState<string[]>([])
   const [filterProjects, setFilterProjects] = useState<string[]>([])
+  const [uploadOpen, setUploadOpen] = useState(false)
 
   const { data: users, isLoading } = useQuery({
     queryKey: ['users'],
@@ -199,6 +353,9 @@ export default function UsersTab() {
             selected={filterProjects}
             onChange={setFilterProjects}
           />
+          <button onClick={() => setUploadOpen(true)} className="btn-secondary">
+            <FileSpreadsheet className="w-4 h-4" /> Upload Excel
+          </button>
           <button onClick={openCreate} className="btn-primary">
             <Plus className="w-4 h-4" /> Add User
           </button>
@@ -276,7 +433,18 @@ export default function UsersTab() {
         </table>
       </div>
 
-      {/* Modal */}
+      {/* Upload Modal */}
+      {uploadOpen && (
+        <UploadModal
+          onClose={() => setUploadOpen(false)}
+          onDone={() => {
+            qc.invalidateQueries({ queryKey: ['users'] })
+            qc.invalidateQueries({ queryKey: ['users-contractors'] })
+          }}
+        />
+      )}
+
+      {/* Edit/Create Modal */}
       {modal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">

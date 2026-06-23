@@ -1,12 +1,13 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { usePageTitle } from '../../store/pageTitleContext'
-import { Users, Database, Shield, ClipboardList, Mail, TriangleAlert } from 'lucide-react'
+import { Users, Database, Shield, ClipboardList, Mail, TriangleAlert, FileUp } from 'lucide-react'
 import UsersTab from './UsersTab'
 import DataInputTab from './DataInputTab'
 import SafetyMeasuresTab from './SafetyMeasuresTab'
 import EaseCriteriaTab from './EaseCriteriaTab'
 import EmailSettingsTab from './EmailSettingsTab'
 import RiskLabelsTab from './RiskLabelsTab'
+import ImportTab from './ImportTab'
 
 const TABS = [
   { to: '/admin', label: 'Users', icon: Users, exact: true },
@@ -14,6 +15,7 @@ const TABS = [
   { to: '/admin/safety', label: 'Safety Measures', icon: Shield },
   { to: '/admin/risk-labels', label: 'Risk Labels', icon: TriangleAlert },
   { to: '/admin/ease-criteria', label: 'SHE Criteria', icon: ClipboardList },
+  { to: '/admin/import', label: 'Import', icon: FileUp },
   { to: '/admin/email', label: 'Email Settings', icon: Mail },
 ]
 
@@ -56,6 +58,7 @@ export default function Admin() {
         <Route path="safety" element={<SafetyMeasuresTab />} />
         <Route path="risk-labels" element={<RiskLabelsTab />} />
         <Route path="ease-criteria" element={<EaseCriteriaTab />} />
+        <Route path="import" element={<ImportTab />} />
         <Route path="email" element={<EmailSettingsTab />} />
       </Routes>
     </div>

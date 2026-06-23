@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from database import get_db
 import models
 import json
+import io
+import re
+import openpyxl
 from auth import get_current_user, require_admin, require_super_admin, hash_password
 
 router = APIRouter(prefix="/api/users", tags=["users"])
@@ -110,6 +113,123 @@ def list_contractors(
             ~models.User.id.in_(has_any_assignment)
         )
     return [user_to_dict(u) for u in q.order_by(models.User.name).all()]
+
+
+def _clean_mobile(raw) -> Optional[str]:
+    if raw is None:
+        return None
+    s = str(raw).strip().replace('\xa0', '').replace('\n', '')
+    if not s or s.lower() == 'none':
+        return None
+    first = re.split(r'[/,]', s)[0].strip()
+    digits = re.sub(r'\D', '', first)
+    if not digits:
+        return None
+    # Handle float representation like "9800002162.0"
+    if digits.endswith('0') and len(digits) == 11:
+        digits = digits[:10]
+    return digits[-10:] if len(digits) >= 10 else digits
+
+
+@router.post("/bulk-upload", status_code=200)
+async def bulk_upload_users(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    contents = await file.read()
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+    except Exception:
+        raise HTTPException(400, "Invalid Excel file")
+
+    ws = wb.active
+    rows = list(ws.iter_rows(values_only=True))
+    if not rows:
+        raise HTTPException(400, "Excel file is empty")
+
+    # Find header row containing 'Project'
+    header_idx = None
+    for i, row in enumerate(rows):
+        if row and str(row[0]).strip().lower() == 'project':
+            header_idx = i
+            break
+    if header_idx is None:
+        raise HTTPException(400, "Could not find header row with 'Project' column")
+
+    DEFAULT_PASSWORD = "123456"
+    created, skipped, errors = [], [], []
+
+    for row in rows[header_idx + 1:]:
+        if not any(row):
+            continue
+        project_name = str(row[0]).strip() if row[0] else None
+        contractor_name = str(row[1]).strip() if row[1] else None
+        mobile_raw = row[2]
+        email_raw = str(row[3]).strip() if len(row) > 3 and row[3] else None
+
+        if not email_raw or not contractor_name or not project_name:
+            continue
+
+        # Multiple emails separated by comma — create one user per unique email
+        raw_emails = [e.strip().lower() for e in email_raw.split(',') if e.strip()]
+
+        for email in raw_emails:
+            if '@' not in email or '.' not in email.split('@')[-1]:
+                errors.append(f"{contractor_name}: invalid email '{email}'")
+                continue
+
+            existing = db.query(models.User).filter(
+                models.User.name == contractor_name,
+                models.User.email == email,
+            ).first()
+
+            project = db.query(models.Project).filter(
+                models.Project.name.ilike(project_name)
+            ).first()
+
+            if existing:
+                # User already exists — just add the project assignment if missing
+                if project:
+                    already_assigned = db.query(models.UserProject).filter(
+                        models.UserProject.user_id == existing.id,
+                        models.UserProject.project_id == project.id,
+                    ).first()
+                    if not already_assigned:
+                        db.add(models.UserProject(user_id=existing.id, project_id=project.id))
+                        created.append(f"{contractor_name} ({email}) → {project.name} (added project)")
+                    else:
+                        skipped.append(f"{contractor_name} ({email}) already in {project.name}")
+                else:
+                    skipped.append(f"{contractor_name} ({email}) exists, project '{project_name}' not found")
+                continue
+
+            mobile = _clean_mobile(mobile_raw)
+            user = models.User(
+                name=contractor_name,
+                email=email,
+                password_hash=hash_password(DEFAULT_PASSWORD),
+                role="Contractor",
+                mobile=mobile,
+            )
+            db.add(user)
+            db.flush()
+
+            if project:
+                db.add(models.UserProject(user_id=user.id, project_id=project.id))
+                created.append(f"{contractor_name} ({email}) → {project.name}")
+            else:
+                created.append(f"{contractor_name} ({email}) [project '{project_name}' not found]")
+
+    db.commit()
+    return {
+        "created_count": len(created),
+        "skipped_count": len(skipped),
+        "error_count": len(errors),
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+    }
 
 
 @router.get("/")

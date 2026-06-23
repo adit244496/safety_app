@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional, List
 import json
+import io
+import openpyxl
+from difflib import get_close_matches
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, case, nullslast
 from datetime import datetime, date
@@ -952,3 +955,272 @@ def delete_observation(obs_id: int, db: Session = Depends(get_db), user: models.
     db.delete(obs)
     db.commit()
     return {"success": True}
+
+
+# ── Bulk import ──────────────────────────────────────────────────────────────
+
+def _clean(val) -> Optional[str]:
+    if val is None:
+        return None
+    s = str(val).strip()
+    return None if s.lower() in ('none', 'nil', '', 'n/a') else s
+
+
+def _fmt_date(val) -> Optional[str]:
+    if val is None:
+        return None
+    if hasattr(val, 'strftime'):
+        return val.strftime('%Y-%m-%d')
+    s = str(val).strip()
+    if not s or s.lower() in ('none', 'nil'):
+        return None
+    for fmt in ('%d-%m-%Y', '%Y-%m-%d', '%d/%m/%Y'):
+        try:
+            return datetime.strptime(s, fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            pass
+    return None
+
+
+def _fmt_time(val) -> Optional[str]:
+    if val is None:
+        return None
+    if hasattr(val, 'strftime'):
+        return val.strftime('%H:%M')
+    s = str(val).strip()
+    return s[:5] if s and s.lower() != 'none' else None
+
+
+def _safe_int(val) -> Optional[int]:
+    try:
+        v = int(float(str(val)))
+        return v if v > 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _find_project(db: Session, name: str) -> models.Project:
+    """Case-insensitive exact match → fuzzy fallback (≥0.7) → auto-create."""
+    project = db.query(models.Project).filter(
+        models.Project.name.ilike(name)
+    ).first()
+    if project:
+        return project
+    all_projects = db.query(models.Project).all()
+    name_map = {p.name.lower(): p for p in all_projects}
+    matches = get_close_matches(name.lower(), name_map.keys(), n=1, cutoff=0.7)
+    if matches:
+        return name_map[matches[0]]
+    new_project = models.Project(name=name.strip().upper())
+    db.add(new_project)
+    db.flush()
+    return new_project
+
+
+def _resolve_or_create_building(db: Session, name: str, project_id: int) -> models.Building:
+    obj = db.query(models.Building).filter(
+        models.Building.project_id == project_id,
+        models.Building.name.ilike(name),
+    ).first()
+    if not obj:
+        obj = models.Building(name=name, project_id=project_id)
+        db.add(obj)
+        db.flush()
+    return obj
+
+
+def _resolve_or_create_floor(db: Session, name: str, building_id: int) -> models.Floor:
+    obj = db.query(models.Floor).filter(
+        models.Floor.building_id == building_id,
+        models.Floor.name.ilike(name),
+    ).first()
+    if not obj:
+        obj = models.Floor(name=name, building_id=building_id)
+        db.add(obj)
+        db.flush()
+    return obj
+
+
+@router.post("/bulk-import")
+async def bulk_import_observations(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(require_admin),
+):
+    contents = await file.read()
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
+    except Exception:
+        raise HTTPException(400, "Invalid Excel file")
+
+    if 'Observations' not in wb.sheetnames:
+        raise HTTPException(400, "Sheet named 'Observations' not found")
+
+    ws = wb['Observations']
+    rows = list(ws.iter_rows(values_only=True))
+
+    # Find the actual header row (contains "Observation ID" in col 0)
+    header_idx = None
+    for i, row in enumerate(rows):
+        if row and str(row[0]).strip() == 'Observation ID':
+            header_idx = i
+            break
+    if header_idx is None:
+        raise HTTPException(400, "Could not find 'Observation ID' header row")
+
+    created, skipped, errors = [], [], []
+
+    for row in rows[header_idx + 1:]:
+        if not row or not row[0]:
+            continue
+        obs_id = str(row[0]).strip()
+        if not obs_id:
+            continue
+
+        # Skip duplicates
+        if db.query(models.Observation).filter(models.Observation.observation_id == obs_id).first():
+            skipped.append(f"{obs_id} — already exists")
+            continue
+
+        try:
+            obs_date        = _fmt_date(row[1])
+            obs_time        = _fmt_time(row[2])
+            project_name    = _clean(row[3])
+            building_name   = _clean(row[4])
+            floor_name      = _clean(row[5])
+            exact_location  = _clean(row[6])
+            observer_name   = _clean(row[7])
+            contractor_name = _clean(row[8])
+            rectified_by    = _clean(row[9])
+            core_concern_name      = _clean(row[11])
+            specific_concern_name  = _clean(row[12])
+            specific_concern_text  = _clean(row[13])
+            possible_outcome       = _clean(row[14])
+            severity         = _safe_int(row[15])
+            probability      = _safe_int(row[16])
+            risk_level_raw   = _clean(row[18])
+            root_cat_name    = _clean(row[19])
+            root_spec_name   = _clean(row[20])
+            violation_name   = _clean(row[21])
+            closing_date     = _fmt_date(row[22])
+            status           = _clean(row[23]) or 'Open'
+
+            # Project (required)
+            if not project_name:
+                errors.append(f"{obs_id}: missing project name")
+                continue
+            project = _find_project(db, project_name)
+
+            # Building / Floor — auto-create if absent
+            building = _resolve_or_create_building(db, building_name, project.id) if building_name else None
+            floor    = _resolve_or_create_floor(db, floor_name, building.id) if (floor_name and building) else None
+
+            # Contractor user — prefer project-scoped match
+            contractor_user = None
+            if contractor_name:
+                contractor_user = (
+                    db.query(models.User)
+                    .join(models.UserProject, models.UserProject.user_id == models.User.id)
+                    .filter(
+                        models.User.role == 'Contractor',
+                        models.User.name.ilike(contractor_name),
+                        models.UserProject.project_id == project.id,
+                    ).first()
+                )
+                if not contractor_user:
+                    contractor_user = db.query(models.User).filter(
+                        models.User.role == 'Contractor',
+                        models.User.name.ilike(contractor_name),
+                    ).first()
+
+            # Core concern → specific concern
+            core_concern = None
+            if core_concern_name:
+                core_concern = db.query(models.CoreConcern).filter(
+                    models.CoreConcern.name.ilike(core_concern_name)
+                ).first()
+
+            specific_concern = None
+            if specific_concern_name and core_concern:
+                specific_concern = db.query(models.SpecificConcern).filter(
+                    models.SpecificConcern.core_concern_id == core_concern.id,
+                    models.SpecificConcern.name.ilike(specific_concern_name),
+                ).first()
+
+            # Root cause
+            root_cat = None
+            if root_cat_name:
+                root_cat = db.query(models.RootCauseCategory).filter(
+                    models.RootCauseCategory.name.ilike(root_cat_name)
+                ).first()
+
+            root_spec = None
+            if root_spec_name and root_cat:
+                root_spec = db.query(models.RootCauseSpecific).filter(
+                    models.RootCauseSpecific.root_cause_category_id == root_cat.id,
+                    models.RootCauseSpecific.name.ilike(root_spec_name),
+                ).first()
+
+            # Violation
+            violation = None
+            if violation_name:
+                violation = db.query(models.Violation).filter(
+                    models.Violation.name.ilike(violation_name)
+                ).first()
+
+            # Risk
+            risk_factor = (severity * probability) if (severity and probability) else None
+            risk_level  = None if (not risk_level_raw or risk_level_raw.upper() == 'NIL') else risk_level_raw
+
+            # closed_at
+            closed_at = None
+            if status == 'Closed' and closing_date:
+                try:
+                    closed_at = datetime.strptime(closing_date, '%Y-%m-%d')
+                except ValueError:
+                    pass
+
+            obs = models.Observation(
+                observation_id=obs_id,
+                project_id=project.id,
+                building_id=building.id if building else None,
+                floor_id=floor.id if floor else None,
+                exact_location=exact_location,
+                obs_date=obs_date,
+                obs_time=obs_time,
+                contractor_user_id=contractor_user.id if contractor_user else None,
+                contractor_user_ids=json.dumps([contractor_user.id]) if contractor_user else None,
+                to_be_rectified_by=rectified_by,
+                observer_name=observer_name,
+                core_concern_id=core_concern.id if core_concern else None,
+                specific_concern_id=specific_concern.id if specific_concern else None,
+                specific_concern_text=specific_concern_text,
+                possible_outcome=possible_outcome,
+                severity=severity,
+                probability=probability,
+                risk_factor=risk_factor,
+                risk_level=risk_level,
+                root_cause_category_id=root_cat.id if root_cat else None,
+                root_cause_specific_id=root_spec.id if root_spec else None,
+                violation_id=violation.id if violation else None,
+                target_date_actual=closing_date,
+                status=status,
+                closed_at=closed_at,
+                created_by=current_user.id,
+            )
+            db.add(obs)
+            created.append(f"{obs_id} → {project.name}")
+
+        except Exception as exc:
+            db.rollback()
+            errors.append(f"{obs_id}: {exc}")
+
+    db.commit()
+    return {
+        "created_count": len(created),
+        "skipped_count": len(skipped),
+        "error_count": len(errors),
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+    }
