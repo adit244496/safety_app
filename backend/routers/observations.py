@@ -4,14 +4,18 @@ from typing import Optional, List
 import json
 import io
 import openpyxl
+import threading
+import logging
 from difflib import get_close_matches
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, case, nullslast
 from datetime import datetime, date
-from database import get_db
+from database import get_db, SessionLocal
 import models
 from auth import get_current_user, require_admin
 from email_service import send_observation_email, build_observation_email
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/observations", tags=["observations"])
 
@@ -800,29 +804,47 @@ def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: mod
         db.commit()
 
     # Email notification
-    _send_obs_email(obs, db)
+    threading.Thread(target=_fire_email_async, args=(obs.id,), daemon=True).start()
 
     return {"id": obs.id, "observation_id": obs.observation_id, "risk_factor": factor, "risk_level": level}
 
 
-def _send_obs_email(obs: models.Observation, db: Session):
+def _send_obs_email(obs: models.Observation, db: Session, event: str = "new"):
     smtp = db.query(models.SmtpSettings).first()
     if not smtp or not smtp.enabled:
         return
 
     # TO: all assigned contractors
     to_emails: List[str] = []
+    contractor_names: List[str] = []
     contractor_ids = json.loads(obs.contractor_user_ids) if obs.contractor_user_ids else (
         [obs.contractor_user_id] if obs.contractor_user_id else []
     )
     for cid in contractor_ids:
         u = db.query(models.User).filter(models.User.id == cid).first()
-        if u and u.email and u.email not in to_emails:
-            to_emails.append(u.email)
+        if u:
+            if u.email and u.email not in to_emails:
+                to_emails.append(u.email)
+            if u.name and u.name not in contractor_names:
+                contractor_names.append(u.name)
 
-    # CC: all project members (PIC, EIC, HO, PSO, Observer) + all Admin users
+    # Observation-specific EIC users
+    eic_names: List[str] = []
+    eic_ids = json.loads(obs.eic_user_ids) if obs.eic_user_ids else (
+        [obs.eic_user_id] if obs.eic_user_id else []
+    )
+    eic_cc: List[str] = []
+    for eid in eic_ids:
+        u = db.query(models.User).filter(models.User.id == eid).first()
+        if u:
+            if u.email and u.email not in to_emails and u.email not in eic_cc:
+                eic_cc.append(u.email)
+            if u.name and u.name not in eic_names:
+                eic_names.append(u.name)
+
+    # CC: project-scoped PIC/EIC/HO/PSO/Observer + all Admin/SuperAdmin (global)
     CC_PROJECT_ROLES = {"PIC", "EIC", "HO", "PSO", "Observer"}
-    cc_emails: List[str] = []
+    cc_emails: List[str] = list(eic_cc)
     project_users = (
         db.query(models.User)
         .join(models.UserProject, models.UserProject.user_id == models.User.id)
@@ -844,20 +866,46 @@ def _send_obs_email(obs: models.Observation, db: Session):
         "observation_id": obs.observation_id,
         "project_name": obs.project.name if obs.project else "",
         "obs_date": obs.obs_date or "",
+        "obs_time": obs.obs_time or "",
         "building_name": obs.building.name if obs.building else "",
         "floor_name": obs.floor.name if obs.floor else "",
         "exact_location": obs.exact_location or "",
         "observer_name": obs.observer_name or "",
-        "contractor_name": obs.contractor.name if obs.contractor else "",
+        "created_by_name": obs.creator.name if obs.creator else "",
+        "contractor_names": contractor_names,
+        "eic_names": eic_names,
+        "to_be_rectified_by": obs.to_be_rectified_by or "",
         "core_concern_name": obs.core_concern.name if obs.core_concern else "",
         "specific_concern_name": obs.specific_concern.name if obs.specific_concern else "",
         "specific_concern_text": obs.specific_concern_text or "",
+        "possible_outcome": obs.possible_outcome or "",
+        "severity": obs.severity,
+        "probability": obs.probability,
+        "risk_factor": obs.risk_factor,
         "risk_level": obs.risk_level or "",
+        "root_cause_category_name": obs.root_cause_category.name if obs.root_cause_category else "",
+        "root_cause_specific_name": obs.root_cause_specific.name if obs.root_cause_specific else "",
+        "violation_name": obs.violation.name if obs.violation else "",
         "target_date_name": obs.target_date.name if obs.target_date else "",
+        "target_date_actual": obs.target_date_actual or "",
         "status": obs.status,
+        "event": event,
     }
     subject, html = build_observation_email(obs_data)
     send_observation_email(smtp, to_emails, cc_emails, subject, html)
+
+
+def _fire_email_async(obs_id: int, event: str = "new"):
+    """Send observation email in a background thread so it doesn't block the HTTP response."""
+    db = SessionLocal()
+    try:
+        obs = db.query(models.Observation).filter(models.Observation.id == obs_id).first()
+        if obs:
+            _send_obs_email(obs, db, event=event)
+    except Exception as exc:
+        logger.error("Async email failed for observation %s: %s", obs_id, exc)
+    finally:
+        db.close()
 
 
 @router.put("/{obs_id}")
@@ -905,7 +953,7 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
                     is_read=False,
                 ))
             db.commit()
-        _send_obs_email(obs, db)
+        threading.Thread(target=_fire_email_async, args=(obs.id,), daemon=True).start()
 
     return {"success": True, "risk_factor": factor, "risk_level": level}
 
@@ -926,6 +974,10 @@ def update_status(obs_id: int, body: StatusBody, db: Session = Depends(get_db), 
     if prev_status != 'Closed' and body.status == 'Closed' and obs.closed_at is None:
         obs.closed_at = datetime.now()
     db.commit()
+
+    if prev_status != body.status:
+        threading.Thread(target=_fire_email_async, args=(obs.id, "status_change"), daemon=True).start()
+
     return {"success": True, "status": body.status}
 
 

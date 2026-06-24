@@ -122,7 +122,7 @@ export default function EmailSettingsTab() {
   }
 
   return (
-    <div className="space-y-5">
+    <form onSubmit={e => e.preventDefault()} autoComplete="off" className="space-y-5">
 
       {/* Page header + enable toggle — full width */}
       <div className="flex items-center justify-between bg-white rounded-xl border border-gray-200 px-6 py-5">
@@ -324,6 +324,7 @@ export default function EmailSettingsTab() {
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={save}
               disabled={saving}
               className="btn-primary flex items-center gap-2"
@@ -332,17 +333,15 @@ export default function EmailSettingsTab() {
               {saving ? 'Saving…' : 'Save Settings'}
             </button>
             <button
+              type="button"
               onClick={testEmail}
-              disabled={testing || !form.enabled}
+              disabled={testing}
               className="btn-secondary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={!form.enabled ? 'Enable notifications first to send a test' : 'Send a test email to verify your configuration'}
+              title="Send a test email to verify your SMTP configuration"
             >
               <Send className="w-4 h-4" />
               {testing ? 'Sending…' : 'Send Test Email'}
             </button>
-            {!form.enabled && (
-              <span className="text-xs text-gray-400 italic">Enable notifications to send a test</span>
-            )}
           </div>
 
           <div className="flex flex-col gap-2 min-w-0">
@@ -370,6 +369,6 @@ export default function EmailSettingsTab() {
         </div>
       </div>
 
-    </div>
+    </form>
   )
 }

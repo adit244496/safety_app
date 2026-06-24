@@ -187,7 +187,8 @@ export default function ObservationForm() {
   }, [probabilityLabels])
   const { data: contractors } = useQuery({
     queryKey: ['contractors', form.project_id],
-    queryFn: () => api.get('/users/contractors', { params: form.project_id ? { project_id: form.project_id } : {} }).then(r => r.data),
+    queryFn: () => api.get('/users/contractors', { params: { project_id: form.project_id } }).then(r => r.data),
+    enabled: !!form.project_id,
     staleTime: 30_000,
   })
 
@@ -534,6 +535,7 @@ export default function ObservationForm() {
             <select
               className="select"
               value={form.contractor_company}
+              disabled={!form.project_id}
               onChange={e => {
                 const name = e.target.value
                 set('contractor_company', name)
@@ -542,7 +544,9 @@ export default function ObservationForm() {
                 set('rectified_by_mobile', '')
               }}
             >
-              <option value="">Select contractor company…</option>
+              <option value="">
+                {form.project_id ? 'Select contractor company…' : 'Select project first…'}
+              </option>
               {contractorCompanies.map((c: any) => (
                 <option key={c.name} value={c.name}>{c.name}</option>
               ))}

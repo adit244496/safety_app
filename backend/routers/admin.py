@@ -3,7 +3,9 @@ from pydantic import BaseModel
 from typing import Optional
 from sqlalchemy.orm import Session
 from database import get_db
-import models, re
+import models, re, smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from auth import get_current_user, require_admin, require_super_admin
 from email_service import send_observation_email
 
@@ -531,14 +533,42 @@ def upsert_probability_label(level: int, body: RiskLabelBody, db: Session = Depe
 @router.post("/smtp-settings/test")
 def test_smtp(db: Session = Depends(get_db), current=Depends(require_admin)):
     s = _get_or_create_smtp(db)
-    test_html = "<p>This is a test email from the Safety Observation System.</p>"
-    ok = send_observation_email(
-        s,
-        to_emails=[current.email],
-        cc_emails=[],
-        subject="[Safety] SMTP Test Email",
-        body_html=test_html,
-    )
-    if not ok:
-        raise HTTPException(400, "Failed to send test email. Check SMTP settings or ensure notifications are enabled.")
+    if not s.smtp_host or not s.smtp_username:
+        raise HTTPException(400, "SMTP settings incomplete — save host and username first.")
+    if not s.smtp_password:
+        raise HTTPException(400, "No password saved — re-enter and save your password, then test again.")
+
+    try:
+        if s.smtp_use_tls:
+            server = smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=15)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+        else:
+            server = smtplib.SMTP_SSL(s.smtp_host, s.smtp_port, timeout=15)
+        server.login(s.smtp_username, s.smtp_password)
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "[Safety] SMTP Test Email"
+        msg["From"] = f"{s.from_name} <{s.from_email}>"
+        msg["To"] = current.email
+        msg.attach(MIMEText(
+            "<p>This is a test email from the Safety Observation System.</p>",
+            "html"
+        ))
+        server.sendmail(s.from_email, [current.email], msg.as_string())
+        server.quit()
+    except smtplib.SMTPAuthenticationError:
+        raise HTTPException(
+            400,
+            "Authentication failed — wrong username or password. "
+            "For Gmail, generate an App Password (Account → Security → 2FA → App Passwords)."
+        )
+    except (smtplib.SMTPConnectError, OSError, TimeoutError):
+        raise HTTPException(400, f"Cannot connect to {s.smtp_host}:{s.smtp_port} — verify host and port.")
+    except smtplib.SMTPException as exc:
+        raise HTTPException(400, f"SMTP error: {exc}")
+    except Exception as exc:
+        raise HTTPException(400, str(exc))
+
     return {"success": True, "sent_to": current.email}
