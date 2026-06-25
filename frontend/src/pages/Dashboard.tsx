@@ -67,20 +67,8 @@ export default function Dashboard() {
   const [coreConcernIds, setCoreConcernIds] = useState<number[]>([])
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
   const [ageingFilter,   setAgeingFilter]   = useState<string[]>([])
-  const [dateFrom, setDateFrom] = useState(() => {
-    const now = new Date(), m = now.getMonth() + 1, y = now.getFullYear()
-    if (m >= 4 && m <= 6)   return `${y}-04-01`
-    if (m >= 7 && m <= 9)   return `${y}-07-01`
-    if (m >= 10 && m <= 12) return `${y}-10-01`
-    return `${y}-01-01`
-  })
-  const [dateTo, setDateTo] = useState(() => {
-    const now = new Date(), m = now.getMonth() + 1, y = now.getFullYear()
-    if (m >= 4 && m <= 6)   return `${y}-06-30`
-    if (m >= 7 && m <= 9)   return `${y}-09-30`
-    if (m >= 10 && m <= 12) return `${y}-12-31`
-    return `${y}-03-31`
-  })
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
 
   const activeFilterCount =
     (projectIds.length    > 0 ? 1 : 0) +

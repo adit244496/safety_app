@@ -847,7 +847,7 @@ def _send_obs_email(obs: models.Observation, db: Session, event: str = "new"):
             if u.name and u.name not in eic_names:
                 eic_names.append(u.name)
 
-    # CC: project-scoped PIC/EIC/HO/PSO/Observer + all Admin/SuperAdmin (global)
+    # CC: project-scoped PIC/EIC/HO/PSO/Observer + Admin/SuperAdmin (project-filtered or global)
     CC_PROJECT_ROLES = {"PIC", "EIC", "HO", "PSO", "Observer"}
     cc_emails: List[str] = list(eic_cc)
     project_users = (
@@ -859,7 +859,17 @@ def _send_obs_email(obs: models.Observation, db: Session, event: str = "new"):
         )
         .all()
     )
-    admin_users = db.query(models.User).filter(models.User.role.in_(["Admin", "SuperAdmin"])).all()
+    # Admin/SuperAdmin: include if they have no project assignments (All Projects)
+    # or if they are assigned to this specific project
+    all_admins = db.query(models.User).filter(models.User.role.in_(["Admin", "SuperAdmin"])).all()
+    admin_project_ids_map = {}
+    for u in all_admins:
+        admin_project_ids_map[u.id] = {up.project_id for up in u.user_projects}
+    admin_users = [
+        u for u in all_admins
+        if not admin_project_ids_map[u.id]  # empty = All Projects
+        or obs.project_id in admin_project_ids_map[u.id]
+    ]
     for u in project_users + admin_users:
         if u.email and u.email not in cc_emails and u.email not in to_emails:
             cc_emails.append(u.email)
