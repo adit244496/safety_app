@@ -812,7 +812,11 @@ def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: mod
 
 def _send_obs_email(obs: models.Observation, db: Session, event: str = "new"):
     smtp = db.query(models.SmtpSettings).first()
-    if not smtp or not smtp.enabled:
+    if not smtp:
+        logger.warning("Email skipped for %s: no SMTP settings row in DB", obs.observation_id)
+        return
+    if not smtp.enabled:
+        logger.warning("Email skipped for %s: SMTP is disabled (enabled=False)", obs.observation_id)
         return
 
     # TO: all assigned contractors
@@ -861,6 +865,7 @@ def _send_obs_email(obs: models.Observation, db: Session, event: str = "new"):
             cc_emails.append(u.email)
 
     if not to_emails and not cc_emails:
+        logger.warning("Email skipped for %s: no recipients found (no contractors/EICs/project users)", obs.observation_id)
         return
 
     obs_data = {

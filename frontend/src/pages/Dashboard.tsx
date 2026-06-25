@@ -18,8 +18,8 @@ import { fmtDate, getRiskClass, getStatusClass } from '../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
 
 const STATUS_COLORS: Record<string, string> = {
-  Open: '#6366f1', Pending: '#f59e0b', 'Under Review': '#3b82f6',
-  'Partially Closed': '#8b5cf6', Closed: '#10b981', 'Positive Approach': '#14b8a6',
+  Open: '#ef4444', Pending: '#f97316', 'Under Review': '#eab308',
+  'Partially Closed': '#86efac', Closed: '#22c55e', 'Positive Approach': '#9ca3af',
 }
 const RISK_COLORS: Record<string, string> = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e' }
 
