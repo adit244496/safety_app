@@ -9,7 +9,7 @@ import {
 } from 'recharts'
 import {
   ClipboardList, AlertTriangle, CheckCircle,
-  TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, Clock, Download,
+  TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, Clock, Download, ThumbsUp,
 } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import { generateDashboardPdf } from '../lib/printPdf'
@@ -19,7 +19,7 @@ import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilte
 
 const STATUS_COLORS: Record<string, string> = {
   Open: '#6366f1', Pending: '#f59e0b', 'Under Review': '#3b82f6',
-  'Partially Closed': '#8b5cf6', Closed: '#10b981',
+  'Partially Closed': '#8b5cf6', Closed: '#10b981', 'Positive Approach': '#14b8a6',
 }
 const RISK_COLORS: Record<string, string> = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e' }
 
@@ -168,7 +168,7 @@ export default function Dashboard() {
   data?.byStatus?.forEach((s: any) => { statusCounts[s.status] = s.count })
   const statusPie     = data?.byStatus?.map((s: any) => ({ name: s.status, value: s.count })) || []
   const riskBars      = (data?.byRisk  || []).filter((r: any) => r.risk_level)
-  const STATUSES_LIST = ['Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed'] as const
+  const STATUSES_LIST = ['Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach'] as const
   const MONTHS_SHORT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
   const monthData = ((data?.byMonthStatus || []) as any[]).map((d: any) => ({
@@ -204,6 +204,7 @@ export default function Dashboard() {
     { label: 'Pending',            value: statusCounts['Pending'] ?? 0,              icon: Hourglass,     bg: 'bg-amber-50',   color: 'text-amber-600',   border: 'border-amber-100'   },
     { label: 'Partially Closed',   value: statusCounts['Partially Closed'] ?? 0,     icon: Clock,         bg: 'bg-violet-50',  color: 'text-violet-600',  border: 'border-violet-100'  },
     { label: 'Closed',             value: statusCounts['Closed'] ?? 0,               icon: CheckCircle,   bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-100' },
+    { label: 'Positive Approach',  value: statusCounts['Positive Approach'] ?? 0,     icon: ThumbsUp,      bg: 'bg-teal-50',    color: 'text-teal-600',    border: 'border-teal-100'    },
   ]
 
   const resetFilters = () => {
@@ -239,7 +240,7 @@ export default function Dashboard() {
       row.height = 20
     }
 
-    // Sheet 1 – Summary KPIs
+    // Sheet 1 – Summary KPIs (exclude totalPositive from separate card row duplication)
     const ws1 = wb.addWorksheet('Summary')
     ws1.columns = [{ width: 24 }, { width: 12 }]
     addHeaderRow(ws1, ['Metric', 'Count'], 'FF4F46E5')
@@ -251,13 +252,14 @@ export default function Dashboard() {
 
     // Sheet 2 – Trend
     const ws2 = wb.addWorksheet(viewMode === 'quarterly' ? 'Quarterly Trend' : 'Monthly Trend')
-    const trendCols = ['Period', 'Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed', 'Total']
+    const trendCols = ['Period', 'Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach', 'Total']
     ws2.columns = trendCols.map((h, i) => ({ header: h, width: i === 0 ? 16 : 14 }))
     addHeaderRow(ws2, trendCols, 'FF4F46E5')
     trendData.forEach((d: any, i) => {
-      const row = ws2.addRow([d.month, d.Open || 0, d.Pending || 0, d['Under Review'] || 0, d['Partially Closed'] || 0, d.Closed || 0, d._total || 0])
+      const row = ws2.addRow([d.month, d.Open || 0, d.Pending || 0, d['Under Review'] || 0, d['Partially Closed'] || 0, d.Closed || 0, d['Positive Approach'] || 0, d._total || 0])
       row.eachCell(cell => { cell.fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF') })
-      row.getCell(7).font = { bold: true }
+      row.getCell(6).font = { color: { argb: 'FF0D9488' } }
+      row.getCell(8).font = { bold: true }
     })
 
     // Sheet 3 – By Status
@@ -698,7 +700,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {cards.map(({ label, value, icon: Icon, bg, color, border }) => (
               <div key={label} className={`stat-card border ${border}`}>
                 <div className={`${bg} ${color} p-3 rounded-xl flex-shrink-0`}>
@@ -761,9 +763,7 @@ export default function Dashboard() {
                       axisLine={false}
                       tickLine={false}
                       tickFormatter={(v: string) => {
-                        // quarterly keys are already "Q1 2026" — pass through
                         if (v.startsWith('Q')) return v
-                        // monthly keys are "YYYY-MM" — convert to "Feb '26"
                         const [yr, mo] = v.split('-')
                         if (!mo) return v
                         return `${MONTHS_SHORT[parseInt(mo, 10) - 1]} '${yr.slice(2)}`
@@ -802,14 +802,12 @@ export default function Dashboard() {
                         maxBarSize={52}
                         radius={idx === STATUSES_LIST.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]}
                       >
-                        {/* Label inside each segment — only shown when value > 0 */}
                         <LabelList
                           dataKey={s}
                           position="inside"
                           formatter={(v: unknown) => (v as number) > 0 ? (v as number) : ''}
                           style={{ fontSize: 9, fontWeight: 700, fill: '#fff' }}
                         />
-                        {/* Total above bar on the topmost segment */}
                         {idx === STATUSES_LIST.length - 1 && (
                           <LabelList
                             dataKey="_total"

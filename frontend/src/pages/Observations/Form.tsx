@@ -304,14 +304,17 @@ export default function ObservationForm() {
       const missing: string[] = []
       if (!form.building_id)                    missing.push('Building / Tower')
       if (!form.floor_id)                       missing.push('Floor')
-      if (!form.contractor_company)             missing.push('Contractor')
-      if (!form.contractor_user_ids.length)     missing.push('To Be Rectified By')
       if (!form.core_concern_id)                missing.push('Core Concern')
-      if (!form.specific_concern_id)  missing.push('Specific Concern')
-      if (!form.violation_id)         missing.push('Violation Caused Due To')
-      if (!form.target_date_actual)    missing.push('Target Date for Rectification')
-      if (!form.severity)             missing.push('Severity')
-      if (!form.probability)          missing.push('Probability')
+      if (!form.specific_concern_id)            missing.push('Specific Concern')
+      if (!form.severity)                       missing.push('Severity')
+      if (!form.probability)                    missing.push('Probability')
+      if (form.status !== 'Positive Approach') {
+        // Rectification fields only required for non-positive (unsafe) observations
+        if (!form.contractor_company)           missing.push('Contractor')
+        if (!form.contractor_user_ids.length)   missing.push('To Be Rectified By')
+        if (!form.violation_id)                 missing.push('Violation Caused Due To')
+        if (!form.target_date_actual)           missing.push('Target Date for Rectification')
+      }
       if (missing.length > 0) {
         setError(`Please fill in the following required fields: ${missing.join(', ')}`)
         return
@@ -443,6 +446,36 @@ export default function ObservationForm() {
           <AlertTriangle className="w-4 h-4 flex-shrink-0" /> {error}
         </div>
       )}
+
+      {/* ── Observation Type ─────────────────────── */}
+      {(() => {
+        const isPositive = form.status === 'Positive Approach'
+        return (
+          <div
+            className={`flex items-center justify-between gap-4 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
+              isPositive ? 'bg-teal-50 border-teal-300' : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+            }`}
+            onClick={() => set('status', isPositive ? 'Open' : 'Positive Approach')}
+          >
+            <div className="flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isPositive ? 'bg-teal-500' : 'bg-gray-200'}`}>
+                <CheckCircle2 className={`w-4 h-4 ${isPositive ? 'text-white' : 'text-gray-400'}`} />
+              </div>
+              <div>
+                <p className={`text-sm font-semibold ${isPositive ? 'text-teal-800' : 'text-gray-700'}`}>
+                  Positive Approach
+                </p>
+                <p className={`text-xs ${isPositive ? 'text-teal-600' : 'text-gray-400'}`}>
+                  {isPositive ? 'Good practice observed — no rectification required' : 'Toggle on if this is a good practice / safe behaviour observation'}
+                </p>
+              </div>
+            </div>
+            <div className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${isPositive ? 'bg-teal-500' : 'bg-gray-300'}`}>
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${isPositive ? 'translate-x-6' : 'translate-x-1'}`} />
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Photos ───────────────────────────────── */}
       <SectionCard title="Photos" icon={<ImagePlus className="w-3.5 h-3.5" />}>

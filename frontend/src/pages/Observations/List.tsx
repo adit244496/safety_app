@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { usePageTitle } from '../../store/pageTitleContext'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, ChevronRight, ChevronDown, SlidersHorizontal, X, MessageSquare, PencilLine, Trash2 } from 'lucide-react'
 import api from '../../lib/api'
 import { fmtDate, getStatusClass, getRiskClass, STATUSES } from '../../lib/utils'
@@ -42,10 +42,11 @@ function ageingClass(days: number | null): string {
 
 export default function ObservationsList() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
   const qc = useQueryClient()
   const isContractor = user?.role === 'Contractor'
-  const canCreate = ['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer'].includes(user?.role || '')
+  const canCreate = user?.role !== 'Contractor'
   const [showFilters, setShowFilters] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState<number | null>(null)
 
@@ -68,7 +69,8 @@ export default function ObservationsList() {
   const [ageingFilter,       setAgeingFilter]       = useState<string[]>([])
   const [dateFrom,           setDateFrom]           = useState('')
   const [dateTo,             setDateTo]             = useState('')
-  const [page,               setPage]               = useState(1)
+  const page = parseInt(searchParams.get('page') || '1', 10)
+  const setPage = (p: number) => setSearchParams(prev => { prev.set('page', String(p)); return new URLSearchParams(prev) }, { replace: true })
 
   const activeCount =
     (statuses.length          > 0 ? 1 : 0) +

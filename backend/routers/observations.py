@@ -307,15 +307,16 @@ def stats(
         .order_by(month_expr)
         .all()
     )
-    # Pivot into { month, Open, Pending, Under Review, Partially Closed, Closed }
+    # Pivot into { month, Open, Pending, Under Review, Partially Closed, Closed, Positive Approach }
     month_status_map: dict = {}
     for m, s, c in by_month_status_rows:
         if not m:
             continue
         if m not in month_status_map:
-            month_status_map[m] = {"month": m, "Open": 0, "Pending": 0, "Under Review": 0, "Partially Closed": 0, "Closed": 0}
+            month_status_map[m] = {"month": m, "Open": 0, "Pending": 0, "Under Review": 0, "Partially Closed": 0, "Closed": 0, "Positive Approach": 0}
         if s in month_status_map[m]:
             month_status_map[m][s] = c
+
     by_month_status = sorted(month_status_map.values(), key=lambda x: x["month"])
 
     return {
@@ -747,7 +748,7 @@ def get_observation(obs_id: str, db: Session = Depends(get_db), user: models.Use
 
 @router.post("/", status_code=201)
 def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
-    if user.role not in ("SuperAdmin", "Admin", "HO", "PSO", "Observer"):
+    if user.role == "Contractor":
         raise HTTPException(status_code=403, detail="Your role cannot create observations")
     factor, level = calc_risk(body.severity or 1, body.probability or 1)
     obs_id = generate_obs_id(db, body.project_id)
@@ -986,7 +987,7 @@ def add_comment(obs_id: int, body: CommentBody, db: Session = Depends(get_db), u
     obs = db.query(models.Observation).filter(models.Observation.id == obs_id).first()
     if not obs:
         raise HTTPException(404)
-    _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'])
+    _assert_obs_access(obs, user)  # all authenticated users with project access may comment
     c = models.ObservationComment(observation_id=obs_id, user_id=user.id, comment=body.comment)
     db.add(c)
     obs.updated_at = datetime.now()

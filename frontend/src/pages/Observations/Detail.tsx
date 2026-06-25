@@ -498,8 +498,8 @@ export default function ObservationDetail() {
   if (!obs) return <div className="text-center text-gray-500 py-12">Observation not found</div>
 
   const canEdit      = ['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer'].includes(user?.role || '')
-  const canUpload    = ['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer', 'Contractor'].includes(user?.role || '')
-  const canComment   = ['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer', 'Contractor'].includes(user?.role || '')
+  const canUpload    = user?.role !== undefined && user.role !== ''
+  const canComment   = !!user?.role
   const isContractor = user?.role === 'Contractor'
   const canDiscard   = user?.role === 'SuperAdmin' || (obs.status === 'Draft' && obs.created_by === user?.id)
 
@@ -813,7 +813,7 @@ export default function ObservationDetail() {
                     value={newStatus}
                     onChange={e => setNewStatus(e.target.value)}
                   >
-                    {['Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed'].map(s => (
+                    {['Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach'].map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
