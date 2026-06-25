@@ -284,53 +284,48 @@ ROOT_CAUSES = [
 
 
 def seed_data(db: Session):
-    if db.query(models.User).filter_by(email="admin@safety.com").first():
-        return
+    # Seed lookup data only if the categories table is empty
+    if not db.query(models.Category).first():
+        cat_map = {}
+        for i, name in enumerate(CATEGORIES):
+            cat = models.Category(name=name, sort_order=i)
+            db.add(cat)
+            db.flush()
+            cat_map[name] = cat.id
 
-    # Admin user
-    admin = models.User(
-        name="Administrator",
-        email="admin@safety.com",
-        password_hash=hash_password("Admin@123"),
-        role="Admin",
-    )
-    db.add(admin)
+        for i, (cat_name, cc_name, specifics) in enumerate(CORE_CONCERNS):
+            cc = models.CoreConcern(name=cc_name, category_id=cat_map.get(cat_name), sort_order=i)
+            db.add(cc)
+            db.flush()
+            for sc_name in specifics:
+                db.add(models.SpecificConcern(name=sc_name, core_concern_id=cc.id))
 
-    # Categories
-    cat_map = {}
-    for i, name in enumerate(CATEGORIES):
-        cat = models.Category(name=name, sort_order=i)
-        db.add(cat)
-        db.flush()
-        cat_map[name] = cat.id
+        for name in POSSIBLE_OUTCOMES:
+            db.add(models.PossibleOutcome(name=name))
 
-    # Core concerns + specific concerns
-    for i, (cat_name, cc_name, specifics) in enumerate(CORE_CONCERNS):
-        cc = models.CoreConcern(name=cc_name, category_id=cat_map.get(cat_name), sort_order=i)
-        db.add(cc)
-        db.flush()
-        for sc_name in specifics:
-            db.add(models.SpecificConcern(name=sc_name, core_concern_id=cc.id))
+        for sort_order, name in TARGET_DATES:
+            db.add(models.TargetDate(name=name, sort_order=sort_order))
 
-    # Possible outcomes
-    for name in POSSIBLE_OUTCOMES:
-        db.add(models.PossibleOutcome(name=name))
+        for name in VIOLATIONS:
+            db.add(models.Violation(name=name))
 
-    # Target dates
-    for sort_order, name in TARGET_DATES:
-        db.add(models.TargetDate(name=name, sort_order=sort_order))
+        for cat_name, specifics in ROOT_CAUSES:
+            rcc = models.RootCauseCategory(name=cat_name)
+            db.add(rcc)
+            db.flush()
+            for name in specifics:
+                db.add(models.RootCauseSpecific(name=name, root_cause_category_id=rcc.id))
 
-    # Violations
-    for name in VIOLATIONS:
-        db.add(models.Violation(name=name))
+        db.commit()
+        print("Lookup data seeded successfully.")
 
-    # Root causes
-    for cat_name, specifics in ROOT_CAUSES:
-        rcc = models.RootCauseCategory(name=cat_name)
-        db.add(rcc)
-        db.flush()
-        for name in specifics:
-            db.add(models.RootCauseSpecific(name=name, root_cause_category_id=rcc.id))
-
-    db.commit()
-    print("Database seeded successfully.")
+    # Create default admin user if not present (independent of lookup data)
+    if not db.query(models.User).filter_by(email="admin@safety.com").first():
+        db.add(models.User(
+            name="Administrator",
+            email="admin@safety.com",
+            password_hash=hash_password("Admin@123"),
+            role="Admin",
+        ))
+        db.commit()
+        print("Default admin user created.")
