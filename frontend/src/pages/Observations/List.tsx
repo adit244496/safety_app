@@ -501,8 +501,8 @@ export default function ObservationsList() {
               <span className="ml-2 text-gray-400">({total})</span>
             </span>
             <div className="flex gap-1.5">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn btn-secondary btn-sm">← Prev</button>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="btn btn-secondary btn-sm">Next →</button>
+              <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1} className="btn btn-secondary btn-sm">← Prev</button>
+              <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page === totalPages} className="btn btn-secondary btn-sm">Next →</button>
             </div>
           </div>
         )}
