@@ -316,7 +316,7 @@ def stats(
         if not m:
             continue
         if m not in month_status_map:
-            month_status_map[m] = {"month": m, "Open": 0, "Overdue": 0, "Under Review": 0, "Partially Closed": 0, "Closed": 0, "Positive Approach": 0}
+            month_status_map[m] = {"month": m, "Open": 0, "Overdue": 0, "Under Review": 0, "Partially Closed": 0, "Closed": 0, "Positive Approach": 0, "Unresolved & Closed": 0}
         if s in month_status_map[m]:
             month_status_map[m][s] = c
 

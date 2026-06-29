@@ -813,7 +813,7 @@ export default function ObservationDetail() {
                     value={newStatus}
                     onChange={e => setNewStatus(e.target.value)}
                   >
-                    {['Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach'].map(s => (
+                    {['Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach', 'Unresolved & Closed'].map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>

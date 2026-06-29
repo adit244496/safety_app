@@ -268,6 +268,7 @@ export default function UsersTab() {
   const [error, setError] = useState('')
   const [filterRoles, setFilterRoles] = useState<string[]>([])
   const [filterProjects, setFilterProjects] = useState<string[]>([])
+  const [filterEmails, setFilterEmails] = useState<string[]>([])
   const [uploadOpen, setUploadOpen] = useState(false)
 
   const { data: users, isLoading } = useQuery({
@@ -287,11 +288,13 @@ export default function UsersTab() {
       const userProjectIds = (u.projects || []).map((p: any) => String(p.id))
       if (!filterProjects.some(pid => userProjectIds.includes(pid))) return false
     }
+    if (filterEmails.length > 0 && !filterEmails.includes(u.email)) return false
     return true
   })
 
   const roleOptions = ROLES.map(r => ({ value: r, label: r }))
   const projectOptions = (projects || []).map((p: any) => ({ value: String(p.id), label: p.name }))
+  const emailOptions = (users || []).map((u: any) => ({ value: u.email, label: u.email }))
 
   const openCreate = () => { setForm(EMPTY); setError(''); setModal({ open: true }) }
   const openEdit = (u: any) => {
@@ -352,6 +355,12 @@ export default function UsersTab() {
             options={projectOptions}
             selected={filterProjects}
             onChange={setFilterProjects}
+          />
+          <FilterDropdown
+            label="Email"
+            options={emailOptions}
+            selected={filterEmails}
+            onChange={setFilterEmails}
           />
           <button onClick={() => setUploadOpen(true)} className="btn-secondary">
             <FileSpreadsheet className="w-4 h-4" /> Upload Excel

@@ -16,6 +16,7 @@ export const getStatusClass = (status?: string) => {
     case 'Closed': return 'badge-closed'
     case 'Draft': return 'badge-draft'
     case 'Positive Approach': return 'badge bg-teal-100 text-teal-800 border-teal-200'
+    case 'Unresolved & Closed': return 'badge bg-violet-100 text-violet-800 border-violet-200'
     default: return 'badge-gray'
   }
 }
@@ -49,5 +50,5 @@ export const calcRisk = (s: number, p: number) => {
   return { factor: f, level: f <= 4 ? 'Low' : f <= 12 ? 'Medium' : 'High' }
 }
 
-export const STATUSES = ['Draft', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach']
+export const STATUSES = ['Draft', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach', 'Unresolved & Closed']
 export const ROLES = ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Contractor', 'Observer']
