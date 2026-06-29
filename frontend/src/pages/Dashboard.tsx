@@ -37,13 +37,15 @@ const AGEING_FILTER_OPTIONS: MSOption[] = [
 ]
 
 const AGEING_COLORS: Record<string, string> = {
+  positive_approach: '#9ca3af',
   on_time:       '#10b981',
   overdue_1_7:   '#f59e0b',
   overdue_8_30:  '#f97316',
   overdue_30_plus: '#ef4444',
-  no_target:     '#94a3b8',
+  no_target:     '#cbd5e1',
 }
 const AGEING_LABELS: Record<string, string> = {
+  positive_approach: 'Positive Approach',
   on_time:       'On Time',
   overdue_1_7:   'Overdue ≤7d',
   overdue_8_30:  'Overdue 8-30d',
@@ -308,6 +310,7 @@ export default function Dashboard() {
 
     const byAging = data?.byAging || {}
     const agingBuckets = [
+      { key: 'positive_approach', label: 'Positive Approach' },
       { key: 'on_time',        label: 'On Time'          },
       { key: 'overdue_1_7',    label: 'Overdue 1-7 Days' },
       { key: 'overdue_8_30',   label: 'Overdue 8-30 Days'},

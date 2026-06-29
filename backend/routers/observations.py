@@ -260,14 +260,17 @@ def stats(
 
     # Aging breakdown (always computed from base filters, ignoring aging filter for the donut itself)
     aging_rows = (
-        apply_filters(db.query(models.Observation.target_date_actual, models.Observation.closed_at))
+        apply_filters(db.query(models.Observation.target_date_actual, models.Observation.closed_at, models.Observation.status))
         .filter(models.Observation.status != 'Draft')
         .all()
     )
-    aging_buckets: dict = {"no_target": 0, "on_time": 0, "overdue_1_7": 0, "overdue_8_30": 0, "overdue_30_plus": 0}
-    for target_str, closed_at in aging_rows:
-        bucket = _aging_bucket(_days_aging(target_str, closed_at, today))
-        aging_buckets[bucket] = aging_buckets.get(bucket, 0) + 1
+    aging_buckets: dict = {"positive_approach": 0, "no_target": 0, "on_time": 0, "overdue_1_7": 0, "overdue_8_30": 0, "overdue_30_plus": 0}
+    for target_str, closed_at, status in aging_rows:
+        if status == 'Positive Approach':
+            aging_buckets["positive_approach"] += 1
+        else:
+            bucket = _aging_bucket(_days_aging(target_str, closed_at, today))
+            aging_buckets[bucket] = aging_buckets.get(bucket, 0) + 1
 
     by_status = apply_all(
         db.query(models.Observation.status, func.count().label("count"))
