@@ -18,7 +18,7 @@ import { fmtDate, getRiskClass, getStatusClass } from '../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
 
 const STATUS_COLORS: Record<string, string> = {
-  Open: '#ef4444', Pending: '#f97316', 'Under Review': '#eab308',
+  Open: '#ef4444', Overdue: '#f97316', 'Under Review': '#eab308',
   'Partially Closed': '#86efac', Closed: '#22c55e', 'Positive Approach': '#9ca3af',
 }
 const RISK_COLORS: Record<string, string> = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e' }
@@ -49,6 +49,21 @@ const AGEING_LABELS: Record<string, string> = {
   overdue_8_30:  'Overdue 8-30d',
   overdue_30_plus: 'Overdue 30+d',
   no_target:     'No Target Set',
+}
+
+function PieTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null
+  const { name, value } = payload[0]
+  const color = payload[0].payload?.fill || payload[0].fill
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-lg text-xs pointer-events-none">
+      <div className="flex items-center gap-1.5">
+        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
+        <span className="text-gray-700 font-medium">{name}</span>
+        <span className="font-bold text-gray-900 ml-1">{value}</span>
+      </div>
+    </div>
+  )
 }
 
 export default function Dashboard() {
@@ -156,7 +171,7 @@ export default function Dashboard() {
   data?.byStatus?.forEach((s: any) => { statusCounts[s.status] = s.count })
   const statusPie     = data?.byStatus?.map((s: any) => ({ name: s.status, value: s.count })) || []
   const riskBars      = (data?.byRisk  || []).filter((r: any) => r.risk_level)
-  const STATUSES_LIST = ['Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach'] as const
+  const STATUSES_LIST = ['Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach'] as const
   const MONTHS_SHORT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
   const monthData = ((data?.byMonthStatus || []) as any[]).map((d: any) => ({
@@ -189,7 +204,7 @@ export default function Dashboard() {
   const cards = [
     { label: 'Total Observations', value: data?.total ?? 0,                          icon: ClipboardList, bg: 'bg-indigo-50',  color: 'text-indigo-600',  border: 'border-indigo-100'  },
     { label: 'Open',               value: statusCounts['Open'] ?? 0,                 icon: AlertTriangle, bg: 'bg-rose-50',    color: 'text-rose-600',    border: 'border-rose-100'    },
-    { label: 'Pending',            value: statusCounts['Pending'] ?? 0,              icon: Hourglass,     bg: 'bg-amber-50',   color: 'text-amber-600',   border: 'border-amber-100'   },
+    { label: 'Overdue',            value: statusCounts['Overdue'] ?? 0,              icon: Hourglass,     bg: 'bg-amber-50',   color: 'text-amber-600',   border: 'border-amber-100'   },
     { label: 'Partially Closed',   value: statusCounts['Partially Closed'] ?? 0,     icon: Clock,         bg: 'bg-violet-50',  color: 'text-violet-600',  border: 'border-violet-100'  },
     { label: 'Closed',             value: statusCounts['Closed'] ?? 0,               icon: CheckCircle,   bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-100' },
     { label: 'Positive Approach',  value: statusCounts['Positive Approach'] ?? 0,     icon: ThumbsUp,      bg: 'bg-teal-50',    color: 'text-teal-600',    border: 'border-teal-100'    },
@@ -240,11 +255,11 @@ export default function Dashboard() {
 
     // Sheet 2 – Trend
     const ws2 = wb.addWorksheet(viewMode === 'quarterly' ? 'Quarterly Trend' : 'Monthly Trend')
-    const trendCols = ['Period', 'Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach', 'Total']
+    const trendCols = ['Period', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach', 'Total']
     ws2.columns = trendCols.map((h, i) => ({ header: h, width: i === 0 ? 16 : 14 }))
     addHeaderRow(ws2, trendCols, 'FF4F46E5')
     trendData.forEach((d: any, i) => {
-      const row = ws2.addRow([d.month, d.Open || 0, d.Pending || 0, d['Under Review'] || 0, d['Partially Closed'] || 0, d.Closed || 0, d['Positive Approach'] || 0, d._total || 0])
+      const row = ws2.addRow([d.month, d.Open || 0, d.Overdue || 0, d['Under Review'] || 0, d['Partially Closed'] || 0, d.Closed || 0, d['Positive Approach'] || 0, d._total || 0])
       row.eachCell(cell => { cell.fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF') })
       row.getCell(6).font = { color: { argb: 'FF0D9488' } }
       row.getCell(8).font = { bold: true }
@@ -846,7 +861,7 @@ export default function Dashboard() {
                         >
                           {statusPie.map((s: any) => <Cell key={s.name} fill={STATUS_COLORS[s.name] || '#94a3b8'} />)}
                         </Pie>
-                        <Tooltip formatter={(v) => [v, '']} />
+                        <Tooltip content={<PieTooltip />} />
                       </PieChart>
                     </ResponsiveContainer>
                     {/* Total in center hole */}
@@ -921,7 +936,7 @@ export default function Dashboard() {
                                 <Cell key={d.key} fill={AGEING_COLORS[d.key] || '#94a3b8'} />
                               ))}
                             </Pie>
-                            <Tooltip formatter={(v, n) => [v, n]} />
+                            <Tooltip content={<PieTooltip />} />
                           </PieChart>
                         </ResponsiveContainer>
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

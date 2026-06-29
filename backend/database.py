@@ -89,6 +89,13 @@ def _run_migrations():
                     except Exception:
                         conn.rollback()  # clear failed transaction so next stmt can run
 
+        # Rename status: Pending → Overdue
+        try:
+            conn.execute(text("UPDATE observations SET status='Overdue' WHERE status='Pending'"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
 
 def init_db():
     from models import Base as ModelBase

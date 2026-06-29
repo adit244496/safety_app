@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { usePageTitle } from '../../store/pageTitleContext'
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { Plus, ChevronRight, ChevronDown, SlidersHorizontal, X, MessageSquare, PencilLine, Trash2 } from 'lucide-react'
 import api from '../../lib/api'
 import { fmtDate, getStatusClass, getRiskClass, STATUSES } from '../../lib/utils'
@@ -42,13 +42,43 @@ function ageingClass(days: number | null): string {
 
 export default function ObservationsList() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
   const qc = useQueryClient()
   const isContractor = user?.role === 'Contractor'
   const canCreate = user?.role !== 'Contractor'
-  const [showFilters, setShowFilters] = useState(false)
   const [confirmDiscard, setConfirmDiscard] = useState<number | null>(null)
+
+  // All filters read from URL search params
+  const statuses            = searchParams.getAll('status')
+  const projectIds          = searchParams.getAll('project_id').map(Number)
+  const selectedContractors = searchParams.getAll('contractor')
+  const riskLevels          = searchParams.getAll('risk')
+  const coreConcernIds      = searchParams.getAll('core_concern').map(Number)
+  const specificConcernIds  = searchParams.getAll('specific_concern').map(Number)
+  const ageingFilter        = searchParams.getAll('ageing')
+  const dateFrom            = searchParams.get('date_from') || ''
+  const dateTo              = searchParams.get('date_to') || ''
+  const page                = parseInt(searchParams.get('page') || '1', 10)
+
+  // Auto-open filters panel if there are active filter params (e.g. when navigating back)
+  const hasActiveFilters = searchParams.has('status') || searchParams.has('project_id') ||
+    searchParams.has('contractor') || searchParams.has('risk') || searchParams.has('core_concern') ||
+    searchParams.has('specific_concern') || searchParams.has('ageing') ||
+    searchParams.has('date_from') || searchParams.has('date_to')
+  const [showFilters, setShowFilters] = useState(hasActiveFilters)
+
+  // Set contractor's own name as default filter on first load
+  useEffect(() => {
+    if (isContractor && user?.name && !searchParams.has('contractor')) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev)
+        next.append('contractor', user.name!)
+        return next
+      }, { replace: true })
+    }
+  }, [isContractor, user?.name]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const discardDraft = useMutation({
     mutationFn: (id: number) => api.delete(`/observations/${id}`),
@@ -58,30 +88,35 @@ export default function ObservationsList() {
     },
   })
 
-  const [statuses,       setStatuses]       = useState<string[]>([])
-  const [projectIds,     setProjectIds]     = useState<number[]>([])
-  const [selectedContractors, setSelectedContractors] = useState<string[]>(
-    () => isContractor && user?.name ? [user.name] : []
-  )
-  const [riskLevels,     setRiskLevels]     = useState<string[]>([])
-  const [coreConcernIds,    setCoreConcernIds]    = useState<number[]>([])
-  const [specificConcernIds, setSpecificConcernIds] = useState<number[]>([])
-  const [ageingFilter,       setAgeingFilter]       = useState<string[]>([])
-  const [dateFrom,           setDateFrom]           = useState('')
-  const [dateTo,             setDateTo]             = useState('')
-  const page = parseInt(searchParams.get('page') || '1', 10)
-  const setPage = (p: number) => setSearchParams(prev => { prev.set('page', String(p)); return new URLSearchParams(prev) }, { replace: true })
+  // Update one or more filter params at once, resetting page to 1
+  const updateFilter = (updates: Record<string, string[]>, resetPage = true) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev)
+      if (resetPage) next.set('page', '1')
+      for (const [key, values] of Object.entries(updates)) {
+        next.delete(key)
+        values.forEach(v => next.append(key, v))
+      }
+      return next
+    }, { replace: true })
+  }
+
+  const setPage = (p: number) => setSearchParams(prev => {
+    const next = new URLSearchParams(prev)
+    next.set('page', String(p))
+    return next
+  }, { replace: true })
 
   const activeCount =
-    (statuses.length          > 0 ? 1 : 0) +
-    (projectIds.length        > 0 ? 1 : 0) +
+    (statuses.length > 0 ? 1 : 0) +
+    (projectIds.length > 0 ? 1 : 0) +
     (!isContractor && selectedContractors.length > 0 ? 1 : 0) +
-    (riskLevels.length        > 0 ? 1 : 0) +
-    (coreConcernIds.length    > 0 ? 1 : 0) +
+    (riskLevels.length > 0 ? 1 : 0) +
+    (coreConcernIds.length > 0 ? 1 : 0) +
     (specificConcernIds.length > 0 ? 1 : 0) +
-    (ageingFilter.length      > 0 ? 1 : 0) +
-    (dateFrom                 ? 1 : 0) +
-    (dateTo                   ? 1 : 0)
+    (ageingFilter.length > 0 ? 1 : 0) +
+    (dateFrom ? 1 : 0) +
+    (dateTo ? 1 : 0)
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ['observations', statuses, projectIds, selectedContractors, riskLevels, coreConcernIds, specificConcernIds, dateFrom, dateTo, page],
@@ -123,6 +158,7 @@ export default function ObservationsList() {
     queryFn: () => api.get('/admin/specific-concerns').then(r => r.data),
     ...STABLE,
   })
+
   // Cascading: contractor options narrowed by selected projects
   const contractorOptions: MSOption[] = useMemo(() => {
     const seen = new Set<string>()
@@ -160,7 +196,7 @@ export default function ObservationsList() {
       .map((p: any) => ({ value: p.id, label: p.name })),
     [projects, contractorProjectIds]
   )
-  const coreConcernOptions: MSOption[] = (concerns  || []).map((c: any) => ({ value: c.id, label: c.name }))
+  const coreConcernOptions: MSOption[] = (concerns || []).map((c: any) => ({ value: c.id, label: c.name }))
   const filteredSpecificConcerns = useMemo(() => {
     const all: any[] = allSpecificConcerns || []
     if (coreConcernIds.length === 0) return all
@@ -174,11 +210,13 @@ export default function ObservationsList() {
   usePageTitle('Observations', `${total} total observation${total !== 1 ? 's' : ''}`)
 
   const clearFilters = () => {
-    setStatuses([]); setProjectIds([])
-    if (!isContractor) setSelectedContractors([])
-    setRiskLevels([]); setCoreConcernIds([]); setSpecificConcernIds([]); setAgeingFilter([]); setDateFrom(''); setDateTo(''); setPage(1)
+    setSearchParams(prev => {
+      const next = new URLSearchParams()
+      next.set('page', '1')
+      if (isContractor && user?.name) next.append('contractor', user.name)
+      return next
+    }, { replace: true })
   }
-  const resetPage = () => setPage(1)
 
   const visibleObs = useMemo(() => {
     if (ageingFilter.length === 0) return obs
@@ -228,17 +266,18 @@ export default function ObservationsList() {
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
 
           <MultiSelectFilter size="sm" options={STATUS_OPTIONS} value={statuses}
-            onChange={v => { setStatuses(v as string[]); resetPage() }}
+            onChange={v => updateFilter({ status: v as string[] })}
             placeholder="Status" className="w-full sm:w-auto sm:min-w-[110px]" />
 
           <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
             onChange={v => {
               const ids = v as number[]
-              setProjectIds(ids); resetPage()
+              const updates: Record<string, string[]> = { project_id: ids.map(String) }
               if (ids.length > 0) {
-                const valid = new Set(contractors.filter((c: any) => (c.projects || []).some((p: any) => ids.includes(p.id))).map((c: any) => c.name))
-                setSelectedContractors(prev => prev.filter(n => valid.has(n)))
+                const validNames = new Set(contractors.filter((c: any) => (c.projects || []).some((p: any) => ids.includes(p.id))).map((c: any) => c.name))
+                updates.contractor = selectedContractors.filter(n => validNames.has(n))
               }
+              updateFilter(updates)
             }}
             placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
 
@@ -250,39 +289,40 @@ export default function ObservationsList() {
             <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
               onChange={v => {
                 const names = v as string[]
-                setSelectedContractors(names); resetPage()
+                const updates: Record<string, string[]> = { contractor: names }
                 if (names.length > 0) {
                   const valid = new Set<number>()
                   contractors.filter((c: any) => names.includes(c.name)).forEach((c: any) => (c.projects || []).forEach((p: any) => valid.add(p.id)))
-                  setProjectIds(prev => prev.filter(id => valid.has(id)))
+                  updates.project_id = projectIds.filter(id => valid.has(id)).map(String)
                 }
+                updateFilter(updates)
               }}
               placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
           )}
 
           <MultiSelectFilter size="sm" options={RISK_OPTIONS} value={riskLevels}
-            onChange={v => { setRiskLevels(v as string[]); resetPage() }}
+            onChange={v => updateFilter({ risk: v as string[] })}
             placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
 
           <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}
-            onChange={v => { setCoreConcernIds(v as number[]); setSpecificConcernIds([]); resetPage() }}
+            onChange={v => updateFilter({ core_concern: (v as number[]).map(String), specific_concern: [] })}
             placeholder="Core Concern" className="w-full sm:w-auto sm:min-w-[130px]" />
 
           <MultiSelectFilter size="sm" options={specificConcernOptions} value={specificConcernIds}
-            onChange={v => { setSpecificConcernIds(v as number[]); resetPage() }}
+            onChange={v => updateFilter({ specific_concern: (v as number[]).map(String) })}
             placeholder="Specific Concern" className="w-full sm:w-auto sm:min-w-[150px]" />
 
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input
               type="date" value={dateFrom}
-              onChange={e => { setDateFrom(e.target.value); resetPage() }}
+              onChange={e => updateFilter({ date_from: e.target.value ? [e.target.value] : [] })}
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
               title="Date from"
             />
             <span className="text-gray-300 text-xs flex-shrink-0">–</span>
             <input
               type="date" value={dateTo}
-              onChange={e => { setDateTo(e.target.value); resetPage() }}
+              onChange={e => updateFilter({ date_to: e.target.value ? [e.target.value] : [] })}
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
               title="Date to"
             />
@@ -297,7 +337,7 @@ export default function ObservationsList() {
             </button>
           )}
           <MultiSelectFilter size="sm" options={AGEING_OPTIONS} value={ageingFilter}
-            onChange={v => { setAgeingFilter(v as string[]); resetPage() }}
+            onChange={v => updateFilter({ ageing: v as string[] })}
             placeholder="Ageing" className="w-full sm:w-auto sm:min-w-[140px]" />
 
         </div>
@@ -335,7 +375,7 @@ export default function ObservationsList() {
               <div
                 key={o.id}
                 className={`p-4 cursor-pointer active:bg-indigo-50/50 transition-colors ${o.status === 'Draft' ? 'bg-red-50 border-l-4 border-red-400' : ''}`}
-                onClick={() => navigate(`/observations/${o.observation_id}`)}
+                onClick={() => navigate(`/observations/${o.observation_id}`, { state: { from: location.pathname + location.search } })}
               >
                 <div className="flex items-start justify-between gap-2 mb-1.5">
                   <div className="flex items-center gap-1.5 flex-wrap">
@@ -416,7 +456,7 @@ export default function ObservationsList() {
                   <tr
                     key={o.id}
                     className={`tr cursor-pointer ${o.status === 'Draft' ? 'bg-red-50 hover:bg-red-100 shadow-[inset_3px_0_0_#ef4444]' : ''}`}
-                    onClick={() => navigate(`/observations/${o.observation_id}`)}
+                    onClick={() => navigate(`/observations/${o.observation_id}`, { state: { from: location.pathname + location.search } })}
                   >
                     <td className="td">
                       <div className="flex items-center gap-1.5">

@@ -10,7 +10,7 @@ export const getRiskClass = (level?: string) => {
 export const getStatusClass = (status?: string) => {
   switch (status) {
     case 'Open': return 'badge-open'
-    case 'Pending': return 'badge-pending'
+    case 'Overdue': return 'badge-pending'
     case 'Under Review': return 'badge-review'
     case 'Partially Closed': return 'badge-partial'
     case 'Closed': return 'badge-closed'
@@ -49,5 +49,5 @@ export const calcRisk = (s: number, p: number) => {
   return { factor: f, level: f <= 4 ? 'Low' : f <= 12 ? 'Medium' : 'High' }
 }
 
-export const STATUSES = ['Draft', 'Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach']
+export const STATUSES = ['Draft', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach']
 export const ROLES = ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Contractor', 'Observer']

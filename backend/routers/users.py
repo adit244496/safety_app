@@ -75,15 +75,24 @@ def list_eic_users(
     db: Session = Depends(get_db),
     _user: models.User = Depends(get_current_user),
 ):
-    """Return EIC users assigned to the given project(s)."""
+    """Return EIC users assigned to the given project(s), including those with All Projects access."""
     q = db.query(models.User).filter(models.User.role.in_(EIC_ROLES))
     if project_id:
-        assigned_to_project = (
+        # EICs explicitly assigned to the project
+        assigned_ids = (
             db.query(models.UserProject.user_id)
             .filter(models.UserProject.project_id.in_(project_id))
             .distinct()
         )
-        q = q.filter(models.User.id.in_(assigned_to_project))
+        # EICs with no project assignments at all = "All Projects" access
+        all_project_ids = (
+            db.query(models.User.id)
+            .filter(
+                models.User.role.in_(EIC_ROLES),
+                ~models.User.id.in_(db.query(models.UserProject.user_id).distinct()),
+            )
+        )
+        q = q.filter(models.User.id.in_(assigned_ids) | models.User.id.in_(all_project_ids))
     return [
         {"id": u.id, "name": u.name, "role": u.role}
         for u in q.order_by(models.User.name).all()

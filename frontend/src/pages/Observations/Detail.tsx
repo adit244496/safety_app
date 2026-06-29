@@ -565,7 +565,7 @@ export default function ObservationDetail() {
       {/* ── Page header ── */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3">
-          <button onClick={() => navigate(-1)} className="btn-ghost btn-sm flex-shrink-0 mt-0.5">
+          <button onClick={() => navigate((location.state as any)?.from || '/observations')} className="btn-ghost btn-sm flex-shrink-0 mt-0.5">
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
@@ -813,7 +813,7 @@ export default function ObservationDetail() {
                     value={newStatus}
                     onChange={e => setNewStatus(e.target.value)}
                   >
-                    {['Open', 'Pending', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach'].map(s => (
+                    {['Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach'].map(s => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
