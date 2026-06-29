@@ -85,7 +85,7 @@
 select, input, textarea { scroll-margin: 0; }
 
 /* ── Stat card hover glow ────────────────────────── */
-.stat-card { @apply card-sm flex items-center gap-4 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5; }
+.stat-card { @apply card-xs flex items-center gap-3 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5; }
 
 /* ── Section heading ─────────────────────────────── */
 .section-title { @apply text-base font-semibold text-gray-900 mb-4 pb-3 border-b border-gray-100 flex items-center gap-2; }

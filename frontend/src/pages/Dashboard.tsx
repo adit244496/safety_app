@@ -710,11 +710,11 @@ export default function Dashboard() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
             {cards.map(({ label, value, icon: Icon, bg, color, border }) => (
               <div key={label} className={`stat-card border ${border}`}>
-                <div className={`${bg} ${color} p-3 rounded-xl flex-shrink-0`}>
-                  <Icon className="w-5 h-5" />
+                <div className={`${bg} ${color} p-2 rounded-lg flex-shrink-0`}>
+                  <Icon className="w-4 h-4" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-gray-900">{value}</p>
+                  <p className="text-xl font-bold text-gray-900">{value}</p>
                   <p className="text-xs text-gray-500 mt-0.5 leading-tight">{label}</p>
                 </div>
               </div>
