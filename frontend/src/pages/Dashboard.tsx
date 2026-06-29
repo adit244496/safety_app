@@ -707,7 +707,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
             {cards.map(({ label, value, icon: Icon, bg, color, border }) => (
               <div key={label} className={`stat-card border ${border}`}>
                 <div className={`${bg} ${color} p-2 rounded-lg flex-shrink-0`}>
