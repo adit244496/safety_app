@@ -210,7 +210,7 @@ export default function ObservationsList() {
   usePageTitle('Observations', `${total} total observation${total !== 1 ? 's' : ''}`)
 
   const clearFilters = () => {
-    setSearchParams(prev => {
+    setSearchParams(() => {
       const next = new URLSearchParams()
       next.set('page', '1')
       if (isContractor && user?.name) next.append('contractor', user.name)
