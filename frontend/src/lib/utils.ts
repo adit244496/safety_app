@@ -15,7 +15,7 @@ export const getStatusClass = (status?: string) => {
     case 'Partially Closed': return 'badge-partial'
     case 'Closed': return 'badge-closed'
     case 'Draft': return 'badge-draft'
-    case 'Positive Approach': return 'badge bg-teal-100 text-teal-800 border-teal-200'
+    case 'Positive Approach': return 'badge bg-amber-100 text-[#8a6d1a] border-amber-200'
     case 'Unresolved & Closed': return 'badge bg-violet-100 text-violet-800 border-violet-200'
     default: return 'badge-gray'
   }

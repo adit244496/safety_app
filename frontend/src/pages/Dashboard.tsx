@@ -19,9 +19,13 @@ import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilte
 
 const STATUS_COLORS: Record<string, string> = {
   Open: '#ef4444', Overdue: '#f97316', 'Under Review': '#eab308',
-  'Partially Closed': '#86efac', Closed: '#22c55e', 'Positive Approach': '#9ca3af', 'Unresolved & Closed': '#7c3aed',
+  'Partially Closed': '#86efac', Closed: '#22c55e', 'Positive Approach': '#D4AF37', 'Unresolved & Closed': '#7c3aed',
 }
 const RISK_COLORS: Record<string, string> = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e' }
+
+// "Positive Approach" is displayed as "Good Observation" on the dashboard; the backend value is unchanged.
+const STATUS_DISPLAY: Record<string, string> = { 'Positive Approach': 'Good Observation' }
+const displayStatus = (s: string) => STATUS_DISPLAY[s] || s
 
 const PRIORITY_OPTIONS: MSOption[] = [
   { value: 'High',   label: 'High'   },
@@ -37,7 +41,7 @@ const AGEING_FILTER_OPTIONS: MSOption[] = [
 ]
 
 const AGEING_COLORS: Record<string, string> = {
-  positive_approach: '#9ca3af',
+  positive_approach: '#D4AF37',
   on_time:       '#10b981',
   overdue_1_7:   '#f59e0b',
   overdue_8_30:  '#f97316',
@@ -45,7 +49,7 @@ const AGEING_COLORS: Record<string, string> = {
   no_target:     '#cbd5e1',
 }
 const AGEING_LABELS: Record<string, string> = {
-  positive_approach: 'Positive Approach',
+  positive_approach: 'Good Observation',
   on_time:       'On Time',
   overdue_1_7:   'Overdue ≤7d',
   overdue_8_30:  'Overdue 8-30d',
@@ -61,7 +65,7 @@ function PieTooltip({ active, payload }: any) {
     <div className="bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-lg text-xs pointer-events-none">
       <div className="flex items-center gap-1.5">
         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: color }} />
-        <span className="text-gray-700 font-medium">{name}</span>
+        <span className="text-gray-700 font-medium">{displayStatus(name)}</span>
         <span className="font-bold text-gray-900 ml-1">{value}</span>
       </div>
     </div>
@@ -209,7 +213,7 @@ export default function Dashboard() {
     { label: 'Overdue',            value: statusCounts['Overdue'] ?? 0,              icon: Hourglass,     bg: 'bg-amber-50',   color: 'text-amber-600',   border: 'border-amber-100'   },
     { label: 'Partially Closed',   value: statusCounts['Partially Closed'] ?? 0,     icon: Clock,         bg: 'bg-lime-50',    color: 'text-lime-600',    border: 'border-lime-100'    },
     { label: 'Closed',             value: statusCounts['Closed'] ?? 0,               icon: CheckCircle,   bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-100' },
-    { label: 'Positive Approach',    value: statusCounts['Positive Approach'] ?? 0,    icon: ThumbsUp,      bg: 'bg-teal-50',    color: 'text-teal-600',    border: 'border-teal-100'    },
+    { label: 'Good Observation',    value: statusCounts['Positive Approach'] ?? 0,    icon: ThumbsUp,      bg: 'bg-amber-50',    color: 'text-[#B8860B]',    border: 'border-amber-100'    },
     { label: 'Unresolved & Closed',  value: statusCounts['Unresolved & Closed'] ?? 0, icon: AlertTriangle, bg: 'bg-violet-50',  color: 'text-violet-600',  border: 'border-violet-100'  },
   ]
 
@@ -258,7 +262,7 @@ export default function Dashboard() {
 
     // Sheet 2 – Trend
     const ws2 = wb.addWorksheet(viewMode === 'quarterly' ? 'Quarterly Trend' : 'Monthly Trend')
-    const trendCols = ['Period', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach', 'Unresolved & Closed', 'Total']
+    const trendCols = ['Period', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Good Observation', 'Unresolved & Closed', 'Total']
     ws2.columns = trendCols.map((h, i) => ({ header: h, width: i === 0 ? 16 : 14 }))
     addHeaderRow(ws2, trendCols, 'FF4F46E5')
     trendData.forEach((d: any, i) => {
@@ -311,7 +315,7 @@ export default function Dashboard() {
 
     const byAging = data?.byAging || {}
     const agingBuckets = [
-      { key: 'positive_approach', label: 'Positive Approach' },
+      { key: 'positive_approach', label: 'Good Observation' },
       { key: 'on_time',        label: 'On Time'          },
       { key: 'overdue_1_7',    label: 'Overdue 1-7 Days' },
       { key: 'overdue_8_30',   label: 'Overdue 8-30 Days'},
@@ -755,7 +759,7 @@ export default function Dashboard() {
                     {STATUSES_LIST.map(s => (
                       <div key={s} className="flex items-center gap-1">
                         <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLORS[s] }} />
-                        <span className="text-[10px] text-gray-500 whitespace-nowrap">{s}</span>
+                        <span className="text-[10px] text-gray-500 whitespace-nowrap">{displayStatus(s)}</span>
                       </div>
                     ))}
                   </div>
@@ -785,7 +789,7 @@ export default function Dashboard() {
                             <div key={p.dataKey} className="flex items-center justify-between gap-4 mb-0.5">
                               <div className="flex items-center gap-1.5">
                                 <span className="w-2 h-2 rounded-full" style={{ background: p.fill }} />
-                                <span className="text-gray-600">{p.dataKey}</span>
+                                <span className="text-gray-600">{displayStatus(p.dataKey)}</span>
                               </div>
                               <span className="font-semibold text-gray-900">{p.value}</span>
                             </div>
@@ -883,7 +887,7 @@ export default function Dashboard() {
                       <div key={s.name} className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLORS[s.name] }} />
-                          <span className="text-gray-600">{s.name}</span>
+                          <span className="text-gray-600">{displayStatus(s.name)}</span>
                         </div>
                         <span className="font-semibold text-gray-900">{s.value}</span>
                       </div>
@@ -1025,7 +1029,7 @@ export default function Dashboard() {
                       </div>
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         {o.risk_level && <span className={getRiskClass(o.risk_level)}>{o.risk_level}</span>}
-                        <span className={getStatusClass(o.status)}>{o.status}</span>
+                        <span className={getStatusClass(o.status)}>{displayStatus(o.status)}</span>
                       </div>
                     </div>
                   ))}
