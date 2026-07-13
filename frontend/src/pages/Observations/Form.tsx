@@ -306,17 +306,18 @@ export default function ObservationForm() {
       if (!form.floor_id)                       missing.push('Floor')
       if (!form.core_concern_id)                missing.push('Core Concern')
       if (!form.specific_concern_id)            missing.push('Specific Concern')
-      if (!form.severity)                       missing.push('Severity')
-      if (!form.probability)                    missing.push('Probability')
+      if (!form.severity)                       missing.push('Severity of Consequence')
+      if (!form.probability)                    missing.push('Probability of Occurrence')
       if (form.status !== 'Positive Approach') {
         // Rectification fields only required for non-positive (unsafe) observations
-        if (!form.contractor_company)           missing.push('Contractor')
+        if (!form.contractor_company)           missing.push('Contractor Company')
         if (!form.contractor_user_ids.length)   missing.push('To Be Rectified By')
         if (!form.violation_id)                 missing.push('Violation Caused Due To')
         if (!form.target_date_actual)           missing.push('Target Date for Rectification')
       }
       if (missing.length > 0) {
         setError(`Please fill in the following required fields: ${missing.join(', ')}`)
+        isSavingRef.current = false
         return
       }
     }
@@ -544,13 +545,13 @@ export default function ObservationForm() {
               {(projects || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </Field>
-          <Field label="Building / Tower">
+          <Field label="Building / Tower" required>
             <select className="select" value={form.building_id} onChange={e => { set('building_id', e.target.value); set('floor_id', '') }} disabled={!form.project_id}>
               <option value="">{form.project_id ? 'Select building…' : 'Select project first…'}</option>
               {(buildings || []).map((b: any) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </Field>
-          <Field label="Floor">
+          <Field label="Floor" required>
             <select className="select" value={form.floor_id} onChange={e => set('floor_id', e.target.value)} disabled={!form.building_id || !(floors?.length)}>
               <option value="">
                 {!form.building_id ? 'Select building first…' : !(floors?.length) ? 'No floors configured' : 'Select floor…'}
@@ -564,7 +565,7 @@ export default function ObservationForm() {
           <Field label="Observer Name">
             <input className="input" value={form.observer_name} onChange={e => set('observer_name', e.target.value)} />
           </Field>
-          <Field label="Contractor Company" required>
+          <Field label="Contractor Company" required={form.status !== 'Positive Approach'}>
             <select
               className="select"
               value={form.contractor_company}
@@ -596,7 +597,7 @@ export default function ObservationForm() {
               <input type="time" className="input" value={form.obs_time} onChange={e => set('obs_time', e.target.value)} />
             </div>
           </div>
-          <Field label="To Be Rectified By" required>
+          <Field label="To Be Rectified By" required={form.status !== 'Positive Approach'}>
             {form.contractor_company ? (
               <MultiSelectFilter
                 size="md"
@@ -640,13 +641,13 @@ export default function ObservationForm() {
       {/* ── Observation Details ──────────────────── */}
       <SectionCard title="Observation Details" icon={<ClipboardList className="w-3.5 h-3.5" />}>
         <div className={G3}>
-          <Field label="Core Concern">
+          <Field label="Core Concern" required>
             <select className="select" value={form.core_concern_id} onChange={e => { set('core_concern_id', e.target.value); set('specific_concern_id', '') }}>
               <option value="">Select core concern…</option>
               {(coreConcerns || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </Field>
-          <Field label="Specific Concern">
+          <Field label="Specific Concern" required>
             <select className="select" value={form.specific_concern_id} onChange={e => set('specific_concern_id', e.target.value)} disabled={!form.core_concern_id}>
               <option value="">Select specific concern…</option>
               {(specificConcerns || []).map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -658,13 +659,13 @@ export default function ObservationForm() {
               {(outcomes || []).map((o: any) => <option key={o.id} value={o.name}>{o.name}</option>)}
             </select>
           </Field>
-          <Field label="Violation Caused Due To">
+          <Field label="Violation Caused Due To" required={form.status !== 'Positive Approach'}>
             <select className="select" value={form.violation_id} onChange={e => set('violation_id', e.target.value)}>
               <option value="">Select cause…</option>
               {(violations || []).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
           </Field>
-          <Field label="Target Date for Rectification">
+          <Field label="Target Date for Rectification" required={form.status !== 'Positive Approach'}>
             <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
           </Field>
           <Field label="Concerned EIC">
@@ -700,13 +701,13 @@ export default function ObservationForm() {
           Risk Factor = Severity × Probability. Select 1 (lowest) to 5 (highest) for each.
         </p>
         <div className={G3}>
-          <Field label="Severity of Consequence" hint="1 = First Aid only  →  5 = Fatality">
+          <Field label="Severity of Consequence" required hint="1 = First Aid only  →  5 = Fatality">
             <select className="select" value={form.severity} onChange={e => set('severity', e.target.value)}>
               <option value="">Select severity…</option>
               {[1,2,3,4,5].map(n => <option key={n} value={n}>{SEVERITY_LABELS[n]}</option>)}
             </select>
           </Field>
-          <Field label="Probability of Occurrence" hint="1 = Very Unlikely  →  5 = Almost Certain">
+          <Field label="Probability of Occurrence" required hint="1 = Very Unlikely  →  5 = Almost Certain">
             <select className="select" value={form.probability} onChange={e => set('probability', e.target.value)}>
               <option value="">Select probability…</option>
               {[1,2,3,4,5].map(n => <option key={n} value={n}>{PROB_LABELS[n]}</option>)}

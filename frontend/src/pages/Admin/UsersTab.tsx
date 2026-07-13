@@ -294,7 +294,12 @@ export default function UsersTab() {
 
   const roleOptions = ROLES.map(r => ({ value: r, label: r }))
   const projectOptions = (projects || []).map((p: any) => ({ value: String(p.id), label: p.name }))
-  const emailOptions = (users || []).map((u: any) => ({ value: u.email, label: u.email }))
+  const emailOptions = Array.from(
+    new Map((users || [])
+      .filter((u: any) => u.email)
+      .map((u: any) => [u.email, { value: u.email, label: u.email }])
+    ).values()
+  )
 
   const openCreate = () => { setForm(EMPTY); setError(''); setModal({ open: true }) }
   const openEdit = (u: any) => {
