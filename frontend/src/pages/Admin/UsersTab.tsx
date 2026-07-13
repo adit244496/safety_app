@@ -295,9 +295,9 @@ export default function UsersTab() {
   const roleOptions = ROLES.map(r => ({ value: r, label: r }))
   const projectOptions = (projects || []).map((p: any) => ({ value: String(p.id), label: p.name }))
   const emailOptions = Array.from(
-    new Map((users || [])
+    new Map<string, { value: string; label: string }>((users || [])
       .filter((u: any) => u.email)
-      .map((u: any) => [u.email, { value: u.email, label: u.email }])
+      .map((u: any) => [u.email as string, { value: u.email as string, label: u.email as string }])
     ).values()
   )
 
