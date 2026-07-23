@@ -255,6 +255,10 @@ export default function EaseCriteriaTab() {
                   {topic.elements.length} elements · {topicMarks} marks
                 </span>
               </button>
+              <button onClick={() => { if (!isOpen) toggleTopic(topic.id); setElemModal({ open: true, topicId: topic.id }) }}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-indigo-600 hover:text-indigo-800 hover:bg-indigo-100 transition">
+                <Plus className="w-3.5 h-3.5" /> Add Element
+              </button>
               <button onClick={() => setTopicModal({ open: true, editing: topic })}
                 className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-100 transition">
                 <Edit2 className="w-3.5 h-3.5" />
