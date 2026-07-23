@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from database import get_db
 import models
 from auth import get_current_user, require_admin, require_super_admin
@@ -121,7 +122,7 @@ class ElementCreate(BaseModel):
     topic_id: int
     question: str
     assessment_value: int = 3
-    sort_order: int = 0
+    sort_order: Optional[int] = None
 
 class ElementUpdate(BaseModel):
     question: Optional[str] = None
@@ -192,11 +193,20 @@ def delete_topic(topic_id: int, db: Session = Depends(get_db)):
 def create_element(body: ElementCreate, db: Session = Depends(get_db)):
     if not db.query(models.EaseTopic).get(body.topic_id):
         raise HTTPException(404, "Topic not found")
+    sort_order = body.sort_order
+    if sort_order is None:
+        # No sort order supplied → append to the end of the topic's list.
+        last = (
+            db.query(func.max(models.EaseEvaluationElement.sort_order))
+            .filter(models.EaseEvaluationElement.topic_id == body.topic_id)
+            .scalar()
+        )
+        sort_order = (last + 1) if last is not None else 0
     e = models.EaseEvaluationElement(
         topic_id=body.topic_id,
         question=body.question,
         assessment_value=body.assessment_value,
-        sort_order=body.sort_order,
+        sort_order=sort_order,
     )
     db.add(e)
     db.commit()

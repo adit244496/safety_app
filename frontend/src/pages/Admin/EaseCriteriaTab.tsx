@@ -79,7 +79,7 @@ function ElementModal({
   const qc = useQueryClient()
   const [question, setQuestion] = useState(editing?.question ?? '')
   const [value, setValue] = useState(String(editing?.assessment_value ?? 3))
-  const [sortOrder, setSortOrder] = useState(String(editing?.sort_order ?? 0))
+  const [sortOrder, setSortOrder] = useState(editing ? String(editing.sort_order) : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -99,7 +99,8 @@ function ElementModal({
           topic_id: topicId,
           question: question.trim(),
           assessment_value: Number(value),
-          sort_order: Number(sortOrder) || 0,
+          // Empty → let the backend append it to the end of the topic.
+          sort_order: sortOrder.trim() === '' ? null : Number(sortOrder),
         })
       }
       qc.invalidateQueries({ queryKey: ['ease-criteria'] })
@@ -135,7 +136,8 @@ function ElementModal({
             <div>
               <label className="label">Sort Order</label>
               <input className="input" type="number" value={sortOrder}
-                onChange={e => setSortOrder(e.target.value)} />
+                onChange={e => setSortOrder(e.target.value)}
+                placeholder={editing ? undefined : 'Auto (last)'} />
             </div>
           </div>
         </div>
