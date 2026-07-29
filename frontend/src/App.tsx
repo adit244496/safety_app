@@ -11,6 +11,9 @@ import ObservationDetail from './pages/Observations/Detail'
 import Admin from './pages/Admin/index'
 import ReportPage from './pages/Report/index'
 import Summary from './pages/Summary'
+import LegacyData from './pages/LegacyData'
+import Trainings from './pages/Trainings/index'
+import TrainingForm from './pages/Trainings/Form'
 
 function Guard({ children }: { children: React.ReactNode }) {
   const { token, user } = useAuth()
@@ -37,6 +40,13 @@ function ContractorGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function LegacyDataGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  if (!user) return null
+  if (!['SuperAdmin', 'Admin', 'HO'].includes(user.role)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   const { token, setAuth, logout } = useAuth()
 
@@ -57,6 +67,10 @@ export default function App() {
           <Route path="observations/:id/edit" element={<ObservationForm />} />
           <Route path="summary" element={<ContractorGuard><Summary /></ContractorGuard>} />
           <Route path="report" element={<ContractorGuard><ReportPage /></ContractorGuard>} />
+          <Route path="legacy-data" element={<LegacyDataGuard><LegacyData /></LegacyDataGuard>} />
+          <Route path="trainings" element={<ContractorGuard><Trainings /></ContractorGuard>} />
+          <Route path="trainings/new" element={<ContractorGuard><TrainingForm /></ContractorGuard>} />
+          <Route path="trainings/:id/edit" element={<ContractorGuard><TrainingForm /></ContractorGuard>} />
           <Route path="admin/*" element={<AdminGuard><Admin /></AdminGuard>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -665,9 +665,6 @@ export default function ObservationForm() {
               {(violations || []).map((v: any) => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
           </Field>
-          <Field label="Target Date for Rectification" required={form.status !== 'Positive Approach'}>
-            <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
-          </Field>
           <Field label="Concerned EIC">
             {form.project_id ? (
               <MultiSelectFilter
@@ -732,6 +729,9 @@ export default function ObservationForm() {
               <p className="text-xs text-gray-400">Risk result will appear here</p>
             </div>
           )}
+          <Field label="Target Date for Rectification" required={form.status !== 'Positive Approach'}>
+            <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
+          </Field>
         </div>
       </SectionCard>
 

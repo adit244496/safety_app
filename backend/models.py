@@ -287,6 +287,36 @@ class ProbabilityLabel(Base):
     label = Column(String, nullable=False)
 
 
+class Training(Base):
+    """Safety / SHE training session record with participant & assessment details."""
+    __tablename__ = "trainings"
+    id = Column(Integer, primary_key=True)
+    training_topic = Column(String, nullable=False)
+    training_date = Column(String, nullable=True)      # YYYY-MM-DD
+    time_from = Column(String, nullable=True)           # HH:MM (24h)
+    time_to = Column(String, nullable=True)             # HH:MM (24h)
+    trainer_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    trainer_name = Column(String, nullable=True)        # free-text fallback / display name
+    trainer_title = Column(String, nullable=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)   # primary (first selected)
+    project_ids = Column(Text, nullable=True)           # JSON list of all selected project IDs
+    department = Column(String, nullable=True)
+    training_type = Column(String, nullable=True)       # Technical / Refresher / Post-Incident / Corrective
+    training_content = Column(Text, nullable=True)
+    assessment_method = Column(String, nullable=True)   # Written Quiz / Practical / Verbal Review / Attendance Only
+    assessment_applicable = Column(Boolean, default=False)  # was an assessment conducted?
+    participant_category = Column(String, nullable=True)  # legacy — category is now per-participant
+    participants = Column(Text, nullable=True)          # JSON list: [{user_id, name, role, category, assessment_status, score, remarks}]
+    participant_count = Column(Integer, default=0)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    project = relationship("Project")
+    trainer = relationship("User", foreign_keys=[trainer_user_id])
+    creator = relationship("User", foreign_keys=[created_by])
+
+
 class EscalationLog(Base):
     """Tracks escalation emails sent for overdue observations."""
     __tablename__ = "escalation_logs"

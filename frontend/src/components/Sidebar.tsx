@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ClipboardList, PlusCircle,
   Settings, X, ChevronRight, ChevronsLeft, ChevronRightSquare,
-  LogOut, FileBarChart2, BarChart3,
+  LogOut, FileBarChart2, BarChart3, Database, GraduationCap,
 } from 'lucide-react'
 import { useAuth } from '../store/authStore'
 import { useNavigate } from 'react-router-dom'
@@ -20,6 +20,8 @@ const NAV = [
   { to: '/observations/new', icon: PlusCircle, label: 'New Observation', exact: true, roles: ['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer'] },
   { to: '/report', icon: FileBarChart2, label: 'SHE Report', exact: true, roles: ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Observer'] },
   { to: '/summary', icon: BarChart3, label: 'Summary', exact: true, roles: ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Observer'] },
+  { to: '/trainings', icon: GraduationCap, label: 'Training', exact: false, roles: null },
+  { to: '/legacy-data', icon: Database, label: 'Legacy Data', exact: true, roles: ['SuperAdmin', 'Admin', 'HO'] },
 ]
 
 export default function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggleCollapse }: Props) {

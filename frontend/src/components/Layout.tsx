@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import Sidebar from './Sidebar'
 import Header from './Header'
@@ -8,6 +8,10 @@ import { PageTitleProvider } from '../store/pageTitleContext'
 export default function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const loc = useLocation()
+  // Legacy Data is a wide embedded dashboard — let it use the full content area
+  // (no max-width cap, no padding) instead of the standard constrained page layout.
+  const fullBleed = loc.pathname.startsWith('/legacy-data')
 
   return (
     <PageTitleProvider>
@@ -29,10 +33,16 @@ export default function Layout() {
           style={{ flex: '1 1 0%' }}
         >
           <Header onMenu={() => setMobileOpen(o => !o)} />
-          <main className="flex-1 overflow-auto p-4 md:p-6 pb-20 lg:pb-6 thin-scroll main-scroll">
-            <div className="max-w-7xl mx-auto">
+          <main className={`flex-1 overflow-auto thin-scroll main-scroll ${fullBleed ? '' : 'p-4 md:p-6 pb-20 lg:pb-6'}`}>
+            {fullBleed ? (
               <Outlet />
-            </div>
+            ) : (
+              // When the sidebar is collapsed, drop the max-width cap so pages use the
+              // freed horizontal space; when expanded, keep the standard constrained width.
+              <div className={`mx-auto ${collapsed ? 'max-w-none' : 'max-w-7xl'}`}>
+                <Outlet />
+              </div>
+            )}
           </main>
         </div>
 
