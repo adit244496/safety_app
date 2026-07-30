@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, Save, GripVertical, ShieldAlert, ToggleLeft, CheckSquare, Type } from 'lucide-react'
 import { toast } from 'sonner'
@@ -148,6 +148,30 @@ function PrecautionEditor({ workTypeId, onChange }: { workTypeId: number; onChan
   const { data: rows = [] } = useQuery<any[]>({ queryKey: ['permit-precautions', workTypeId], queryFn: () => api.get('/admin/permit-precautions', { params: { work_type_id: workTypeId } }).then(r => r.data) })
   const invalidate = () => { qc.invalidateQueries({ queryKey: ['permit-precautions', workTypeId] }); onChange() }
 
+  // Local ordering for drag-and-drop (kept in sync with the server list)
+  const [items, setItems] = useState<any[]>([])
+  useEffect(() => { setItems(rows) }, [rows])
+  const dragFrom = useRef<number | null>(null)
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
+
+  async function persistOrder(next: any[]) {
+    setItems(next)
+    try {
+      await api.post('/admin/permit-precautions/reorder', { ids: next.map(r => r.id) })
+      invalidate()
+    } catch (e: any) { toast.error('Failed to save order'); setItems(rows) }
+  }
+  function handleDrop(to: number) {
+    const from = dragFrom.current
+    dragFrom.current = null; setOverIndex(null); setDragId(null)
+    if (from == null || from === to) return
+    const next = [...items]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    persistOrder(next)
+  }
+
   const [nLabel, setNLabel] = useState('')
   const [nSection, setNSection] = useState('Precautions Taken')
   const [nType, setNType] = useState('checkbox')
@@ -157,18 +181,30 @@ function PrecautionEditor({ workTypeId, onChange }: { workTypeId: number; onChan
     if (!nLabel.trim()) return
     setAdding(true)
     try {
-      await api.post('/admin/permit-precautions', { work_type_id: workTypeId, label: nLabel.trim(), section: nSection.trim() || null, input_type: nType, sort_order: rows.length })
+      await api.post('/admin/permit-precautions', { work_type_id: workTypeId, label: nLabel.trim(), section: nSection.trim() || null, input_type: nType, sort_order: items.length })
       setNLabel(''); invalidate(); toast.success('Precaution added')
     } catch (e: any) { toast.error(e.response?.data?.detail || 'Failed') } finally { setAdding(false) }
   }
 
   return (
     <div className="card p-4">
-      <h4 className="text-sm font-semibold text-gray-700 mb-3">Precautions ({rows.length})</h4>
+      <h4 className="text-sm font-semibold text-gray-700 mb-3">Precautions ({items.length}) <span className="text-xs font-normal text-gray-400">— drag the handle to reorder</span></h4>
 
       <div className="space-y-1.5">
-        {rows.map(pr => <PrecautionRow key={pr.id} pr={pr} onChange={invalidate} />)}
-        {rows.length === 0 && <p className="text-sm text-gray-400 py-2">No precautions yet — add one below.</p>}
+        {items.map((pr, i) => (
+          <div key={pr.id}
+            draggable={dragId === pr.id}
+            onDragStart={() => { dragFrom.current = i }}
+            onDragOver={e => { e.preventDefault(); if (overIndex !== i) setOverIndex(i) }}
+            onDrop={() => handleDrop(i)}
+            onDragEnd={() => { dragFrom.current = null; setOverIndex(null); setDragId(null) }}
+            className={`rounded-lg transition-shadow ${overIndex === i && dragFrom.current !== null && dragFrom.current !== i ? 'ring-2 ring-indigo-300' : ''} ${dragId === pr.id ? 'opacity-60' : ''}`}
+          >
+            <PrecautionRow pr={pr} onChange={invalidate}
+              gripProps={{ onMouseDown: () => setDragId(pr.id), onMouseUp: () => setDragId(null) }} />
+          </div>
+        ))}
+        {items.length === 0 && <p className="text-sm text-gray-400 py-2">No precautions yet — add one below.</p>}
       </div>
 
       {/* Add row */}
@@ -193,7 +229,7 @@ function PrecautionEditor({ workTypeId, onChange }: { workTypeId: number; onChan
   )
 }
 
-function PrecautionRow({ pr, onChange }: { pr: any; onChange: () => void }) {
+function PrecautionRow({ pr, onChange, gripProps }: { pr: any; onChange: () => void; gripProps?: any }) {
   const [label, setLabel] = useState(pr.label)
   const [section, setSection] = useState(pr.section || '')
   const [type, setType] = useState(pr.input_type)
@@ -214,7 +250,7 @@ function PrecautionRow({ pr, onChange }: { pr: any; onChange: () => void }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-[1fr_150px_140px_auto] gap-2 items-center bg-gray-50/60 rounded-lg px-2 py-1.5">
       <div className="flex items-center gap-1.5">
-        <GripVertical className="w-3.5 h-3.5 text-gray-300 flex-shrink-0" />
+        <span {...gripProps} title="Drag to reorder" className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 flex-shrink-0 select-none"><GripVertical className="w-3.5 h-3.5" /></span>
         <span className="text-gray-400"><TypeIcon t={type} /></span>
         <input className="input !py-1 text-sm flex-1 !bg-white" value={label} onChange={e => setLabel(e.target.value)} />
       </div>

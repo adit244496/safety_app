@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from sqlalchemy.orm import Session
 from database import get_db
 import models, re, smtplib
@@ -719,5 +719,29 @@ def delete_permit_precaution(id: int, db: Session = Depends(get_db), _=Depends(r
     if not pr:
         raise HTTPException(404, "Precaution not found")
     db.delete(pr)
+    db.commit()
+    return {"success": True}
+
+
+class ReorderBody(BaseModel):
+    ids: List[int]
+
+
+@router.post("/permit-precautions/reorder")
+def reorder_permit_precautions(body: ReorderBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    for i, pid in enumerate(body.ids):
+        pr = db.query(models.PermitPrecaution).filter(models.PermitPrecaution.id == pid).first()
+        if pr:
+            pr.sort_order = i
+    db.commit()
+    return {"success": True}
+
+
+@router.post("/permit-work-types/reorder")
+def reorder_permit_work_types(body: ReorderBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    for i, wid in enumerate(body.ids):
+        wt = db.query(models.PermitWorkType).filter(models.PermitWorkType.id == wid).first()
+        if wt:
+            wt.sort_order = i
     db.commit()
     return {"success": True}
