@@ -103,7 +103,6 @@ export default function WorkPermitForm() {
     }
   }, [existing])
 
-  const byCode = useMemo(() => Object.fromEntries((config || []).map(w => [w.code, w])), [config])
 
   const toggleCat = (code: string) => {
     setSelectedCats(prev => prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code])
