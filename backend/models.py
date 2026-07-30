@@ -317,6 +317,97 @@ class Training(Base):
     creator = relationship("User", foreign_keys=[created_by])
 
 
+class WorkPermit(Base):
+    """Construction Hazardous Work Permit (CHWP) — contractor-submitted, approved by PIC/PSO/EIC."""
+    __tablename__ = "work_permits"
+    id = Column(Integer, primary_key=True)
+    permit_no = Column(String, nullable=False, unique=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    other_permits = Column(String, nullable=True)
+
+    # Receiver (the contractor receiving the permit)
+    receiver_name = Column(String, nullable=True)         # display: joined receiver user names
+    receiver_designation = Column(String, nullable=True)  # display: joined receiver roles
+    receiver_roles = Column(Text, nullable=True)          # JSON list of selected roles
+    receiver_user_ids = Column(Text, nullable=True)       # JSON list of selected receiver user ids
+    issued_date = Column(String, nullable=True)          # YYYY-MM-DD
+
+    work_location = Column(String, nullable=True)         # equipment / location
+    area = Column(String, nullable=True)
+    starts_at = Column(String, nullable=True)             # datetime-local string
+    expires_at = Column(String, nullable=True)
+    work_description = Column(Text, nullable=True)
+    pre_job_discussion = Column(Boolean, default=False)
+
+    hazard_categories = Column(Text, nullable=True)       # JSON list e.g. ["c2","c4"]
+    precautions = Column(Text, nullable=True)             # JSON object keyed by category id
+
+    # Assigned approvers
+    pic_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    pso_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    eic_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # Workflow
+    status = Column(String, nullable=False, default="Draft")
+    # Draft | Pending Approval | Approved | Declined | Closure Requested | Closed | Cancelled
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    approver_role = Column(String, nullable=True)
+    decline_reason = Column(Text, nullable=True)
+
+    closure_type = Column(String, nullable=True)          # one of the 4 closure options
+    closure_note = Column(Text, nullable=True)
+    closure_requested_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    closure_requested_at = Column(DateTime, nullable=True)
+    closure_approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    closed_at = Column(DateTime, nullable=True)
+
+    cancel_reason = Column(Text, nullable=True)
+    cancelled_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
+
+    history = Column(Text, nullable=True)                 # JSON list of {action, by, name, role, at, note}
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+    project = relationship("Project")
+    pic_user = relationship("User", foreign_keys=[pic_user_id])
+    pso_user = relationship("User", foreign_keys=[pso_user_id])
+    eic_user = relationship("User", foreign_keys=[eic_user_id])
+    approver = relationship("User", foreign_keys=[approved_by])
+    creator = relationship("User", foreign_keys=[created_by])
+
+
+class PermitWorkType(Base):
+    """Admin-managed hazardous work type (CHWP category)."""
+    __tablename__ = "permit_work_types"
+    id = Column(Integer, primary_key=True)
+    code = Column(String, unique=True, nullable=False)   # stable slug used in stored permits
+    name = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    has_gas_table = Column(Boolean, default=False)       # show atmospheric gas-test table
+    sort_order = Column(Integer, default=0)
+    active = Column(Boolean, default=True)
+    precautions = relationship(
+        "PermitPrecaution", back_populates="work_type",
+        cascade="all, delete", order_by="PermitPrecaution.sort_order",
+    )
+
+
+class PermitPrecaution(Base):
+    """A single precaution / equipment item under a work type, with an input widget type."""
+    __tablename__ = "permit_precautions"
+    id = Column(Integer, primary_key=True)
+    work_type_id = Column(Integer, ForeignKey("permit_work_types.id", ondelete="CASCADE"))
+    item_key = Column(String, nullable=False)            # stable slug within the work type
+    section = Column(String, nullable=True)              # grouping heading
+    label = Column(Text, nullable=False)
+    input_type = Column(String, default="checkbox")      # 'checkbox' | 'toggle' | 'text'
+    sort_order = Column(Integer, default=0)
+    work_type = relationship("PermitWorkType", back_populates="precautions")
+
+
 class EscalationLog(Base):
     """Tracks escalation emails sent for overdue observations."""
     __tablename__ = "escalation_logs"

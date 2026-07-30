@@ -46,7 +46,11 @@ def _run_migrations():
         ("trainings", "project_ids",           "TEXT",    None),
         ("trainings", "assessment_applicable", "BOOLEAN", "BOOLEAN"),
     ]
-    all_migrations = _obs_columns + _user_columns + _training_columns
+    _permit_columns = [
+        ("work_permits", "receiver_roles",    "TEXT", None),
+        ("work_permits", "receiver_user_ids", "TEXT", None),
+    ]
+    all_migrations = _obs_columns + _user_columns + _training_columns + _permit_columns
 
     with engine.connect() as conn:
         if is_sqlite:

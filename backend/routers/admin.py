@@ -572,3 +572,152 @@ def test_smtp(db: Session = Depends(get_db), current=Depends(require_admin)):
         raise HTTPException(400, str(exc))
 
     return {"success": True, "sent_to": current.email}
+
+
+# ── Work Permit configuration (work types & precautions) ─────────────────────
+import re as _re
+
+
+def _slugify(text: str, fallback: str = "item") -> str:
+    s = _re.sub(r"[^a-z0-9]+", "_", (text or "").lower()).strip("_")
+    return s[:40] or fallback
+
+
+class WorkTypeBody(BaseModel):
+    name: str
+    description: Optional[str] = None
+    has_gas_table: Optional[bool] = False
+    sort_order: Optional[int] = 0
+    active: Optional[bool] = True
+
+
+class PrecautionBody(BaseModel):
+    work_type_id: int
+    section: Optional[str] = None
+    label: str
+    input_type: Optional[str] = "checkbox"
+    sort_order: Optional[int] = 0
+
+
+VALID_INPUT_TYPES = {"checkbox", "toggle", "text"}
+
+
+def _worktype_dict(wt: models.PermitWorkType) -> dict:
+    return {
+        "id": wt.id, "code": wt.code, "name": wt.name, "description": wt.description,
+        "has_gas_table": bool(wt.has_gas_table), "sort_order": wt.sort_order, "active": bool(wt.active),
+        "precaution_count": len(wt.precautions),
+    }
+
+
+def _precaution_dict(pr: models.PermitPrecaution) -> dict:
+    return {
+        "id": pr.id, "work_type_id": pr.work_type_id, "item_key": pr.item_key,
+        "section": pr.section, "label": pr.label, "input_type": pr.input_type, "sort_order": pr.sort_order,
+    }
+
+
+@router.get("/permit-work-types")
+def list_permit_work_types(db: Session = Depends(get_db), _=Depends(require_admin)):
+    rows = db.query(models.PermitWorkType).order_by(models.PermitWorkType.sort_order, models.PermitWorkType.id).all()
+    return [_worktype_dict(wt) for wt in rows]
+
+
+@router.post("/permit-work-types", status_code=201)
+def create_permit_work_type(body: WorkTypeBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    wt = models.PermitWorkType(
+        code="pending", name=body.name.strip(), description=body.description,
+        has_gas_table=bool(body.has_gas_table), sort_order=body.sort_order or 0, active=bool(body.active),
+    )
+    db.add(wt)
+    db.flush()
+    wt.code = f"wt{wt.id}"
+    db.commit()
+    db.refresh(wt)
+    return _worktype_dict(wt)
+
+
+@router.put("/permit-work-types/{id}")
+def update_permit_work_type(id: int, body: WorkTypeBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    wt = db.query(models.PermitWorkType).filter(models.PermitWorkType.id == id).first()
+    if not wt:
+        raise HTTPException(404, "Work type not found")
+    wt.name = body.name.strip()
+    wt.description = body.description
+    wt.has_gas_table = bool(body.has_gas_table)
+    if body.sort_order is not None:
+        wt.sort_order = body.sort_order
+    wt.active = bool(body.active)
+    db.commit()
+    return _worktype_dict(wt)
+
+
+@router.delete("/permit-work-types/{id}")
+def delete_permit_work_type(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
+    wt = db.query(models.PermitWorkType).filter(models.PermitWorkType.id == id).first()
+    if not wt:
+        raise HTTPException(404, "Work type not found")
+    db.delete(wt)
+    db.commit()
+    return {"success": True}
+
+
+@router.get("/permit-precautions")
+def list_permit_precautions(work_type_id: int = Query(...), db: Session = Depends(get_db), _=Depends(require_admin)):
+    rows = (
+        db.query(models.PermitPrecaution)
+        .filter(models.PermitPrecaution.work_type_id == work_type_id)
+        .order_by(models.PermitPrecaution.sort_order, models.PermitPrecaution.id)
+        .all()
+    )
+    return [_precaution_dict(pr) for pr in rows]
+
+
+@router.post("/permit-precautions", status_code=201)
+def create_permit_precaution(body: PrecautionBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    if body.input_type not in VALID_INPUT_TYPES:
+        raise HTTPException(400, f"input_type must be one of {sorted(VALID_INPUT_TYPES)}")
+    wt = db.query(models.PermitWorkType).filter(models.PermitWorkType.id == body.work_type_id).first()
+    if not wt:
+        raise HTTPException(404, "Work type not found")
+    existing = {pr.item_key for pr in wt.precautions}
+    base = _slugify(body.label)
+    key = base
+    n = 2
+    while key in existing:
+        key = f"{base}_{n}"
+        n += 1
+    pr = models.PermitPrecaution(
+        work_type_id=body.work_type_id, item_key=key, section=body.section,
+        label=body.label.strip(), input_type=body.input_type, sort_order=body.sort_order or 0,
+    )
+    db.add(pr)
+    db.commit()
+    db.refresh(pr)
+    return _precaution_dict(pr)
+
+
+@router.put("/permit-precautions/{id}")
+def update_permit_precaution(id: int, body: PrecautionBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    if body.input_type not in VALID_INPUT_TYPES:
+        raise HTTPException(400, f"input_type must be one of {sorted(VALID_INPUT_TYPES)}")
+    pr = db.query(models.PermitPrecaution).filter(models.PermitPrecaution.id == id).first()
+    if not pr:
+        raise HTTPException(404, "Precaution not found")
+    pr.section = body.section
+    pr.label = body.label.strip()
+    pr.input_type = body.input_type
+    if body.sort_order is not None:
+        pr.sort_order = body.sort_order
+    db.commit()
+    return _precaution_dict(pr)
+
+
+@router.delete("/permit-precautions/{id}")
+def delete_permit_precaution(id: int, db: Session = Depends(get_db), _=Depends(require_admin)):
+    pr = db.query(models.PermitPrecaution).filter(models.PermitPrecaution.id == id).first()
+    if not pr:
+        raise HTTPException(404, "Precaution not found")
+    db.delete(pr)
+    db.commit()
+    return {"success": True}

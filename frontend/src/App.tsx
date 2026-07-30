@@ -14,6 +14,10 @@ import Summary from './pages/Summary'
 import LegacyData from './pages/LegacyData'
 import Trainings from './pages/Trainings/index'
 import TrainingForm from './pages/Trainings/Form'
+import WorkPermits from './pages/WorkPermits/index'
+import WorkPermitForm from './pages/WorkPermits/Form'
+import WorkPermitDetail from './pages/WorkPermits/Detail'
+import PermitDocument from './pages/WorkPermits/PermitDocument'
 
 function Guard({ children }: { children: React.ReactNode }) {
   const { token, user } = useAuth()
@@ -47,6 +51,14 @@ function LegacyDataGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Only contractors (and SuperAdmin) can create/edit work permits
+function PermitFormGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  if (!user) return null
+  if (!['Contractor', 'SuperAdmin'].includes(user.role)) return <Navigate to="/work-permits" replace />
+  return <>{children}</>
+}
+
 export default function App() {
   const { token, setAuth, logout } = useAuth()
 
@@ -71,8 +83,14 @@ export default function App() {
           <Route path="trainings" element={<ContractorGuard><Trainings /></ContractorGuard>} />
           <Route path="trainings/new" element={<ContractorGuard><TrainingForm /></ContractorGuard>} />
           <Route path="trainings/:id/edit" element={<ContractorGuard><TrainingForm /></ContractorGuard>} />
+          <Route path="work-permits" element={<WorkPermits />} />
+          <Route path="work-permits/new" element={<PermitFormGuard><WorkPermitForm /></PermitFormGuard>} />
+          <Route path="work-permits/:id" element={<WorkPermitDetail />} />
+          <Route path="work-permits/:id/edit" element={<PermitFormGuard><WorkPermitForm /></PermitFormGuard>} />
           <Route path="admin/*" element={<AdminGuard><Admin /></AdminGuard>} />
         </Route>
+        {/* Full-page printable CHWP document (no sidebar) */}
+        <Route path="/work-permits/:id/print" element={<Guard><PermitDocument /></Guard>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
