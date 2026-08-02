@@ -653,6 +653,13 @@ const IDX = {};
 HEADER.forEach(function(h,i){ IDX[h]=i; });
 let ROWS = RAW.rows.slice();
 
+/* ---- Persistence: keep uploaded data across page reloads (IndexedDB) ---- */
+const IDB_NAME='she_legacy', IDB_STORE='kv', IDB_KEY='rows';
+function idbOpen(){ return new Promise(function(res,rej){ var r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=function(){ r.result.createObjectStore(IDB_STORE); }; r.onsuccess=function(){ res(r.result); }; r.onerror=function(){ rej(r.error); }; }); }
+function idbSet(k,v){ return idbOpen().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(v,k); tx.oncomplete=function(){ res(); }; tx.onerror=function(){ rej(tx.error); }; }); }); }
+function idbGet(k){ return idbOpen().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction(IDB_STORE,'readonly'); var g=tx.objectStore(IDB_STORE).get(k); g.onsuccess=function(){ res(g.result); }; g.onerror=function(){ rej(g.error); }; }); }); }
+function persistRows(){ try { idbSet(IDB_KEY, ROWS).catch(function(){}); } catch(e){} }
+
 const MULTI_FIELDS = ['project','status','fy','quarter','month','violation_category','root_cause','hazard_type','severity','probability','risk_grade','contractor','eic','target_date'];
 
 const FIELD_LABELS = {
@@ -1697,6 +1704,7 @@ function finishUpload(totalAdded, filesOk, filesTotal, problems){
     resetFilters();
     initMeta();
     update();
+    persistRows();
   }
   let msg = '';
   if (filesOk>0){
@@ -1724,6 +1732,7 @@ function clearAllData(){
   resetFilters();
   initMeta();
   update();
+  persistRows();
   showToast('All data cleared. Upload .xlsx files to begin again.', 'success');
 }
 
@@ -1780,17 +1789,27 @@ function update(){
 }
 
 function init(){
-  initMeta();
-  initFilterUI();
-  initTableEvents();
-  initModal();
-  initTabs();
-  initDataControls();
-  document.getElementById('accTopSelect').addEventListener('change', function(e){
-    state.accMode = e.target.value;
-    renderAccountabilityChart();
-  });
-  update();
+  function boot(){
+    initMeta();
+    initFilterUI();
+    initTableEvents();
+    initModal();
+    initTabs();
+    initDataControls();
+    document.getElementById('accTopSelect').addEventListener('change', function(e){
+      state.accMode = e.target.value;
+      renderAccountabilityChart();
+    });
+    update();
+  }
+  // Restore any previously uploaded/cleared data before first render
+  idbGet(IDB_KEY).then(function(saved){
+    if (saved && Array.isArray(saved)){
+      ROWS = saved;
+      refreshDerivedData();
+    }
+    boot();
+  }).catch(function(){ boot(); });
 }
 
 if (document.readyState === 'loading'){

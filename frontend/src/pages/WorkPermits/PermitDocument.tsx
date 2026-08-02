@@ -164,12 +164,12 @@ export default function PermitDocument() {
             <tr>
               <td style={{ whiteSpace: 'nowrap', verticalAlign: 'bottom', paddingRight: 8 }}><span className="lbl">FOR WORK IN:</span></td>
               <td colSpan={2} style={{ textAlign: 'center' }}>{line(p.work_location)}</td>
-              <td style={{ textAlign: 'center' }}>{line(p.area)}</td>
+              <td style={{ textAlign: 'center' }}>{line([p.area, p.floor].filter(Boolean).join(' — ') || null)}</td>
             </tr>
             <tr>
               <td></td>
               <td colSpan={2} className="cap">EQUIPMENT / LOCATION</td>
-              <td className="cap">AREA</td>
+              <td className="cap">AREA / FLOOR</td>
             </tr>
           </tbody>
         </table>

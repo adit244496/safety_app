@@ -44,6 +44,7 @@ class TrainingCreate(BaseModel):
     project_id: Optional[int] = None
     project_ids: Optional[List[int]] = None
     department: Optional[str] = None
+    category: Optional[str] = None
     training_type: Optional[str] = None
     training_content: Optional[str] = None
     assessment_method: Optional[str] = None
@@ -125,6 +126,7 @@ def training_to_dict(t: models.Training, db: Optional[Session] = None) -> dict:
         "project_name": project_names[0] if project_names else None,
         "project_names": project_names,
         "department": t.department,
+        "category": t.category,
         "training_type": t.training_type,
         "training_content": t.training_content,
         "assessment_method": t.assessment_method,
@@ -156,9 +158,14 @@ def _scoped_query(db: Session, user: models.User):
 
 @router.get("/trainers")
 def list_trainers(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
-    """All users, for the trainer dropdown on the training form."""
-    users = db.query(models.User).order_by(models.User.name).all()
-    return [{"id": u.id, "name": u.name, "role": u.role} for u in users]
+    """Users eligible to be a trainer (contractors excluded), for the trainer dropdown."""
+    users = (
+        db.query(models.User)
+        .filter(models.User.role != "Contractor")
+        .order_by(models.User.name)
+        .all()
+    )
+    return [{"id": u.id, "name": u.name, "role": u.role, "email": u.email} for u in users]
 
 
 @router.get("/options")
@@ -168,6 +175,13 @@ def training_options(_user: models.User = Depends(get_current_user)):
         "assessment_methods": ASSESSMENT_METHODS,
         "participant_categories": PARTICIPANT_CATEGORIES,
     }
+
+
+@router.get("/categories")
+def list_training_categories(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
+    """Admin-managed training categories, for the training form dropdown."""
+    rows = db.query(models.TrainingCategory).order_by(models.TrainingCategory.sort_order, models.TrainingCategory.name).all()
+    return [{"id": c.id, "name": c.name} for c in rows]
 
 
 @router.get("/departments")
@@ -399,6 +413,7 @@ def create_training(body: TrainingCreate, db: Session = Depends(get_db), user: m
         project_id=primary_pid,
         project_ids=json.dumps(project_ids) if project_ids else None,
         department=body.department,
+        category=body.category,
         training_type=body.training_type,
         training_content=body.training_content,
         assessment_method=body.assessment_method,

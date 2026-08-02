@@ -47,7 +47,7 @@ export default function WorkPermitForm() {
       project_id: '', other_permits: '',
       receiver_user_ids: [] as number[],
       issued_date: t,
-      work_location: '', area: '', starts_at: `${t}T09:00`, expires_at: `${t}T18:00`, work_description: '',
+      work_location: '', area: '', floor: '', starts_at: `${t}T09:00`, expires_at: `${t}T18:00`, work_description: '',
       pre_job_discussion: false, pic_user_id: '', pso_user_id: '', eic_user_id: '',
     }
   })
@@ -58,6 +58,24 @@ export default function WorkPermitForm() {
   const [error, setError] = useState('')
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
+  // datetime-local formatter + max expiry = min(start + 12h, end of the start day)
+  const fmtLocal = (d: Date) => { const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
+  const maxExpiry = (startStr: string): string | undefined => {
+    if (!startStr) return undefined
+    const s = new Date(startStr); if (isNaN(s.getTime())) return undefined
+    const plus12 = new Date(s.getTime() + 12 * 60 * 60 * 1000)
+    const endOfDay = new Date(s); endOfDay.setHours(23, 59, 0, 0)
+    return fmtLocal(plus12 < endOfDay ? plus12 : endOfDay)
+  }
+  // When start changes, keep expiry within [start, maxExpiry]; clamp to max if out of range
+  const setStart = (v: string) => setForm((f: any) => {
+    let exp = f.expires_at
+    const max = maxExpiry(v)
+    if (v && max) {
+      if (!exp || exp <= v || exp > max) exp = max
+    }
+    return { ...f, starts_at: v, expires_at: exp }
+  })
   // Setting an approver also drops any "Issued To" receiver that is no longer one of the three
   const setApprover = (field: string, value: string) => setForm((f: any) => {
     const next = { ...f, [field]: value }
@@ -72,6 +90,39 @@ export default function WorkPermitForm() {
   const { data: psoUsers } = useQuery({ queryKey: ['approvers', 'PSO', pid], queryFn: () => api.get('/work-permits/approvers', { params: { role: 'PSO', project_id: pid || undefined } }).then(r => r.data), staleTime: 30_000 })
   const { data: eicUsers } = useQuery({ queryKey: ['approvers', 'EIC', pid], queryFn: () => api.get('/work-permits/approvers', { params: { role: 'EIC', project_id: pid || undefined } }).then(r => r.data), staleTime: 30_000 })
   const { data: buildings } = useQuery({ queryKey: ['permit-buildings', pid], queryFn: () => api.get('/admin/buildings', { params: { project_id: pid } }).then(r => r.data), enabled: !!pid, staleTime: 30_000 })
+  // Floors are scoped to the selected building (area) — resolve the building id from its name
+  const buildingId = useMemo(() => (buildings || []).find((b: any) => b.name === form.area)?.id, [buildings, form.area])
+  const { data: floorsRaw } = useQuery({ queryKey: ['permit-floors', buildingId], queryFn: () => api.get('/admin/floors', { params: { building_id: buildingId } }).then(r => r.data), enabled: !!buildingId, staleTime: 30_000 })
+  // Observation imports auto-create Floor rows from free-text, polluting the list.
+  // Keep only recognizable floor names, drop ordinal duplicates, and sort sensibly.
+  const floors = useMemo(() => {
+    const looksLikeFloor = (name: string) => {
+      const s = (name || '').trim().toLowerCase()
+      return /^floor\s+\d+$/.test(s)                       // Floor 3
+        || /^\d+(st|nd|rd|th)\s+floor$/.test(s)            // 3rd Floor
+        || /^\d+$/.test(s)                                  // 3
+        || /^b\d+$/.test(s)                                 // B1 (basement)
+        || /^(ground\s*floor|gf|basement|cellar|terrace|top\s*floor|roof|podium|mezzanine|lower ground|upper ground)\b/.test(s)
+    }
+    const kept = (floorsRaw || []).filter((f: any) => looksLikeFloor(f.name))
+    // drop ordinal duplicates (e.g. "3rd Floor") when a canonical "Floor 3" exists
+    const canonicalNums = new Set<number>()
+    kept.forEach((f: any) => { const m = (f.name || '').trim().toLowerCase().match(/^floor\s+(\d+)$/); if (m) canonicalNums.add(parseInt(m[1], 10)) })
+    const deduped = kept.filter((f: any) => {
+      const m = (f.name || '').trim().toLowerCase().match(/^(\d+)(st|nd|rd|th)\s+floor$/)
+      return !(m && canonicalNums.has(parseInt(m[1], 10)))
+    })
+    const rank = (name: string) => {
+      const s = (name || '').trim().toLowerCase()
+      if (/basement|cellar|^b\d+/.test(s)) return -10
+      if (/lower ground/.test(s)) return -2
+      if (/ground|^gf$|upper ground/.test(s)) return 0
+      const m = s.match(/(\d+)/); if (m) return parseInt(m[1], 10)
+      if (/terrace|top|roof/.test(s)) return 9998
+      return 9999
+    }
+    return [...deduped].sort((a: any, b: any) => rank(a.name) - rank(b.name) || a.name.localeCompare(b.name))
+  }, [floorsRaw])
   const { data: existing } = useQuery({ queryKey: ['work-permit', id], queryFn: () => api.get(`/work-permits/${id}`).then(r => r.data), enabled: isEdit })
 
   // Receiver ("Issued To") is picked from the assigned PIC / PSO / EIC only
@@ -91,7 +142,7 @@ export default function WorkPermitForm() {
       setForm({
         project_id: existing.project_id?.toString() || '', other_permits: existing.other_permits || '',
         receiver_user_ids: existing.receiver_user_ids || [],
-        issued_date: existing.issued_date || '', work_location: existing.work_location || '', area: existing.area || '',
+        issued_date: existing.issued_date || '', work_location: existing.work_location || '', area: existing.area || '', floor: existing.floor || '',
         starts_at: existing.starts_at || '', expires_at: existing.expires_at || '', work_description: existing.work_description || '',
         pre_job_discussion: !!existing.pre_job_discussion,
         pic_user_id: existing.pic_user_id?.toString() || '', pso_user_id: existing.pso_user_id?.toString() || '', eic_user_id: existing.eic_user_id?.toString() || '',
@@ -117,6 +168,11 @@ export default function WorkPermitForm() {
   async function save(submit: boolean) {
     if (savingRef.current) return
     if (!form.work_description.trim()) { setError('Description of work is required'); return }
+    if (form.starts_at && form.expires_at) {
+      const s = new Date(form.starts_at).getTime(), e = new Date(form.expires_at).getTime()
+      if (e <= s) { setError('Expiry must be after the start time'); return }
+      if (e - s > 12 * 60 * 60 * 1000) { setError('A work permit can be valid for a maximum of 12 hours (start to expiry).'); return }
+    }
     if (submit) {
       const missing: string[] = []
       if (!form.project_id) missing.push('Project')
@@ -138,6 +194,7 @@ export default function WorkPermitForm() {
       issued_date: form.issued_date || null,
       work_location: form.work_location.trim() || null,
       area: form.area.trim() || null,
+      floor: form.floor.trim() || null,
       starts_at: form.starts_at || null, expires_at: form.expires_at || null,
       work_description: form.work_description.trim() || null,
       pre_job_discussion: !!form.pre_job_discussion,
@@ -188,7 +245,7 @@ export default function WorkPermitForm() {
       <SectionCard title="Permit Details" icon={<FileText className="w-3.5 h-3.5" />}>
         <div className={G3}>
           <Field label="Project" required>
-            <select className="select" value={form.project_id} onChange={e => { const v = e.target.value; setForm((f: any) => ({ ...f, project_id: v, area: '', pic_user_id: '', pso_user_id: '', eic_user_id: '', receiver_user_ids: [] })) }}>
+            <select className="select" value={form.project_id} onChange={e => { const v = e.target.value; setForm((f: any) => ({ ...f, project_id: v, area: '', floor: '', pic_user_id: '', pso_user_id: '', eic_user_id: '', receiver_user_ids: [] })) }}>
               <option value="">Select project…</option>
               {(projects || []).map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
@@ -225,14 +282,30 @@ export default function WorkPermitForm() {
               className="w-full" disabled={!receiverOptions.length} />
           </Field>
           <Field label="Area">
-            <select className="select" value={form.area} onChange={e => set('area', e.target.value)} disabled={!form.project_id}>
+            <select className="select" value={form.area} onChange={e => setForm((f: any) => ({ ...f, area: e.target.value, floor: '' }))} disabled={!form.project_id}>
               <option value="">{form.project_id ? (buildings?.length ? 'Select area / building…' : 'No buildings for project') : 'Select project first…'}</option>
               {(buildings || []).map((b: any) => <option key={b.id} value={b.name}>{b.name}</option>)}
             </select>
           </Field>
+          <Field label="Floor">
+            <select className="select" value={form.floor} onChange={e => set('floor', e.target.value)} disabled={!form.area}>
+              <option value="">{!form.area ? 'Select area first…' : (floors?.length ? 'Select floor…' : 'No floors for area')}</option>
+              {(floors || []).map((fl: any) => <option key={fl.id} value={fl.name}>{fl.name}</option>)}
+            </select>
+          </Field>
           <Field label="For Work In — Equipment / Location"><input className="input" value={form.work_location} onChange={e => set('work_location', e.target.value)} /></Field>
-          <Field label="Starts At"><input type="datetime-local" className="input" value={form.starts_at} onChange={e => set('starts_at', e.target.value)} /></Field>
-          <Field label="Expires At"><input type="datetime-local" className="input" value={form.expires_at} onChange={e => set('expires_at', e.target.value)} /></Field>
+          <Field label="Starts At"><input type="datetime-local" className="input" value={form.starts_at} onChange={e => setStart(e.target.value)} /></Field>
+          <Field label="Expires At" hint="Up to 12 hours from start, same day.">
+            <input type="datetime-local" className="input" value={form.expires_at} min={form.starts_at || undefined} max={maxExpiry(form.starts_at)} disabled={!form.starts_at}
+              onChange={e => {
+                let v = e.target.value
+                const max = maxExpiry(form.starts_at)
+                // Clamp: format is fixed (YYYY-MM-DDTHH:mm) so string compare is order-preserving
+                if (form.starts_at && v && v < form.starts_at) v = form.starts_at
+                if (max && v && v > max) v = max
+                set('expires_at', v)
+              }} />
+          </Field>
           <div className="lg:col-span-3">
             <Field label="Description of Work to be Done" required><textarea rows={2} className="input resize-none" value={form.work_description} onChange={e => set('work_description', e.target.value)} /></Field>
           </div>

@@ -45,10 +45,12 @@ def _run_migrations():
     _training_columns = [
         ("trainings", "project_ids",           "TEXT",    None),
         ("trainings", "assessment_applicable", "BOOLEAN", "BOOLEAN"),
+        ("trainings", "category",              "VARCHAR", None),
     ]
     _permit_columns = [
-        ("work_permits", "receiver_roles",    "TEXT", None),
-        ("work_permits", "receiver_user_ids", "TEXT", None),
+        ("work_permits", "receiver_roles",    "TEXT",    None),
+        ("work_permits", "receiver_user_ids", "TEXT",    None),
+        ("work_permits", "floor",             "VARCHAR", None),
     ]
     all_migrations = _obs_columns + _user_columns + _training_columns + _permit_columns
 

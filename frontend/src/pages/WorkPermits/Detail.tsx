@@ -232,6 +232,7 @@ export default function WorkPermitDetail() {
           <InfoRow label="Issued Date" value={p.issued_date} />
           <InfoRow label="Equipment / Location" value={p.work_location} />
           <InfoRow label="Area" value={p.area} />
+          <InfoRow label="Floor" value={p.floor} />
           <InfoRow label="Starts At" value={p.starts_at?.replace('T', ' ')} />
           <InfoRow label="Expires At" value={p.expires_at?.replace('T', ' ')} />
           <InfoRow label="Other Permits" value={p.other_permits} />

@@ -992,10 +992,15 @@ export async function generateHtmlReportPdf(
   onBeforeCapture?.(el)
 
   const prevOverflowX = el.style.overflowX
+  const prevOverflow  = el.style.overflow
+  const prevMaxH      = el.style.maxHeight
   const prevWidth     = el.style.width
   const contentW      = el.scrollWidth
   const contentH      = el.scrollHeight
 
+  // Neutralise any on-screen height cap / scroll so the full table is captured
+  el.style.overflow  = 'visible'
+  el.style.maxHeight = 'none'
   el.style.overflowX = 'visible'
   el.style.width     = `${contentW}px`
 
@@ -1016,6 +1021,8 @@ export async function generateHtmlReportPdf(
   })
 
   el.style.overflowX = prevOverflowX
+  el.style.overflow  = prevOverflow
+  el.style.maxHeight = prevMaxH
   el.style.width     = prevWidth
   onAfterCapture?.(el)
 

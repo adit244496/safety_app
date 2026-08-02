@@ -23,8 +23,8 @@ const STATUS_COLORS: Record<string, string> = {
 }
 const RISK_COLORS: Record<string, string> = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e' }
 
-// "Positive Approach" is displayed as "Good Observation" on the dashboard; the backend value is unchanged.
-const STATUS_DISPLAY: Record<string, string> = { 'Positive Approach': 'Good Observation' }
+// "Positive Approach" is displayed as "Praiseworthy Observation" on the dashboard; the backend value is unchanged.
+const STATUS_DISPLAY: Record<string, string> = { 'Positive Approach': 'Praiseworthy Observation' }
 const displayStatus = (s: string) => STATUS_DISPLAY[s] || s
 
 const PRIORITY_OPTIONS: MSOption[] = [
@@ -49,7 +49,7 @@ const AGEING_COLORS: Record<string, string> = {
   no_target:     '#cbd5e1',
 }
 const AGEING_LABELS: Record<string, string> = {
-  positive_approach: 'Good Observation',
+  positive_approach: 'Praiseworthy Observation',
   on_time:       'On Time',
   overdue_1_7:   'Overdue ≤7d',
   overdue_8_30:  'Overdue 8-30d',
@@ -213,7 +213,7 @@ export default function Dashboard() {
     { label: 'Overdue',            value: statusCounts['Overdue'] ?? 0,              icon: Hourglass,     bg: 'bg-amber-50',   color: 'text-amber-600',   border: 'border-amber-100'   },
     { label: 'Partially Closed',   value: statusCounts['Partially Closed'] ?? 0,     icon: Clock,         bg: 'bg-lime-50',    color: 'text-lime-600',    border: 'border-lime-100'    },
     { label: 'Closed',             value: statusCounts['Closed'] ?? 0,               icon: CheckCircle,   bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-100' },
-    { label: 'Good Observation',    value: statusCounts['Positive Approach'] ?? 0,    icon: ThumbsUp,      bg: 'bg-amber-50',    color: 'text-[#B8860B]',    border: 'border-amber-100'    },
+    { label: 'Praiseworthy Observation',    value: statusCounts['Positive Approach'] ?? 0,    icon: ThumbsUp,      bg: 'bg-amber-50',    color: 'text-[#B8860B]',    border: 'border-amber-100'    },
     { label: 'Unresolved & Closed',  value: statusCounts['Unresolved & Closed'] ?? 0, icon: AlertTriangle, bg: 'bg-violet-50',  color: 'text-violet-600',  border: 'border-violet-100'  },
   ]
 
@@ -262,7 +262,7 @@ export default function Dashboard() {
 
     // Sheet 2 – Trend
     const ws2 = wb.addWorksheet(viewMode === 'quarterly' ? 'Quarterly Trend' : 'Monthly Trend')
-    const trendCols = ['Period', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Good Observation', 'Unresolved & Closed', 'Total']
+    const trendCols = ['Period', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Praiseworthy Observation', 'Unresolved & Closed', 'Total']
     ws2.columns = trendCols.map((h, i) => ({ header: h, width: i === 0 ? 16 : 14 }))
     addHeaderRow(ws2, trendCols, 'FF4F46E5')
     trendData.forEach((d: any, i) => {
@@ -315,7 +315,7 @@ export default function Dashboard() {
 
     const byAging = data?.byAging || {}
     const agingBuckets = [
-      { key: 'positive_approach', label: 'Good Observation' },
+      { key: 'positive_approach', label: 'Praiseworthy Observation' },
       { key: 'on_time',        label: 'On Time'          },
       { key: 'overdue_1_7',    label: 'Overdue 1-7 Days' },
       { key: 'overdue_8_30',   label: 'Overdue 8-30 Days'},

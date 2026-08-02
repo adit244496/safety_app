@@ -301,6 +301,7 @@ class Training(Base):
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)   # primary (first selected)
     project_ids = Column(Text, nullable=True)           # JSON list of all selected project IDs
     department = Column(String, nullable=True)
+    category = Column(String, nullable=True)            # admin-managed training category
     training_type = Column(String, nullable=True)       # Technical / Refresher / Post-Incident / Corrective
     training_content = Column(Text, nullable=True)
     assessment_method = Column(String, nullable=True)   # Written Quiz / Practical / Verbal Review / Attendance Only
@@ -315,6 +316,14 @@ class Training(Base):
     project = relationship("Project")
     trainer = relationship("User", foreign_keys=[trainer_user_id])
     creator = relationship("User", foreign_keys=[created_by])
+
+
+class TrainingCategory(Base):
+    """Admin-managed list of training categories."""
+    __tablename__ = "training_categories"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False, unique=True)
+    sort_order = Column(Integer, default=0)
 
 
 class WorkPermit(Base):
@@ -333,7 +342,8 @@ class WorkPermit(Base):
     issued_date = Column(String, nullable=True)          # YYYY-MM-DD
 
     work_location = Column(String, nullable=True)         # equipment / location
-    area = Column(String, nullable=True)
+    area = Column(String, nullable=True)                  # building name (from admin)
+    floor = Column(String, nullable=True)                 # floor name (from admin)
     starts_at = Column(String, nullable=True)             # datetime-local string
     expires_at = Column(String, nullable=True)
     work_description = Column(Text, nullable=True)

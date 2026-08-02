@@ -5,6 +5,7 @@ import { Save, ArrowLeft, AlertTriangle, GraduationCap, Users, ClipboardCheck, U
 import { toast } from 'sonner'
 import api from '../../lib/api'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
+import SearchableSelect from '../../components/SearchableSelect'
 
 const STABLE = { staleTime: 5 * 60 * 1000 } as const
 
@@ -55,6 +56,7 @@ export default function TrainingForm() {
     trainer_title: '',
     project_ids: [] as number[],
     department: '',
+    category: '',
     training_type: '',
     training_content: '',
     assessment_applicable: false,
@@ -71,6 +73,7 @@ export default function TrainingForm() {
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => api.get('/projects/').then(r => r.data), ...STABLE })
   const { data: trainers } = useQuery({ queryKey: ['trainers'], queryFn: () => api.get('/trainings/trainers').then(r => r.data), ...STABLE })
   const { data: options } = useQuery({ queryKey: ['training-options'], queryFn: () => api.get('/trainings/options').then(r => r.data), ...STABLE })
+  const { data: categories } = useQuery({ queryKey: ['training-categories'], queryFn: () => api.get('/trainings/categories').then(r => r.data), ...STABLE })
 
   // Participant pools — scoped to the selected projects
   const projParam = form.project_ids
@@ -105,6 +108,7 @@ export default function TrainingForm() {
         trainer_title: existing.trainer_title || '',
         project_ids: existing.project_ids?.length ? existing.project_ids : (existing.project_id ? [existing.project_id] : []),
         department: existing.department || '',
+        category: existing.category || '',
         training_type: existing.training_type || '',
         training_content: existing.training_content || '',
         assessment_applicable: !!existing.assessment_applicable,
@@ -168,6 +172,7 @@ export default function TrainingForm() {
       project_ids: form.project_ids,
       project_id: form.project_ids[0] ?? null,
       department: form.department.trim() || null,
+      category: form.category || null,
       training_type: form.training_type || null,
       training_content: form.training_content.trim() || null,
       assessment_applicable: !!form.assessment_applicable,
@@ -258,7 +263,13 @@ export default function TrainingForm() {
           <Field label="Department">
             <input className="input" placeholder="e.g. Civil, Electrical, EHS" value={form.department} onChange={e => set('department', e.target.value)} />
           </Field>
-          <div className="lg:col-span-3">
+          <Field label="Category">
+            <select className="select" value={form.category} onChange={e => set('category', e.target.value)}>
+              <option value="">Select category…</option>
+              {(categories || []).map((c: any) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            </select>
+          </Field>
+          <div className="lg:col-span-2">
             <Field label="Project(s)" hint="Select one or more projects. The participant lists below are scoped to these projects.">
               <MultiSelectFilter
                 size="md"
@@ -285,10 +296,12 @@ export default function TrainingForm() {
             </Field>
           ) : (
             <Field label="Trainer" required>
-              <select className="select" value={form.trainer_user_id} onChange={e => set('trainer_user_id', e.target.value)}>
-                <option value="">Select trainer…</option>
-                {(trainers || []).map((u: any) => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
-              </select>
+              <SearchableSelect
+                options={(trainers || []).map((u: any) => ({ value: u.id, label: `${u.name}${u.email ? ` (${u.email})` : ''}` }))}
+                value={form.trainer_user_id}
+                onChange={v => set('trainer_user_id', String(v))}
+                placeholder="Search & select trainer…"
+              />
             </Field>
           )}
           <Field label="Trainer Title / Designation">

@@ -40,6 +40,7 @@ class PermitBody(BaseModel):
     issued_date: Optional[str] = None
     work_location: Optional[str] = None
     area: Optional[str] = None
+    floor: Optional[str] = None
     starts_at: Optional[str] = None
     expires_at: Optional[str] = None
     work_description: Optional[str] = None
@@ -121,6 +122,7 @@ def permit_to_dict(p: models.WorkPermit) -> dict:
         "issued_date": p.issued_date,
         "work_location": p.work_location,
         "area": p.area,
+        "floor": p.floor,
         "starts_at": p.starts_at,
         "expires_at": p.expires_at,
         "work_description": p.work_description,
@@ -161,7 +163,23 @@ def _can_approve(p: models.WorkPermit, user: models.User) -> bool:
     return _is_assigned_approver(p, user) or user.role in ADMIN_ROLES
 
 
+def _validate_permit_times(starts_at, expires_at):
+    """A permit may be valid for at most 12 hours, and must expire after it starts."""
+    if not starts_at or not expires_at:
+        return
+    try:
+        s = datetime.fromisoformat(starts_at)
+        e = datetime.fromisoformat(expires_at)
+    except (ValueError, TypeError):
+        return  # unparseable — leave as-is
+    if e <= s:
+        raise HTTPException(400, "Expiry must be after the start time")
+    if (e - s).total_seconds() > 12 * 3600:
+        raise HTTPException(400, "A work permit can be valid for a maximum of 12 hours (start to expiry)")
+
+
 def _apply_body(p: models.WorkPermit, body: PermitBody, db: Session):
+    _validate_permit_times(body.starts_at, body.expires_at)
     p.project_id = body.project_id
     p.other_permits = body.other_permits
     uids = body.receiver_user_ids or []
@@ -184,6 +202,7 @@ def _apply_body(p: models.WorkPermit, body: PermitBody, db: Session):
     p.issued_date = body.issued_date
     p.work_location = body.work_location
     p.area = body.area
+    p.floor = body.floor
     p.starts_at = body.starts_at
     p.expires_at = body.expires_at
     p.work_description = body.work_description

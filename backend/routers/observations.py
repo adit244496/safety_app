@@ -1100,16 +1100,15 @@ def _resolve_or_create_building(db: Session, name: str, project_id: int) -> mode
     return obj
 
 
-def _resolve_or_create_floor(db: Session, name: str, building_id: int) -> models.Floor:
-    obj = db.query(models.Floor).filter(
+def _resolve_floor(db: Session, name: str, building_id: int):
+    """Match an existing floor only — imports must NOT create new floors, otherwise the
+    floor list gets polluted with free-text values from the observation sheets."""
+    if not name or not building_id:
+        return None
+    return db.query(models.Floor).filter(
         models.Floor.building_id == building_id,
         models.Floor.name.ilike(name),
     ).first()
-    if not obj:
-        obj = models.Floor(name=name, building_id=building_id)
-        db.add(obj)
-        db.flush()
-    return obj
 
 
 @router.post("/bulk-import")
@@ -1182,9 +1181,12 @@ async def bulk_import_observations(
                 continue
             project = _find_project(db, project_name)
 
-            # Building / Floor — auto-create if absent
+            # Building — auto-created if absent. Floor — matched only, never created:
+            # unmatched floor text is folded into the location so no info is lost.
             building = _resolve_or_create_building(db, building_name, project.id) if building_name else None
-            floor    = _resolve_or_create_floor(db, floor_name, building.id) if (floor_name and building) else None
+            floor    = _resolve_floor(db, floor_name, building.id) if (floor_name and building) else None
+            if floor_name and not floor:
+                exact_location = " - ".join(p for p in [floor_name, exact_location] if p)
 
             # Contractor user — prefer project-scoped match
             contractor_user = None

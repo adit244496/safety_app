@@ -70,6 +70,20 @@ def _seed_risk_labels(db):
         db.commit()
 
 
+_DEFAULT_TRAINING_CATEGORIES = [
+    "Safety Induction", "Toolbox Talk", "Classroom Session",
+    "On-the-Job Training", "Mock Drill / Emergency Response", "Awareness Session",
+]
+
+
+def _seed_training_categories(db):
+    import models as m
+    if db.query(m.TrainingCategory).count() == 0:
+        for i, name in enumerate(_DEFAULT_TRAINING_CATEGORIES):
+            db.add(m.TrainingCategory(name=name, sort_order=i))
+        db.commit()
+
+
 @app.on_event("startup")
 def startup():
     init_db()
@@ -79,6 +93,7 @@ def startup():
         seed_ease_criteria(db)
         seed_permit_config(db)
         _seed_risk_labels(db)
+        _seed_training_categories(db)
         if not _IS_PROD:
             seed_ease_scores(db)
             seed_dummy_data(db)

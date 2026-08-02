@@ -745,3 +745,42 @@ def reorder_permit_work_types(body: ReorderBody, db: Session = Depends(get_db), 
             wt.sort_order = i
     db.commit()
     return {"success": True}
+
+
+# ── Training Categories ──────────────────────────────────────────────────────
+@router.get("/training-categories")
+def list_training_categories_admin(db: Session = Depends(get_db), _=Depends(require_admin)):
+    rows = db.query(models.TrainingCategory).order_by(models.TrainingCategory.sort_order, models.TrainingCategory.name).all()
+    return [{"id": c.id, "name": c.name, "sort_order": c.sort_order} for c in rows]
+
+
+@router.post("/training-categories", status_code=201)
+def create_training_category(body: NameBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(400, "Name is required")
+    if db.query(models.TrainingCategory).filter(models.TrainingCategory.name.ilike(name)).first():
+        raise HTTPException(409, "Category already exists")
+    n = db.query(models.TrainingCategory).count()
+    c = models.TrainingCategory(name=name, sort_order=n)
+    db.add(c); db.commit(); db.refresh(c)
+    return {"id": c.id, "name": c.name}
+
+
+@router.put("/training-categories/{id}")
+def update_training_category(id: int, body: NameBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    c = db.query(models.TrainingCategory).filter(models.TrainingCategory.id == id).first()
+    if not c:
+        raise HTTPException(404, "Not found")
+    c.name = body.name.strip()
+    db.commit()
+    return {"success": True}
+
+
+@router.delete("/training-categories/{id}")
+def delete_training_category(id: int, db: Session = Depends(get_db), _=Depends(require_super_admin)):
+    c = db.query(models.TrainingCategory).filter(models.TrainingCategory.id == id).first()
+    if not c:
+        raise HTTPException(404, "Not found")
+    db.delete(c); db.commit()
+    return {"success": True}
