@@ -268,6 +268,11 @@ export default function ObservationForm() {
     ? calcRisk(Number(form.severity), Number(form.probability))
     : null
 
+  // "Praiseworthy observation" is a Core Concern (good practice) — no rectification needed,
+  // so the target date is hidden for it. For "Positive Approach" status it stays optional.
+  const selectedCore = (coreConcerns || []).find((c: any) => String(c.id) === String(form.core_concern_id))
+  const isPraiseworthyConcern = /praiseworthy/i.test(selectedCore?.name || '')
+
   const MAX_IMAGES = 5
 
   const handleFiles = (files: FileList | null) => {
@@ -316,7 +321,7 @@ export default function ObservationForm() {
         if (!form.contractor_company)           missing.push('Contractor Company')
         if (!form.contractor_user_ids.length)   missing.push('To Be Rectified By')
         if (!form.violation_id)                 missing.push('Violation Caused Due To')
-        if (!form.target_date_actual)           missing.push('Target Date for Rectification')
+        if (!isPraiseworthyConcern && !form.target_date_actual) missing.push('Target Date for Rectification')
       }
       if (missing.length > 0) {
         setError(`Please fill in the following required fields: ${missing.join(', ')}`)
@@ -732,8 +737,8 @@ export default function ObservationForm() {
               <p className="text-xs text-gray-400">Risk result will appear here</p>
             </div>
           )}
-          {form.status !== 'Positive Approach' && (
-            <Field label="Target Date for Rectification" required>
+          {!isPraiseworthyConcern && (
+            <Field label="Target Date for Rectification" required={form.status !== 'Positive Approach'}>
               <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
             </Field>
           )}
