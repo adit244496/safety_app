@@ -1337,7 +1337,7 @@ export default function ReportPage() {
   return (
     <div className="space-y-5">
       {/* ── Control panel ── */}
-      <div className="no-print trk-no-print">
+      <div className="no-print trk-no-print sticky top-0 z-20 bg-slate-50 pb-2">
         <style dangerouslySetInnerHTML={{ __html: STYLE }} />
 
         {/* Page header with tabs on the right */}
@@ -1375,7 +1375,7 @@ export default function ReportPage() {
         </div>
 
         {/* Shared filter panel */}
-        <div className="card sticky top-0 z-20 shadow-md">
+        <div className="card shadow-md">
           <h2 className="font-semibold text-gray-800 mb-3">Report Parameters</h2>
           <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
             <div>
