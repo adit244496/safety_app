@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { usePageTitle } from '../../store/pageTitleContext'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -10,6 +10,32 @@ import api from '../../lib/api'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
 
 const STALE = { staleTime: 5 * 60 * 1000 } as const
+
+// Wide report table with a SECOND horizontal scrollbar on top (synced with the native
+// bottom one), so you can scroll sideways without reaching the bottom of the table.
+function DualScrollX({ id, children }: { id: string; children: React.ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const topRef = useRef<HTMLDivElement>(null)
+  const [w, setW] = useState(0)
+  useEffect(() => {
+    const el = scrollRef.current, top = topRef.current
+    if (!el || !top) return
+    const onEl = () => { top.scrollLeft = el.scrollLeft }
+    const onTop = () => { el.scrollLeft = top.scrollLeft }
+    el.addEventListener('scroll', onEl, { passive: true })
+    top.addEventListener('scroll', onTop, { passive: true })
+    const measure = () => setW(el.scrollWidth)
+    measure()
+    const ro = new ResizeObserver(measure); ro.observe(el)
+    return () => { el.removeEventListener('scroll', onEl); top.removeEventListener('scroll', onTop); ro.disconnect() }
+  }, [])
+  return (
+    <>
+      <div ref={topRef} className="report-top-scroll no-print trk-no-print"><div style={{ width: w, height: 1 }} /></div>
+      <div id={id} ref={scrollRef} style={{ overflowX: 'auto' }}>{children}</div>
+    </>
+  )
+}
 
 function sevText(n?: number | null) {
   if (!n) return '—'
@@ -561,6 +587,10 @@ function LightboxZoom({ src, label, onClose }: { src: string; label?: string; on
 
 // ── Styles ────────────────────────────────────────────────────────────────
 const STYLE = `
+/* ── Top horizontal scrollbar for wide report tables ── */
+.report-top-scroll { overflow-x: auto; overflow-y: hidden; height: 14px; }
+@media print { .report-top-scroll { display: none !important; } }
+
 /* ── Screen hide/show ── */
 .she-print-only { display: none !important; }
 
@@ -1118,7 +1148,7 @@ function SHETrackerTab({
       </div>
 
       {/* ── Tracker table ── */}
-      <div id="tracker-print-root" style={{ overflowX: 'auto' }}>
+      <DualScrollX id="tracker-print-root">
         <table className="trk-table" style={{ minWidth: 1600 }}>
           <colgroup>
             {cols.map((c, i) => <col key={i} style={{ width: c.w }} />)}
@@ -1201,7 +1231,7 @@ function SHETrackerTab({
             })}
           </tbody>
         </table>
-      </div>
+      </DualScrollX>
     </div>
   )
 }
@@ -1461,7 +1491,7 @@ export default function ReportPage() {
 
       {/* ── SHE Inspection Report output ── */}
       {generated && !isFetching && observations.length > 0 && activeTab === 'inspection' && (
-        <div id="she-report-root" style={{ overflowX: 'auto' }}>
+        <DualScrollX id="she-report-root">
           <table className="she-table" style={{ minWidth: 1050 }}>
             <colgroup>
               <col style={{ width: '3%' }} />
@@ -1513,7 +1543,7 @@ export default function ReportPage() {
               ))}
             </tbody>
           </table>
-        </div>
+        </DualScrollX>
       )}
 
       {/* ── SHE Tracker output ── */}

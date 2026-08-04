@@ -122,11 +122,11 @@ export default function TrainingForm() {
   }, [existing])
 
   const employeeOptions: MSOption[] = useMemo(
-    () => (employeePool || []).map((u: any) => ({ value: u.id, label: `${u.name} · ${u.role}` })),
+    () => (employeePool || []).map((u: any) => ({ value: u.id, label: `${u.name}${u.email ? ` (${u.email})` : ''} · ${u.role}` })),
     [employeePool],
   )
   const contractorOptions: MSOption[] = useMemo(
-    () => (contractorPool || []).map((u: any) => ({ value: u.id, label: [u.name, u.role].filter(Boolean).join(' · ') })),
+    () => (contractorPool || []).map((u: any) => ({ value: u.id, label: `${u.name}${u.email ? ` (${u.email})` : ''}${u.role ? ` · ${u.role}` : ''}` })),
     [contractorPool],
   )
 

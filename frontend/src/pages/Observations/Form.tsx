@@ -9,6 +9,7 @@ import { useAuth } from '../../store/authStore'
 import { MultiSelectFilter } from '../../components/MultiSelectFilter'
 
 const DEFAULT_SEVERITY: Record<number, string> = {
+  0: '0 – No Injury / Not Applicable',
   1: '1 – First Aid only',
   2: '2 – Medical Treatment, no lost time',
   3: '3 – Lost Time Accident',
@@ -16,12 +17,14 @@ const DEFAULT_SEVERITY: Record<number, string> = {
   5: '5 – Fatality',
 }
 const DEFAULT_PROB: Record<number, string> = {
+  0: '0 – Not Applicable',
   1: '1 – Very Unlikely',
   2: '2 – Unlikely',
   3: '3 – Possible',
   4: '4 – Likely',
   5: '5 – Almost Certain',
 }
+const RISK_LEVELS = [0, 1, 2, 3, 4, 5]
 
 function prepareFloors(floors: any[]): any[] {
   // Drop ordinal names (e.g. "3rd") when the canonical "Floor N" already exists
@@ -701,13 +704,13 @@ export default function ObservationForm() {
           <Field label="Severity of Consequence" required hint="1 = First Aid only  →  5 = Fatality">
             <select className="select" value={form.severity} onChange={e => set('severity', e.target.value)}>
               <option value="">Select severity…</option>
-              {[1,2,3,4,5].map(n => <option key={n} value={n}>{SEVERITY_LABELS[n]}</option>)}
+              {RISK_LEVELS.map(n => <option key={n} value={n}>{SEVERITY_LABELS[n]}</option>)}
             </select>
           </Field>
           <Field label="Probability of Occurrence" required hint="1 = Very Unlikely  →  5 = Almost Certain">
             <select className="select" value={form.probability} onChange={e => set('probability', e.target.value)}>
               <option value="">Select probability…</option>
-              {[1,2,3,4,5].map(n => <option key={n} value={n}>{PROB_LABELS[n]}</option>)}
+              {RISK_LEVELS.map(n => <option key={n} value={n}>{PROB_LABELS[n]}</option>)}
             </select>
           </Field>
           {risk ? (
@@ -729,9 +732,11 @@ export default function ObservationForm() {
               <p className="text-xs text-gray-400">Risk result will appear here</p>
             </div>
           )}
-          <Field label="Target Date for Rectification" required={form.status !== 'Positive Approach'}>
-            <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
-          </Field>
+          {form.status !== 'Positive Approach' && (
+            <Field label="Target Date for Rectification" required>
+              <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
+            </Field>
+          )}
         </div>
       </SectionCard>
 

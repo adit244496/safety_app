@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import api from '../../lib/api'
 
-const LEVELS = [1, 2, 3, 4, 5]
+const LEVELS = [0, 1, 2, 3, 4, 5]
 
 function LabelEditor({
   title,

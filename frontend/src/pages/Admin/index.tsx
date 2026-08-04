@@ -1,6 +1,6 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { usePageTitle } from '../../store/pageTitleContext'
-import { Users, Database, Shield, ClipboardList, Mail, TriangleAlert, FileUp, FileCheck2, GraduationCap } from 'lucide-react'
+import { Users, Database, Shield, ClipboardList, Mail, TriangleAlert, FileUp, FileCheck2, GraduationCap, BookOpen } from 'lucide-react'
 import UsersTab from './UsersTab'
 import DataInputTab from './DataInputTab'
 import SafetyMeasuresTab from './SafetyMeasuresTab'
@@ -10,6 +10,7 @@ import RiskLabelsTab from './RiskLabelsTab'
 import ImportTab from './ImportTab'
 import PermitConfigTab from './PermitConfigTab'
 import TrainingCategoriesTab from './TrainingCategoriesTab'
+import GuidelinesTab from './GuidelinesTab'
 
 const TABS = [
   { to: '/admin', label: 'Users', icon: Users, exact: true },
@@ -19,6 +20,7 @@ const TABS = [
   { to: '/admin/ease-criteria', label: 'SHE Criteria', icon: ClipboardList },
   { to: '/admin/training-categories', label: 'Training', icon: GraduationCap },
   { to: '/admin/permit-config', label: 'Work Permits', icon: FileCheck2 },
+  { to: '/admin/guidelines', label: 'Guidelines', icon: BookOpen },
   { to: '/admin/import', label: 'Import', icon: FileUp },
   { to: '/admin/email', label: 'Email Settings', icon: Mail },
 ]
@@ -64,6 +66,7 @@ export default function Admin() {
         <Route path="ease-criteria" element={<EaseCriteriaTab />} />
         <Route path="permit-config" element={<PermitConfigTab />} />
         <Route path="training-categories" element={<TrainingCategoriesTab />} />
+        <Route path="guidelines" element={<GuidelinesTab />} />
         <Route path="import" element={<ImportTab />} />
         <Route path="email" element={<EmailSettingsTab />} />
       </Routes>

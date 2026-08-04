@@ -326,6 +326,20 @@ class TrainingCategory(Base):
     sort_order = Column(Integer, default=0)
 
 
+class Guideline(Base):
+    """Safety guideline PDF uploaded by admins, visible to all users."""
+    __tablename__ = "guidelines"
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String, nullable=True)
+    file_path = Column(String, nullable=False)     # stored filename in uploads dir
+    file_name = Column(String, nullable=False)     # original filename
+    uploaded_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=func.now())
+    uploader = relationship("User")
+
+
 class WorkPermit(Base):
     """Construction Hazardous Work Permit (CHWP) — contractor-submitted, approved by PIC/PSO/EIC."""
     __tablename__ = "work_permits"

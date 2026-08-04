@@ -18,6 +18,7 @@ import WorkPermits from './pages/WorkPermits/index'
 import WorkPermitForm from './pages/WorkPermits/Form'
 import WorkPermitDetail from './pages/WorkPermits/Detail'
 import PermitDocument from './pages/WorkPermits/PermitDocument'
+import Guidelines from './pages/Guidelines'
 
 function Guard({ children }: { children: React.ReactNode }) {
   const { token, user } = useAuth()
@@ -87,6 +88,7 @@ export default function App() {
           <Route path="work-permits/new" element={<PermitFormGuard><WorkPermitForm /></PermitFormGuard>} />
           <Route path="work-permits/:id" element={<WorkPermitDetail />} />
           <Route path="work-permits/:id/edit" element={<PermitFormGuard><WorkPermitForm /></PermitFormGuard>} />
+          <Route path="guidelines" element={<Guidelines />} />
           <Route path="admin/*" element={<AdminGuard><Admin /></AdminGuard>} />
         </Route>
         {/* Full-page printable CHWP document (no sidebar) */}
