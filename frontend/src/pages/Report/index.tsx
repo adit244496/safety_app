@@ -1337,9 +1337,9 @@ export default function ReportPage() {
   return (
     <div className="space-y-5">
       {/* ── Control panel ── */}
-      {/* Sticky filter pane. Negative top margin + padding fills the page's top padding so the
-          report never peeks above it; z-30 keeps it over the table. */}
-      <div className="no-print trk-no-print sticky top-0 z-30 bg-slate-50 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-2">
+      {/* Sticky filter pane. Negative `top` rides the pane up over the page's top padding while
+          matching top padding keeps its content in place — so the report never peeks above it. */}
+      <div className="no-print trk-no-print sticky -top-4 md:-top-6 z-30 bg-slate-50 pt-4 md:pt-6 pb-2">
         <style dangerouslySetInnerHTML={{ __html: STYLE }} />
 
         {/* Tabs (title lives in the app header) */}
