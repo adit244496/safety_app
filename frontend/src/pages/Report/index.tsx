@@ -1337,17 +1337,13 @@ export default function ReportPage() {
   return (
     <div className="space-y-5">
       {/* ── Control panel ── */}
-      <div className="no-print trk-no-print sticky top-0 z-20 bg-slate-50 pb-2">
+      {/* Sticky filter pane. Negative top margin + padding fills the page's top padding so the
+          report never peeks above it; z-30 keeps it over the table. */}
+      <div className="no-print trk-no-print sticky top-0 z-30 bg-slate-50 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-2">
         <style dangerouslySetInnerHTML={{ __html: STYLE }} />
 
-        {/* Page header with tabs on the right */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <div className="lg:hidden">
-            <h1 className="page-title flex items-center gap-2">
-              <FileText className="w-6 h-6 text-indigo-600" /> SHE Reports
-            </h1>
-            <p className="text-sm text-gray-400 mt-1">Surveillance Safety, Health &amp; Environment report generator</p>
-          </div>
+        {/* Tabs (title lives in the app header) */}
+        <div className="flex items-center justify-end gap-2 mb-2">
           <div className="flex gap-1 bg-slate-100 rounded-xl p-1 self-start sm:self-auto flex-shrink-0">
             <button
               onClick={() => setActiveTab('inspection')}
@@ -1375,9 +1371,9 @@ export default function ReportPage() {
         </div>
 
         {/* Shared filter panel */}
-        <div className="card shadow-md">
-          <h2 className="font-semibold text-gray-800 mb-3">Report Parameters</h2>
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <div className="card shadow-md !p-3">
+          <h2 className="text-sm font-semibold text-gray-800 mb-2">Report Parameters</h2>
+          <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6">
             <div>
               <label className="label">Project</label>
               <MultiSelectFilter
@@ -1428,7 +1424,7 @@ export default function ReportPage() {
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <button onClick={() => setGenerated(true)} disabled={isFetching} className="btn-primary w-full sm:w-auto justify-center">
               {isFetching
                 ? <><span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Generating…</>
