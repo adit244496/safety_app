@@ -730,6 +730,9 @@ export default function ObservationForm() {
                   {risk.level === 'Medium' && 'Interim controls required.'}
                   {risk.level === 'High' && 'Immediate intervention required.'}
                 </p>
+                <p className={`text-xs font-semibold mt-1 leading-tight ${riskTextColor}`}>
+                  Recommended target: {risk.level === 'High' ? 'Same day or ≤ 2 days' : risk.level === 'Medium' ? '≤ 4 days' : '≤ 7 days'}
+                </p>
               </div>
             </div>
           ) : (
