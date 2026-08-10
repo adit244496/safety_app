@@ -154,12 +154,12 @@ export default function PermitDocument() {
           <tbody>
             <tr>
               <td style={{ whiteSpace: 'nowrap', verticalAlign: 'middle', paddingRight: 10 }}><span className="lbl">ISSUED TO:</span></td>
-              <td style={{ width: '40%', textAlign: 'center', verticalAlign: 'middle', fontWeight: 600 }}>{line(p.created_by_name)}</td>
-              <td style={{ width: '36%', textAlign: 'left', verticalAlign: 'middle', fontSize: '8.5pt', paddingLeft: 12 }}>
+              <td style={{ width: '40%', textAlign: 'center', verticalAlign: 'middle', fontWeight: 600, fontSize: '8.5pt', lineHeight: 1.2 }}>{line(p.created_by_name)}</td>
+              <td style={{ width: '36%', textAlign: 'left', verticalAlign: 'middle', fontSize: '7.5pt', lineHeight: 1.3, paddingLeft: 12 }}>
                 <div><b>Email ID:</b> {line(p.created_by_email)}</div>
-                <div style={{ marginTop: 2 }}><b>Phone:</b> {line(p.created_by_mobile)}</div>
+                <div><b>Phone:</b> {line(p.created_by_mobile)}</div>
               </td>
-              <td style={{ width: '14%', textAlign: 'center', verticalAlign: 'middle' }}>{line(p.issued_date)}</td>
+              <td style={{ width: '14%', textAlign: 'center', verticalAlign: 'middle', fontSize: '8.5pt' }}>{line(p.issued_date)}</td>
             </tr>
             <tr>
               <td></td>
@@ -170,7 +170,7 @@ export default function PermitDocument() {
             <tr>
               <td style={{ whiteSpace: 'nowrap', verticalAlign: 'bottom', paddingRight: 8 }}><span className="lbl">FOR WORK IN:</span></td>
               <td colSpan={2} style={{ textAlign: 'center' }}>{line(p.work_location)}</td>
-              <td style={{ textAlign: 'center' }}>{line([p.area, p.floor].filter(Boolean).join(' — ') || null)}</td>
+              <td style={{ textAlign: 'center', whiteSpace: 'nowrap', fontSize: '8.5pt' }}>{line([p.area, p.floor].filter(Boolean).join(' — ') || null)}</td>
             </tr>
             <tr>
               <td></td>

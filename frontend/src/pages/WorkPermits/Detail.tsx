@@ -242,12 +242,22 @@ export default function WorkPermitDetail() {
         <div className="mt-4"><InfoRow label="Description of Work" value={p.work_description} /></div>
       </Card>
 
-      {/* Approvers */}
+      {/* Approvers — a green tick marks whoever approved */}
       <Card title="Approvers" icon={<UserCheck className="w-3.5 h-3.5" />}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <InfoRow label="PIC" value={p.pic_user?.name} />
-          <InfoRow label="PSO" value={p.pso_user?.name} />
-          <InfoRow label="EIC" value={p.eic_user?.name} />
+          {[{ role: 'PIC', u: p.pic_user }, { role: 'PSO', u: p.pso_user }, { role: 'EIC', u: p.eic_user }].map(({ role, u }) => {
+            const approved = !!u && p.approved_by === u.id
+            return (
+              <div key={role}>
+                <p className="text-xs text-gray-400 uppercase tracking-wide">{role}</p>
+                <p className="text-sm font-medium text-gray-800 mt-0.5 flex items-center gap-1.5">
+                  {approved && <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />}
+                  <span>{u?.name || '—'}</span>
+                  {approved && <span className="text-[11px] font-semibold text-emerald-600">Approved</span>}
+                </p>
+              </div>
+            )
+          })}
         </div>
       </Card>
 
