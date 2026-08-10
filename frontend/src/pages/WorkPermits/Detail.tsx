@@ -227,8 +227,9 @@ export default function WorkPermitDetail() {
       <Card title="Permit Details" icon={<FileText className="w-3.5 h-3.5" />}>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
           <InfoRow label="Project" value={p.project_name} />
-          <InfoRow label="Issued To" value={p.receiver_name} />
-          <InfoRow label="Designation" value={p.receiver_designation} />
+          <InfoRow label="Issued To (Receiver)" value={p.created_by_name} />
+          <InfoRow label="Receiver Email" value={p.created_by_email} />
+          <InfoRow label="Receiver Phone" value={p.created_by_mobile} />
           <InfoRow label="Issued Date" value={p.issued_date} />
           <InfoRow label="Equipment / Location" value={p.work_location} />
           <InfoRow label="Area" value={p.area} />

@@ -116,6 +116,9 @@ export default function PermitDocument() {
   const histOf = (a: string) => (p.history || []).find((h: any) => h.action === a)
   const approvedH = histOf('approved')
   const closeByH = histOf('closed') || histOf('cancelled')
+  const approverName = approvedH?.name || p.approver_name
+  const approverRole = approvedH?.role || p.approver_role
+  const approverLabel = approverName ? `${approverName}${approverRole ? ` (${approverRole})` : ''}` : null
   const slot = (v?: string | null, w = 110) => (
     <span style={{ display: 'inline-block', minWidth: w, borderBottom: '1px solid #000', textAlign: 'center', fontWeight: 400, padding: '0 3px', color: v && v.trim() ? FILLED : undefined }}>{v || ' '}</span>
   )
@@ -150,18 +153,18 @@ export default function PermitDocument() {
         <table style={{ marginTop: 4 }}>
           <tbody>
             <tr>
-              <td style={{ whiteSpace: 'nowrap', verticalAlign: 'bottom', paddingRight: 8 }}><span className="lbl">ISSUED TO:</span></td>
-              <td style={{ textAlign: 'center' }}>{line(p.created_by_name)}</td>
-              <td style={{ textAlign: 'left', fontSize: '8.5pt', paddingLeft: 10 }}>
+              <td style={{ whiteSpace: 'nowrap', verticalAlign: 'middle', paddingRight: 10 }}><span className="lbl">ISSUED TO:</span></td>
+              <td style={{ width: '40%', textAlign: 'center', verticalAlign: 'middle', fontWeight: 600 }}>{line(p.created_by_name)}</td>
+              <td style={{ width: '36%', textAlign: 'left', verticalAlign: 'middle', fontSize: '8.5pt', paddingLeft: 12 }}>
                 <div><b>Email ID:</b> {line(p.created_by_email)}</div>
-                <div><b>Phone:</b> {line(p.created_by_mobile)}</div>
+                <div style={{ marginTop: 2 }}><b>Phone:</b> {line(p.created_by_mobile)}</div>
               </td>
-              <td style={{ width: '15%', textAlign: 'center' }}>{line(p.issued_date)}</td>
+              <td style={{ width: '14%', textAlign: 'center', verticalAlign: 'middle' }}>{line(p.issued_date)}</td>
             </tr>
             <tr>
               <td></td>
-              <td className="cap">NAME (CONTRACTOR)</td>
-              <td className="cap">EMAIL ID / PHONE (CONTRACTOR)</td>
+              <td className="cap">NAME (RECEIVER)</td>
+              <td className="cap" style={{ textAlign: 'left', paddingLeft: 12 }}>EMAIL ID / PHONE (RECEIVER)</td>
               <td className="cap">DATE</td>
             </tr>
             <tr>
@@ -197,7 +200,7 @@ export default function PermitDocument() {
           <tbody>
             <tr>
               <td style={{ whiteSpace: 'nowrap', verticalAlign: 'bottom', paddingRight: 8 }}><Cb checked={p.pre_job_discussion} /> <span className="lbl">HELD PRE-JOB DISCUSSION</span></td>
-              <td style={{ textAlign: 'center' }}>{line(approvedH?.name || p.approver_name)}</td>
+              <td style={{ textAlign: 'center' }}>{line(approverLabel)}</td>
               <td style={{ width: '13%', textAlign: 'center' }}>{line(fmtDate(approvedH?.at))}</td>
               <td style={{ width: '11%', textAlign: 'center' }}>{line(fmtTime(approvedH?.at))}</td>
             </tr>
