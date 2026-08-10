@@ -150,6 +150,8 @@ def permit_to_dict(p: models.WorkPermit) -> dict:
         "history": _load(p.history, []),
         "created_by": p.created_by,
         "created_by_name": p.creator.name if p.creator else None,
+        "created_by_email": p.creator.email if p.creator else None,
+        "created_by_mobile": p.creator.mobile if p.creator else None,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }

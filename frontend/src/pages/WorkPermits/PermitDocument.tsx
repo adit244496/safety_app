@@ -151,14 +151,17 @@ export default function PermitDocument() {
           <tbody>
             <tr>
               <td style={{ whiteSpace: 'nowrap', verticalAlign: 'bottom', paddingRight: 8 }}><span className="lbl">ISSUED TO:</span></td>
-              <td style={{ textAlign: 'center' }}>{line(p.receiver_name)}</td>
-              <td style={{ textAlign: 'center' }}>{line(p.receiver_designation)}</td>
+              <td style={{ textAlign: 'center' }}>{line(p.created_by_name)}</td>
+              <td style={{ textAlign: 'left', fontSize: '8.5pt', paddingLeft: 10 }}>
+                <div><b>Email ID:</b> {line(p.created_by_email)}</div>
+                <div><b>Phone:</b> {line(p.created_by_mobile)}</div>
+              </td>
               <td style={{ width: '15%', textAlign: 'center' }}>{line(p.issued_date)}</td>
             </tr>
             <tr>
               <td></td>
-              <td className="cap">NAME (RECEIVER)</td>
-              <td className="cap">DESIGNATION / PORTFOLIO (RECEIVER)</td>
+              <td className="cap">NAME (CONTRACTOR)</td>
+              <td className="cap">EMAIL ID / PHONE (CONTRACTOR)</td>
               <td className="cap">DATE</td>
             </tr>
             <tr>
@@ -189,20 +192,18 @@ export default function PermitDocument() {
           know what to do in an <b>EMERGENCY</b>.
         </p>
 
-        {/* Pre-job discussion */}
+        {/* Pre-job discussion — signed by the approver */}
         <table style={{ marginTop: 4 }}>
           <tbody>
             <tr>
               <td style={{ whiteSpace: 'nowrap', verticalAlign: 'bottom', paddingRight: 8 }}><Cb checked={p.pre_job_discussion} /> <span className="lbl">HELD PRE-JOB DISCUSSION</span></td>
-              <td style={{ textAlign: 'center' }}>{line(p.receiver_name)}</td>
-              <td style={{ textAlign: 'center' }}>{line(approvedH?.name)}</td>
+              <td style={{ textAlign: 'center' }}>{line(approvedH?.name || p.approver_name)}</td>
               <td style={{ width: '13%', textAlign: 'center' }}>{line(fmtDate(approvedH?.at))}</td>
               <td style={{ width: '11%', textAlign: 'center' }}>{line(fmtTime(approvedH?.at))}</td>
             </tr>
             <tr>
               <td></td>
-              <td className="cap">(INITIALS of RECEIVER)</td>
-              <td className="cap">Signed (Name) at Job Site by (ISSUER)</td>
+              <td className="cap">Name of the Approver</td>
               <td className="cap">Date</td>
               <td className="cap">Time</td>
             </tr>
