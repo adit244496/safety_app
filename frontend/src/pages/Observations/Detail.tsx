@@ -6,8 +6,9 @@ import {
   ImageIcon, MessageSquare, ClipboardCheck,
   ChevronDown, ChevronUp, Maximize2, Minimize2,
   AlertTriangle, CheckCircle2, ShieldAlert,
-  MapPin, Target, RefreshCw, Trash2,
+  MapPin, Target, RefreshCw, Trash2, Sparkles,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import api from '../../lib/api'
 import { fmtDateTime, getStatusClass } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
@@ -357,6 +358,60 @@ function ReplyForm({ onSubmit, isPending, isContractor, defaultImageType = 'foll
   )
 }
 
+// ── AI summary ────────────────────────────────────────────────────────────
+function AiSummaryCard({ obs }: { obs: any }) {
+  const qc = useQueryClient()
+  const gen = useMutation({
+    mutationFn: () =>
+      api.post(`/observations/${obs.id}/ai-summary`).then(r => r.data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['observation', String(obs.id)] })
+      toast.success('AI summary generated')
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.detail || 'Failed to generate AI summary'),
+  })
+
+  const hasSummary = !!obs.ai_summary
+  const busy = gen.isPending
+
+  return (
+    <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50/40 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-violet-100">
+        <Sparkles className="w-3.5 h-3.5 text-violet-600" />
+        <span className="text-xs font-semibold tracking-wide text-violet-800 uppercase">AI Summary</span>
+        <button
+          onClick={() => gen.mutate()}
+          disabled={busy}
+          className="btn-sm ml-auto gap-1.5 flex-shrink-0 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {busy
+            ? <span className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
+            : hasSummary ? <RefreshCw className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
+          <span className="text-xs">{busy ? 'Generating…' : hasSummary ? 'Regenerate' : 'Generate'}</span>
+        </button>
+      </div>
+      <div className="px-4 py-3">
+        {hasSummary ? (
+          <>
+            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{obs.ai_summary}</p>
+            <p className="mt-2.5 text-[11px] text-violet-500/90">
+              Generated{obs.ai_summary_by_name ? ` by ${obs.ai_summary_by_name}` : ''}
+              {obs.ai_summary_at ? ` · ${fmtDateTime(obs.ai_summary_at)}` : ''}
+            </p>
+          </>
+        ) : (
+          <p className="text-sm text-gray-400 italic">
+            {busy
+              ? 'Generating an AI summary from this observation’s details and photos…'
+              : 'No AI summary yet. Generate one from this observation’s details and photos.'}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────
 export default function ObservationDetail() {
   const { id } = useParams()
@@ -624,6 +679,9 @@ export default function ObservationDetail() {
 
         {/* ─── LEFT: detail sections ─── */}
         <div className="space-y-4 min-w-0">
+
+          {/* AI summary */}
+          <AiSummaryCard obs={obs} />
 
           {/* Risk assessment */}
           {obs.risk_level && <RiskCard obs={obs} />}

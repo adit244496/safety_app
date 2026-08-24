@@ -151,6 +151,9 @@ class Observation(Base):
     eic_user_ids = Column(Text, nullable=True)                             # JSON array of all selected EIC user IDs
     status = Column(String, nullable=False, default="Open")
     closed_at = Column(DateTime, nullable=True)           # set when status transitions to Closed
+    ai_summary = Column(Text, nullable=True)              # cached AI-generated summary
+    ai_summary_at = Column(DateTime, nullable=True)       # when the summary was generated
+    ai_summary_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # who generated it
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
@@ -167,6 +170,7 @@ class Observation(Base):
     creator = relationship("User", foreign_keys=[created_by])
     contractor = relationship("User", foreign_keys=[contractor_user_id])
     eic_user = relationship("User", foreign_keys=[eic_user_id])
+    ai_summary_user = relationship("User", foreign_keys=[ai_summary_by])
     images = relationship("ObservationImage", back_populates="observation", cascade="all, delete")
     comments = relationship("ObservationComment", back_populates="observation", cascade="all, delete")
 

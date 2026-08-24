@@ -273,6 +273,30 @@ export default function ObservationForm() {
   const selectedCore = (coreConcerns || []).find((c: any) => String(c.id) === String(form.core_concern_id))
   const isPraiseworthyConcern = /praiseworthy/i.test(selectedCore?.name || '')
 
+  // Whole days from today to the chosen target date. Both ends are normalised to UTC
+  // midnight so a DST boundary can't turn an exact day gap into a fractional one.
+  const daysToTarget = useMemo(() => {
+    const [y, m, d] = (form.target_date_actual || '').split('-').map(Number)
+    if (!y || !m || !d) return null
+    const now = new Date()
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+    return Math.round((Date.UTC(y, m - 1, d) - today) / 86400000)
+  }, [form.target_date_actual])
+
+  const targetDayLabel =
+    daysToTarget === null ? null
+      : daysToTarget === 0 ? 'Due today'
+        : daysToTarget === 1 ? 'In 1 day'
+          : daysToTarget > 1 ? `In ${daysToTarget} days`
+            : daysToTarget === -1 ? '1 day overdue'
+              : `${Math.abs(daysToTarget)} days overdue`
+
+  const targetDayTone =
+    daysToTarget === null ? ''
+      : daysToTarget < 0 ? 'border-rose-300 bg-rose-50 text-rose-700'
+        : daysToTarget === 0 ? 'border-amber-300 bg-amber-50 text-amber-700'
+          : 'border-emerald-300 bg-emerald-50 text-emerald-700'
+
   const MAX_IMAGES = 5
 
   const handleFiles = (files: FileList | null) => {
@@ -742,7 +766,14 @@ export default function ObservationForm() {
           )}
           {!isPraiseworthyConcern && (
             <Field label="Target Date for Rectification" required={form.status !== 'Positive Approach'}>
-              <input type="date" className="input" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
+              <div className="flex items-center gap-2">
+                <input type="date" className="input flex-1 min-w-0" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
+                {targetDayLabel && (
+                  <span className={`flex-shrink-0 whitespace-nowrap text-xs font-semibold px-2.5 py-2 rounded-lg border ${targetDayTone}`}>
+                    {targetDayLabel}
+                  </span>
+                )}
+              </div>
             </Field>
           )}
         </div>

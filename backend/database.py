@@ -38,6 +38,9 @@ def _run_migrations():
         ("observations", "closed_at",           "DATETIME",                            "TIMESTAMP"),
         ("observations", "eic_user_id",         "INTEGER REFERENCES users(id)",        "INTEGER REFERENCES users(id)"),
         ("observations", "eic_user_ids",        "TEXT",                                None),
+        ("observations", "ai_summary",          "TEXT",                                None),
+        ("observations", "ai_summary_at",       "DATETIME",                            "TIMESTAMP"),
+        ("observations", "ai_summary_by",       "INTEGER REFERENCES users(id)",        "INTEGER REFERENCES users(id)"),
     ]
     _user_columns = [
         ("users", "mobile", "VARCHAR", None),

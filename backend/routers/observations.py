@@ -3,9 +3,11 @@ from pydantic import BaseModel
 from typing import Optional, List
 import json
 import io
+import os
 import openpyxl
 import threading
 import logging
+import ai_service
 from difflib import get_close_matches
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, case, nullslast
@@ -102,6 +104,10 @@ def obs_to_dict(obs: models.Observation, db: Session) -> dict:
         "eic_user_ids": json.loads(obs.eic_user_ids) if obs.eic_user_ids else [],
         "eic_user_name": obs.eic_user.name if obs.eic_user else None,
         "closed_at": obs.closed_at.isoformat() if obs.closed_at else None,
+        "ai_summary": obs.ai_summary,
+        "ai_summary_at": obs.ai_summary_at.isoformat() if obs.ai_summary_at else None,
+        "ai_summary_by": obs.ai_summary_by,
+        "ai_summary_by_name": obs.ai_summary_user.name if obs.ai_summary_user else None,
         "status": obs.status,
         "created_by": obs.created_by,
         "created_by_name": obs.creator.name if obs.creator else None,
@@ -747,6 +753,41 @@ def get_observation(obs_id: str, db: Session = Depends(get_db), user: models.Use
         raise HTTPException(404, "Observation not found")
     _assert_obs_access(obs, user)
     return obs_to_dict(obs, db)
+
+
+@router.post("/{obs_id}/ai-summary")
+def generate_ai_summary(obs_id: str, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """(Re)generate the AI summary for an observation. The result is cached on the observation
+    (with who generated it and when) until someone regenerates it."""
+    obs = (
+        db.query(models.Observation).filter(models.Observation.id == int(obs_id)).first()
+        if obs_id.isdigit()
+        else db.query(models.Observation).filter(models.Observation.observation_id == obs_id).first()
+    )
+    if not obs:
+        raise HTTPException(404, "Observation not found")
+    _assert_obs_access(obs, user)
+
+    if not ai_service.is_configured():
+        raise HTTPException(503, "AI summary is not configured on the server (ANTHROPIC_API_KEY is not set).")
+
+    try:
+        summary = ai_service.generate_summary(obs, obs_to_dict(obs, db), db)
+    except Exception as exc:
+        logger.error("AI summary generation failed for %s: %s", obs.observation_id, exc)
+        raise HTTPException(502, "Failed to generate the AI summary. Please try again.")
+
+    obs.ai_summary = summary
+    obs.ai_summary_at = datetime.now()
+    obs.ai_summary_by = user.id
+    db.commit()
+    db.refresh(obs)
+    return {
+        "ai_summary": obs.ai_summary,
+        "ai_summary_at": obs.ai_summary_at.isoformat() if obs.ai_summary_at else None,
+        "ai_summary_by": obs.ai_summary_by,
+        "ai_summary_by_name": user.name,
+    }
 
 
 @router.post("/", status_code=201)
