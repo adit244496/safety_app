@@ -8,6 +8,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from auth import get_current_user, require_admin, require_super_admin
 from email_service import send_observation_email
+import ai_service
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -485,6 +486,67 @@ def update_smtp_settings(body: SmtpBody, db: Session = Depends(get_db), _=Depend
     s.enabled = body.enabled
     db.commit()
     return {"success": True}
+
+
+# ── AI Summary Settings ──────────────────────────────────────────────────────
+
+class AiSettingsBody(BaseModel):
+    api_key: str = ""
+    model: str = ai_service.DEFAULT_MODEL
+    enabled: bool = False
+
+
+def _get_or_create_ai(db: Session) -> models.AiSettings:
+    settings = db.query(models.AiSettings).first()
+    if not settings:
+        settings = models.AiSettings()
+        db.add(settings)
+        db.commit()
+        db.refresh(settings)
+    return settings
+
+
+@router.get("/ai-settings")
+def get_ai_settings(db: Session = Depends(get_db), _=Depends(require_admin)):
+    s = _get_or_create_ai(db)
+    return {
+        "model": s.model if s.model in ai_service.ALLOWED_MODELS else ai_service.DEFAULT_MODEL,
+        "enabled": s.enabled,
+        "has_key": bool(s.api_key),          # never expose the key itself
+        "models": ai_service.ALLOWED_MODELS,  # {id: label} for the UI dropdown
+    }
+
+
+@router.put("/ai-settings")
+def update_ai_settings(body: AiSettingsBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    if body.model not in ai_service.ALLOWED_MODELS:
+        raise HTTPException(400, "Unsupported model selected.")
+    s = _get_or_create_ai(db)
+    if body.api_key.strip():  # only overwrite when a new key is supplied
+        s.api_key = body.api_key.strip()
+    s.model = body.model
+    s.enabled = body.enabled
+    db.commit()
+    return {"success": True, "has_key": bool(s.api_key)}
+
+
+@router.post("/ai-settings/test")
+def test_ai_settings(db: Session = Depends(get_db), _=Depends(require_admin)):
+    api_key, model = ai_service._resolve_config(db)
+    if not api_key:
+        raise HTTPException(400, "No API key saved. Enter and save a key first.")
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model=model,
+            max_tokens=16,
+            messages=[{"role": "user", "content": "Reply with the word OK."}],
+        )
+        text = "".join(b.text for b in resp.content if b.type == "text").strip()
+        return {"success": True, "model": model, "reply": text or "(empty)"}
+    except Exception as exc:
+        raise HTTPException(400, f"Test failed: {exc}")
 
 
 # ── Severity Labels ──────────────────────────────────────────────────────────

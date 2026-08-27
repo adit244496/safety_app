@@ -768,8 +768,8 @@ def generate_ai_summary(obs_id: str, db: Session = Depends(get_db), user: models
         raise HTTPException(404, "Observation not found")
     _assert_obs_access(obs, user)
 
-    if not ai_service.is_configured():
-        raise HTTPException(503, "AI summary is not configured on the server (ANTHROPIC_API_KEY is not set).")
+    if not ai_service.is_configured(db):
+        raise HTTPException(503, "AI summary is not configured. Add an Anthropic API key in Admin → AI Summary.")
 
     try:
         summary = ai_service.generate_summary(obs, obs_to_dict(obs, db), db)

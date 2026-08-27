@@ -1,6 +1,6 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { usePageTitle } from '../../store/pageTitleContext'
-import { Users, Database, Shield, ClipboardList, Mail, TriangleAlert, FileUp, FileCheck2, GraduationCap, BookOpen } from 'lucide-react'
+import { Users, Database, Shield, ClipboardList, Mail, TriangleAlert, FileUp, FileCheck2, GraduationCap, BookOpen, Sparkles } from 'lucide-react'
 import UsersTab from './UsersTab'
 import DataInputTab from './DataInputTab'
 import SafetyMeasuresTab from './SafetyMeasuresTab'
@@ -11,6 +11,7 @@ import ImportTab from './ImportTab'
 import PermitConfigTab from './PermitConfigTab'
 import TrainingCategoriesTab from './TrainingCategoriesTab'
 import GuidelinesTab from './GuidelinesTab'
+import AiSettingsTab from './AiSettingsTab'
 
 const TABS = [
   { to: '/admin', label: 'Users', icon: Users, exact: true },
@@ -23,6 +24,7 @@ const TABS = [
   { to: '/admin/guidelines', label: 'Guidelines', icon: BookOpen },
   { to: '/admin/import', label: 'Import', icon: FileUp },
   { to: '/admin/email', label: 'Email Settings', icon: Mail },
+  { to: '/admin/ai', label: 'AI Summary', icon: Sparkles },
 ]
 
 export default function Admin() {
@@ -69,6 +71,7 @@ export default function Admin() {
         <Route path="guidelines" element={<GuidelinesTab />} />
         <Route path="import" element={<ImportTab />} />
         <Route path="email" element={<EmailSettingsTab />} />
+        <Route path="ai" element={<AiSettingsTab />} />
       </Routes>
     </div>
   )

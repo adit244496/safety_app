@@ -7,9 +7,14 @@ import models
 
 logger = logging.getLogger(__name__)
 
-# Default to Claude Opus 5 (most capable). Override with AI_SUMMARY_MODEL to use a
-# cheaper model (e.g. claude-sonnet-5 or claude-haiku-4-5) for high volume / lower cost.
-AI_MODEL = os.getenv("AI_SUMMARY_MODEL", "claude-opus-5")
+# Selectable models exposed in the admin UI (label → model id). Kept small on
+# purpose: Haiku for low cost / high volume, Sonnet for higher quality.
+ALLOWED_MODELS = {
+    "claude-haiku-4-5-20251001": "Claude Haiku 4.5 (fast, low cost)",
+    "claude-sonnet-5": "Claude Sonnet 5 (higher quality)",
+}
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 MAX_IMAGES = 3
 
@@ -28,8 +33,30 @@ SYSTEM_PROMPT = (
 )
 
 
-def is_configured() -> bool:
-    return bool(os.getenv("ANTHROPIC_API_KEY"))
+def _resolve_config(db=None):
+    """Resolve (api_key, model) from the admin DB settings, falling back to env vars.
+
+    A key/model saved in the admin UI takes precedence over the environment.
+    """
+    # 1. Admin UI settings win when enabled and a key is present.
+    if db is not None:
+        try:
+            s = db.query(models.AiSettings).first()
+            if s and s.enabled and s.api_key:
+                model = s.model if s.model in ALLOWED_MODELS else DEFAULT_MODEL
+                return s.api_key, model
+        except Exception as exc:  # table may not exist yet / db error — fall back to env
+            logger.warning("Could not read AiSettings: %s", exc)
+
+    # 2. Fall back to environment configuration.
+    env_model = os.getenv("AI_SUMMARY_MODEL")
+    model = env_model if env_model in ALLOWED_MODELS else DEFAULT_MODEL
+    return os.getenv("ANTHROPIC_API_KEY", ""), model
+
+
+def is_configured(db=None) -> bool:
+    api_key, _ = _resolve_config(db)
+    return bool(api_key)
 
 
 def _observation_text(d: dict) -> str:
@@ -93,15 +120,19 @@ def generate_summary(obs, obs_data: dict, db) -> str:
     """Generate an AI summary for an observation. Raises on failure."""
     import anthropic
 
+    api_key, model = _resolve_config(db)
+    if not api_key:
+        raise RuntimeError("No Anthropic API key configured")
+
     content = _image_blocks(obs, db)
     content.append({
         "type": "text",
         "text": _observation_text(obs_data) + "\n\nWrite the summary now.",
     })
 
-    client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY from the environment
+    client = anthropic.Anthropic(api_key=api_key)
     resp = client.messages.create(
-        model=AI_MODEL,
+        model=model,
         max_tokens=700,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": content}],

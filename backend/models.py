@@ -262,6 +262,15 @@ class SmtpSettings(Base):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
+class AiSettings(Base):
+    __tablename__ = "ai_settings"
+    id = Column(Integer, primary_key=True)
+    api_key = Column(String, nullable=False, default="")
+    model = Column(String, nullable=False, default="claude-haiku-4-5-20251001")
+    enabled = Column(Boolean, default=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
 class EaseElementResponse(Base):
     __tablename__ = "ease_element_responses"
     id = Column(Integer, primary_key=True)
