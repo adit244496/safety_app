@@ -855,6 +855,9 @@ def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: mod
 
 
 def _send_obs_email(obs: models.Observation, db: Session, event: str = "new"):
+    if obs.status == 'Draft':
+        logger.info("Email skipped for %s: observation is a Draft", obs.observation_id)
+        return
     smtp = db.query(models.SmtpSettings).first()
     if not smtp:
         logger.warning("Email skipped for %s: no SMTP settings row in DB", obs.observation_id)
@@ -1014,6 +1017,9 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
                 ))
             db.commit()
         threading.Thread(target=_fire_email_async, args=(obs.id,), daemon=True).start()
+    # Closure via the edit form: notify when the observation transitions into Closed
+    elif prev_status != 'Closed' and obs.status == 'Closed':
+        threading.Thread(target=_fire_email_async, args=(obs.id, "closed"), daemon=True).start()
 
     return {"success": True, "risk_factor": factor, "risk_level": level}
 
@@ -1035,8 +1041,9 @@ def update_status(obs_id: int, body: StatusBody, db: Session = Depends(get_db), 
         obs.closed_at = datetime.now()
     db.commit()
 
-    if prev_status != body.status:
-        threading.Thread(target=_fire_email_async, args=(obs.id, "status_change"), daemon=True).start()
+    if prev_status != body.status and body.status != 'Draft':
+        event = "closed" if (prev_status != "Closed" and body.status == "Closed") else "status_change"
+        threading.Thread(target=_fire_email_async, args=(obs.id, event), daemon=True).start()
 
     return {"success": True, "status": body.status}
 

@@ -115,8 +115,11 @@ def build_observation_email(obs: dict) -> tuple[str, str]:
         "Closed":      "#16a34a",
     }.get(status, "#6b7280")
 
-    event = obs.get("event", "new")  # "new" | "update" | "status_change"
-    if event == "status_change":
+    event = obs.get("event", "new")  # "new" | "update" | "status_change" | "closed"
+    if event == "closed":
+        subject = f"[Safety] Observation Closed - {obs_id} | {project}"
+        header_title = "✅ Observation Closed"
+    elif event == "status_change":
         subject = f"[Safety] {status} - {obs_id} | {project}"
         header_title = "Observation Status Updated"
     elif event == "update":

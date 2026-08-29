@@ -102,7 +102,23 @@ def _run_escalation_check():
 
         logger.info("Escalation check: %d overdue observation(s)", len(overdue_obs))
 
+        today_start = datetime.combine(date.today(), datetime.min.time())
+
         for obs in overdue_obs:
+            # One reminder per observation per day — skip if we already sent one today.
+            # Guards against duplicate emails from multiple workers or process restarts.
+            already_sent_today = (
+                db.query(models.EscalationLog)
+                .filter(
+                    models.EscalationLog.observation_id == obs.id,
+                    models.EscalationLog.sent_at >= today_start,
+                )
+                .first()
+            )
+            if already_sent_today:
+                logger.info("Escalation skipped for %s — already sent today", obs.observation_id)
+                continue
+
             # Count previous escalations for reminder numbering
             prev_count = (
                 db.query(models.EscalationLog)
@@ -132,23 +148,35 @@ def _run_escalation_check():
                 if u.email and u.email not in cc_emails and u.email not in to_emails:
                     cc_emails.append(u.email)
 
+            # Claim today's slot BEFORE sending. Committing the log first (rather than
+            # after the slow SMTP send) closes the window where a second worker could
+            # pass the "already sent today" check and send a duplicate reminder.
+            log = models.EscalationLog(
+                observation_id=obs.id,
+                obs_ref=obs.observation_id,
+                reminder_number=reminder_number,
+                sent_at=datetime.now(),
+                recipients_json=json.dumps({"to": to_emails, "cc": cc_emails}),
+            )
+            db.add(log)
+            db.commit()
+
             subject = f"[Safety] Overdue Action: {obs.observation_id}{reminder_tag}"
             html = _build_escalation_html(obs, reminder_number)
 
             ok = send_observation_email(smtp, to_emails, cc_emails, subject, html)
             if ok:
-                log = models.EscalationLog(
-                    observation_id=obs.id,
-                    obs_ref=obs.observation_id,
-                    reminder_number=reminder_number,
-                    sent_at=datetime.now(),
-                    recipients_json=json.dumps({"to": to_emails, "cc": cc_emails}),
-                )
-                db.add(log)
-                db.commit()
                 logger.info(
                     "Escalation email #%d sent for %s → %s",
                     reminder_number, obs.observation_id, to_emails,
+                )
+            else:
+                # Send failed — release the claim so it can be retried on the next run.
+                db.delete(log)
+                db.commit()
+                logger.warning(
+                    "Escalation email #%d failed for %s — claim released",
+                    reminder_number, obs.observation_id,
                 )
     except Exception:
         logger.exception("Escalation scheduler error")
