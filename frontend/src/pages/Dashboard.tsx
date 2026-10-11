@@ -10,6 +10,7 @@ import {
 import {
   ClipboardList, AlertTriangle, CheckCircle,
   TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, Clock, Download, ThumbsUp,
+  Users, FileCheck2, HardHat, GraduationCap, ShieldCheck, Siren, HeartPulse, Stethoscope, Megaphone, ClipboardCheck, Activity,
 } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import { generateDashboardPdf } from '../lib/printPdf'
@@ -19,7 +20,8 @@ import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilte
 
 const STATUS_COLORS: Record<string, string> = {
   Open: '#ef4444', Overdue: '#f97316', 'Under Review': '#eab308',
-  'Partially Closed': '#86efac', Closed: '#22c55e', 'Positive Approach': '#D4AF37', 'Unresolved & Closed': '#7c3aed',
+  'Partially Closed': '#86efac', Closed: '#22c55e', 'Overdue & Closed': '#c2410c',
+  'Positive Approach': '#D4AF37', 'Unresolved & Closed': '#7c3aed',
 }
 const RISK_COLORS: Record<string, string> = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e' }
 
@@ -173,12 +175,58 @@ export default function Dashboard() {
     }).then(r => r.data),
   })
 
+  // Top observers (same source as Summary → Compliance Analysis)
+  const { data: details } = useQuery({
+    queryKey: ['dash-details', projectIds, buildingId, selectedContractors, dateFrom, dateTo],
+    queryFn: () => api.get('/observations/stats/summary-details', {
+      params: {
+        project_id:         projectIds.length          ? projectIds          : undefined,
+        building_id:        buildingId                 || undefined,
+        contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
+        date_from:          dateFrom             || undefined,
+        date_to:            dateTo               || undefined,
+      },
+    }).then(r => r.data),
+  })
+
+  // Work-permit KPIs (issued today / total issued)
+  const { data: permitStats } = useQuery({
+    queryKey: ['permit-stats', projectIds],
+    queryFn: () => api.get('/work-permits/stats', {
+      params: { project_id: projectIds.length ? projectIds : undefined },
+    }).then(r => r.data),
+  })
+
+  // OH&S activity totals (project-to-date rollup of the Monthly OH&S Statistics)
+  const { data: ohsTotals } = useQuery({
+    queryKey: ['ohs-totals', projectIds],
+    queryFn: () => api.get('/ohs-statistics/totals', {
+      params: { project_id: projectIds.length ? projectIds : undefined },
+    }).then(r => r.data),
+  })
+
   const statusCounts: Record<string, number> = {}
   data?.byStatus?.forEach((s: any) => { statusCounts[s.status] = s.count })
   const statusPie     = data?.byStatus?.map((s: any) => ({ name: s.status, value: s.count })) || []
   const riskBars      = (data?.byRisk  || []).filter((r: any) => r.risk_level)
   const STATUSES_LIST = ['Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach', 'Unresolved & Closed'] as const
   const MONTHS_SHORT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+  // Activity rollup from the Monthly OH&S Statistics (project-to-date totals).
+  const act = (i: number) => Math.round(ohsTotals?.activities?.[i] ?? 0)
+  const gen = (i: number) => Math.round(ohsTotals?.general_summary?.[i] ?? 0)
+  const activityCards = [
+    { label: 'Tool Box Talks',        value: act(7),                 icon: HardHat,       color: 'text-amber-600',   bg: 'bg-amber-50'   },
+    { label: 'Trainings Held',        value: act(1) + act(2) + act(3), icon: GraduationCap, color: 'text-indigo-600',  bg: 'bg-indigo-50'  },
+    { label: 'Safety Inductions',     value: act(0),                 icon: ShieldCheck,   color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Mock Drills',           value: act(8),                 icon: Siren,         color: 'text-rose-600',    bg: 'bg-rose-50'    },
+    { label: 'First-Aid Cases',       value: gen(4),                 icon: HeartPulse,    color: 'text-red-600',     bg: 'bg-red-50'     },
+    { label: 'Pre-Employment Medicals', value: act(9),               icon: Stethoscope,   color: 'text-sky-600',     bg: 'bg-sky-50'     },
+    { label: 'Medical Camps',         value: act(10),                icon: Activity,      color: 'text-teal-600',    bg: 'bg-teal-50'    },
+    { label: 'Safety Campaigns',      value: act(11),                icon: Megaphone,     color: 'text-violet-600',  bg: 'bg-violet-50'  },
+    { label: 'Near-Misses',           value: gen(2),                 icon: AlertTriangle, color: 'text-orange-600',  bg: 'bg-orange-50'  },
+    { label: 'H&S Audits',            value: act(12),                icon: ClipboardCheck, color: 'text-lime-600',   bg: 'bg-lime-50'    },
+  ]
 
   const monthData = ((data?.byMonthStatus || []) as any[]).map((d: any) => ({
     ...d,
@@ -188,34 +236,65 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<'monthly' | 'quarterly'>('monthly')
 
   const quarterData = useMemo(() => {
+    // Fiscal year starts in April (India). Apr-Jun = Qtr I, Jul-Sep = Qtr II,
+    // Oct-Dec = Qtr III, Jan-Mar = Qtr IV (belongs to the PREVIOUS year's FY).
+    const ROMAN = ['I', 'II', 'III', 'IV']
     const byQuarter: Record<string, any> = {}
     for (const d of monthData) {
       // d.month is "YYYY-MM" from backend (e.g. "2026-02")
-      const [year, mStr] = (d.month as string).split('-')
-      const mIdx = parseInt(mStr, 10) - 1  // 0-based
-      if (isNaN(mIdx)) continue
-      const q   = Math.floor(mIdx / 3) + 1
-      const key = `Q${q} ${year}`
-      if (!byQuarter[key]) { byQuarter[key] = { month: key }; STATUSES_LIST.forEach(s => { byQuarter[key][s] = 0 }) }
+      const [yStr, mStr] = (d.month as string).split('-')
+      const year = parseInt(yStr, 10)
+      const month = parseInt(mStr, 10) // 1-based
+      if (isNaN(month)) continue
+      let qNum: number
+      let fyStart: number
+      if (month >= 4) { qNum = Math.floor((month - 4) / 3) + 1; fyStart = year }
+      else { qNum = 4; fyStart = year - 1 } // Jan-Mar → Qtr IV of previous FY
+      const fyLabel = `${String(fyStart).slice(2)}-${String(fyStart + 1).slice(2)}`
+      const key = `Qtr ${ROMAN[qNum - 1]} ${fyLabel}`
+      const sort = fyStart * 10 + qNum
+      if (!byQuarter[key]) { byQuarter[key] = { month: key, _sort: sort }; STATUSES_LIST.forEach(s => { byQuarter[key][s] = 0 }) }
       STATUSES_LIST.forEach(s => { byQuarter[key][s] = (byQuarter[key][s] || 0) + (d[s] || 0) })
     }
-    return Object.values(byQuarter).map(d => ({
-      ...d,
-      _total: STATUSES_LIST.reduce((sum, s) => sum + (d[s] || 0), 0),
-    }))
+    return Object.values(byQuarter)
+      .map(d => ({ ...d, _total: STATUSES_LIST.reduce((sum, s) => sum + (d[s] || 0), 0) }))
+      .sort((a: any, b: any) => a._sort - b._sort)
   }, [monthData])
 
   const trendData = viewMode === 'quarterly' ? quarterData : monthData
 
   const cards = [
-    { label: 'Total Observations', value: data?.total ?? 0,                          icon: ClipboardList, bg: 'bg-indigo-50',  color: 'text-indigo-600',  border: 'border-indigo-100'  },
-    { label: 'Open',               value: statusCounts['Open'] ?? 0,                 icon: AlertTriangle, bg: 'bg-rose-50',    color: 'text-rose-600',    border: 'border-rose-100'    },
-    { label: 'Overdue',            value: statusCounts['Overdue'] ?? 0,              icon: Hourglass,     bg: 'bg-amber-50',   color: 'text-amber-600',   border: 'border-amber-100'   },
-    { label: 'Partially Closed',   value: statusCounts['Partially Closed'] ?? 0,     icon: Clock,         bg: 'bg-lime-50',    color: 'text-lime-600',    border: 'border-lime-100'    },
-    { label: 'Closed',             value: statusCounts['Closed'] ?? 0,               icon: CheckCircle,   bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-100' },
-    { label: 'Praiseworthy Observation',    value: statusCounts['Positive Approach'] ?? 0,    icon: ThumbsUp,      bg: 'bg-amber-50',    color: 'text-[#B8860B]',    border: 'border-amber-100'    },
-    { label: 'Unresolved & Closed',  value: statusCounts['Unresolved & Closed'] ?? 0, icon: AlertTriangle, bg: 'bg-violet-50',  color: 'text-violet-600',  border: 'border-violet-100'  },
+    { label: 'Total Observations', status: null,                 value: data?.total ?? 0,                          icon: ClipboardList, bg: 'bg-indigo-50',  color: 'text-indigo-600',  border: 'border-indigo-100'  },
+    { label: 'Open',               status: 'Open',               value: statusCounts['Open'] ?? 0,                 icon: AlertTriangle, bg: 'bg-rose-50',    color: 'text-rose-600',    border: 'border-rose-100'    },
+    { label: 'Overdue',            status: 'Overdue',            value: statusCounts['Overdue'] ?? 0,              icon: Hourglass,     bg: 'bg-amber-50',   color: 'text-amber-600',   border: 'border-amber-100'   },
+    { label: 'Partially Closed',   status: 'Partially Closed',   value: statusCounts['Partially Closed'] ?? 0,     icon: Clock,         bg: 'bg-lime-50',    color: 'text-lime-600',    border: 'border-lime-100'    },
+    { label: 'Closed',             status: 'Closed',             value: statusCounts['Closed'] ?? 0,               icon: CheckCircle,   bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-100' },
+    { label: 'Praiseworthy Observation', status: 'Positive Approach', value: statusCounts['Positive Approach'] ?? 0, icon: ThumbsUp,   bg: 'bg-amber-50',    color: 'text-[#B8860B]',   border: 'border-amber-100'    },
+    { label: 'Unresolved & Closed', status: 'Unresolved & Closed', value: statusCounts['Unresolved & Closed'] ?? 0, icon: AlertTriangle, bg: 'bg-violet-50',  color: 'text-violet-600',  border: 'border-violet-100'  },
   ]
+
+  // Build an Observations-list URL that carries the dashboard's current filters,
+  // plus any extra overrides (e.g. a clicked status or risk category).
+  const goToObservations = (extra: Record<string, (string | number)[]> = {}) => {
+    const sp = new URLSearchParams()
+    const add = (k: string, vals: (string | number)[]) => vals.forEach(v => sp.append(k, String(v)))
+    if (projectIds.length) add('project_id', projectIds)
+    if (selectedContractors.length) add('contractor', selectedContractors)
+    if (coreConcernIds.length) add('core_concern', coreConcernIds)
+    if (riskLevels.length) add('risk', riskLevels)
+    if (ageingFilter.length) add('ageing', ageingFilter)
+    if (dateFrom) sp.set('date_from', dateFrom)
+    if (dateTo) sp.set('date_to', dateTo)
+    for (const [k, vals] of Object.entries(extra)) { sp.delete(k); add(k, vals) }
+    const q = sp.toString()
+    navigate(`/observations${q ? `?${q}` : ''}`)
+  }
+
+  // Ageing buckets: "Praiseworthy" is a status; the rest map to the ageing filter.
+  const goToAgeing = (key: string) =>
+    key === 'positive_approach'
+      ? goToObservations({ status: ['Positive Approach'] })
+      : goToObservations({ ageing: [key] })
 
   const resetFilters = () => {
     setProjectIds([]); setBuildingId('')
@@ -601,45 +680,45 @@ export default function Dashboard() {
   return (
     <div id="dashboard-pdf-content" className="space-y-5">
       {/* Page header */}
-      <div className="flex items-center justify-between">
-        <div className="lg:hidden">
-          <h1 className="page-title">Dashboard</h1>
-          <p className="text-sm text-gray-400 mt-1">Overview of all safety observations</p>
-        </div>
-        <div className="ml-auto relative" ref={dlRef}>
-          <button
-            onClick={() => setShowDownloadMenu(v => !v)}
-            className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
-          >
-            <Download className="w-3.5 h-3.5" /> Download Report
-            <ChevronDown className="w-3 h-3 ml-0.5" />
-          </button>
-          {showDownloadMenu && (
-            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-50 overflow-hidden">
-              <button onClick={() => { downloadExcel(); setShowDownloadMenu(false) }} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2">
-                <span>📊</span> Excel (.xlsx)
-              </button>
-              <button onClick={() => { startPdfDownload(); setShowDownloadMenu(false) }} disabled={pdfGenerating} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2 disabled:opacity-50">
-                <span>📄</span> {pdfGenerating ? 'Generating…' : 'PDF Report'}
-              </button>
-            </div>
-          )}
-        </div>
+      <div className="lg:hidden">
+        <h1 className="page-title">Dashboard</h1>
+        <p className="text-sm text-gray-400 mt-1">Overview of all safety observations</p>
       </div>
 
       {/* Inline filter bar */}
       <div className="card-sm">
-        {/* Header row: always visible */}
-        <div
-          className="flex items-center gap-2 sm:pointer-events-none cursor-pointer sm:cursor-default"
-          onClick={() => setShowFilters(v => !v)}
-        >
-          <SlidersHorizontal className="w-4 h-4 text-gray-400 flex-shrink-0" />
-          <span className="text-xs font-medium uppercase tracking-wide text-gray-400">Filters</span>
-          {activeFilterCount > 0 && (
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{activeFilterCount}</span>
-          )}
-          <ChevronDown className={`ml-auto w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+        {/* Header row: Filters label + Download Report, always visible */}
+        <div className="flex items-center gap-2">
+          <div
+            className="flex items-center gap-2 flex-1 min-w-0 sm:pointer-events-none cursor-pointer sm:cursor-default"
+            onClick={() => setShowFilters(v => !v)}
+          >
+            <SlidersHorizontal className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <span className="text-xs font-medium uppercase tracking-wide text-gray-400">Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">{activeFilterCount}</span>
+            )}
+          </div>
+          <div className="relative flex-shrink-0" ref={dlRef}>
+            <button
+              onClick={() => setShowDownloadMenu(v => !v)}
+              className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+            >
+              <Download className="w-3.5 h-3.5" /> Download Report
+              <ChevronDown className="w-3 h-3 ml-0.5" />
+            </button>
+            {showDownloadMenu && (
+              <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-100 rounded-xl shadow-lg z-50 overflow-hidden">
+                <button onClick={() => { downloadExcel(); setShowDownloadMenu(false) }} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2">
+                  <span>📊</span> Excel (.xlsx)
+                </button>
+                <button onClick={() => { startPdfDownload(); setShowDownloadMenu(false) }} disabled={pdfGenerating} className="w-full text-left px-4 py-2.5 text-xs hover:bg-indigo-50 text-gray-700 flex items-center gap-2 disabled:opacity-50">
+                  <span>📄</span> {pdfGenerating ? 'Generating…' : 'PDF Report'}
+                </button>
+              </div>
+            )}
+          </div>
+          <ChevronDown onClick={() => setShowFilters(v => !v)} className={`w-4 h-4 text-gray-400 sm:hidden transition-transform duration-200 flex-shrink-0 cursor-pointer ${showFilters ? 'rotate-180' : ''}`} />
         </div>
 
         {/* Filter controls: hidden on mobile until toggled, always visible on sm+ */}
@@ -712,8 +791,14 @@ export default function Dashboard() {
       ) : (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-            {cards.map(({ label, value, icon: Icon, bg, color, border }) => (
-              <div key={label} className={`stat-card border ${border}`}>
+            {cards.map(({ label, status, value, icon: Icon, bg, color, border }) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => goToObservations(status ? { status: [status] } : {})}
+                title={status ? `View ${label} observations` : 'View all observations'}
+                className={`stat-card border ${border} text-left w-full cursor-pointer transition-all hover:shadow-md hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-indigo-400`}
+              >
                 <div className={`${bg} ${color} p-2 rounded-lg flex-shrink-0`}>
                   <Icon className="w-4 h-4" />
                 </div>
@@ -721,7 +806,7 @@ export default function Dashboard() {
                   <p className="text-xl font-bold text-gray-900">{value}</p>
                   <p className="text-xs text-gray-500 mt-0.5 leading-tight">{label}</p>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
 
@@ -852,6 +937,8 @@ export default function Dashboard() {
                           cx="50%" cy="50%"
                           innerRadius={52}
                           outerRadius={75}
+                          className="cursor-pointer"
+                          onClick={(seg: any) => { const n = seg?.name ?? seg?.payload?.name; if (n) goToObservations({ status: [n] }) }}
                           labelLine={false}
                           label={({ cx, cy, midAngle, innerRadius, outerRadius, value, percent }) => {
                             if (!percent || percent < 0.06 || midAngle == null) return null
@@ -884,13 +971,15 @@ export default function Dashboard() {
                   </div>
                   <div className="space-y-1.5 mt-2">
                     {statusPie.map((s: any) => (
-                      <div key={s.name} className="flex items-center justify-between text-xs">
+                      <button key={s.name} type="button" onClick={() => goToObservations({ status: [s.name] })}
+                        title={`View ${displayStatus(s.name)} observations`}
+                        className="w-full flex items-center justify-between text-xs rounded-md px-1.5 py-1 -mx-1.5 hover:bg-gray-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400">
                         <div className="flex items-center gap-1.5">
                           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLORS[s.name] }} />
                           <span className="text-gray-600">{displayStatus(s.name)}</span>
                         </div>
                         <span className="font-semibold text-gray-900">{s.value}</span>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </>
@@ -898,10 +987,8 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Aging + Risk (left col) | Recent (right col) */}
+          {/* Ageing + Risk — side by side (equal height) */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {/* Left column: aging donut + risk distribution stacked */}
-            <div className="space-y-5">
             {/* Aging donut */}
             {(() => {
               const byAging = data?.byAging || {}
@@ -910,7 +997,7 @@ export default function Dashboard() {
                 .filter(d => d.value > 0)
               const agingTotal = agingPie.reduce((s, d) => s + d.value, 0)
               return (
-                <div id="dash-aging-donut" className="card">
+                <div id="dash-aging-donut" className="card flex flex-col">
                   <h2 className="font-semibold text-gray-900 mb-1">Ageing Distribution</h2>
                   <p className="text-[10px] text-gray-400 mb-3">Days past target rectification date</p>
                   {agingPie.length > 0 ? (
@@ -925,6 +1012,8 @@ export default function Dashboard() {
                               cx="50%" cy="50%"
                               innerRadius={52}
                               outerRadius={75}
+                              className="cursor-pointer"
+                              onClick={(seg: any) => { const k = seg?.key ?? seg?.payload?.key; if (k) goToAgeing(k) }}
                               labelLine={false}
                               label={({ cx, cy, midAngle, innerRadius, outerRadius, value, percent }) => {
                                 if (!percent || percent < 0.06 || midAngle == null) return null
@@ -954,15 +1043,17 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
-                      <div className="space-y-1.5 mt-2">
+                      <div className="space-y-1.5 mt-auto pt-3">
                         {agingPie.map((d) => (
-                          <div key={d.key} className="flex items-center justify-between text-xs">
+                          <button key={d.key} type="button" onClick={() => goToAgeing(d.key)}
+                            title={`View ${d.name} observations`}
+                            className="w-full flex items-center justify-between text-xs rounded-md px-1.5 py-1 -mx-1.5 hover:bg-gray-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400">
                             <div className="flex items-center gap-1.5">
                               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: AGEING_COLORS[d.key] }} />
                               <span className="text-gray-600">{d.name}</span>
                             </div>
                             <span className="font-semibold text-gray-900">{d.value}</span>
-                          </div>
+                          </button>
                         ))}
                       </div>
                     </>
@@ -971,6 +1062,8 @@ export default function Dashboard() {
               )
             })()}
 
+            {/* Right column: Risk + Recent stacked */}
+            <div className="space-y-4">
             {/* Risk bars */}
             <div className="card">
               <h2 className="font-semibold text-gray-900 mb-4">Risk Distribution</h2>
@@ -982,7 +1075,9 @@ export default function Dashboard() {
                     const total = riskBars.reduce((s: number, x: any) => s + x.count, 0)
                     const pct = Math.round((item.count / total) * 100)
                     return (
-                      <div key={level}>
+                      <button key={level} type="button" onClick={() => goToObservations({ risk: [level] })}
+                        title={`View ${level} risk observations`}
+                        className="block w-full text-left cursor-pointer rounded-lg px-1 py-0.5 -mx-1 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400">
                         <div className="flex justify-between items-center mb-1.5">
                           <span className={getRiskClass(level)}>{level} Risk</span>
                           <span className="text-xs font-semibold text-gray-700">{item.count} <span className="text-gray-400 font-normal">({pct}%)</span></span>
@@ -991,39 +1086,36 @@ export default function Dashboard() {
                           <div className="h-full rounded-full transition-all duration-500"
                             style={{ width: `${pct}%`, background: RISK_COLORS[level] }} />
                         </div>
-                      </div>
+                      </button>
                     )
                   })}
                 </div>
               ) : <div className="text-gray-400 text-sm text-center py-10">No risk data</div>}
             </div>
-            </div>{/* end left column */}
 
-            {/* Right column: Recent observations */}
-            <div className="card flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-semibold text-gray-900">Recent Observations <span className="text-xs font-normal text-gray-400">(latest 4)</span></h2>
-              </div>
+            {/* Recent observations — compact */}
+            <div className="card">
+              <h2 className="text-sm font-semibold text-gray-900 mb-2">Recent Observations <span className="text-[11px] font-normal text-gray-400">(latest 2)</span></h2>
               {(data?.recent || []).length === 0 ? (
-                <div className="text-center py-10 text-gray-400 text-sm flex-1">No observations for the selected filters</div>
+                <div className="text-center py-5 text-gray-400 text-sm">No observations for the selected filters</div>
               ) : (
-                <div className="space-y-2 flex-1">
-                  {(data?.recent || []).map((o: any) => (
+                <div className="space-y-1.5">
+                  {(data?.recent || []).slice(0, 2).map((o: any) => (
                     <div
                       key={o.observation_id}
                       onClick={() => navigate(`/observations/${o.observation_id}`)}
-                      className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/40 cursor-pointer transition-all"
+                      className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/40 cursor-pointer transition-all"
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded flex-shrink-0">
                             {o.observation_id}
                           </span>
                           {o.core_concern_name && (
                             <span className="text-xs text-gray-600 truncate">{o.core_concern_name}</span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-400 mt-1">
+                        <p className="text-[11px] text-gray-400 mt-0.5 truncate">
                           {o.project_name} · {o.obs_date ? fmtDate(o.obs_date) : fmtDate(o.created_at)}
                         </p>
                       </div>
@@ -1037,11 +1129,97 @@ export default function Dashboard() {
               )}
               <button
                 onClick={() => navigate('/observations')}
-                className="mt-4 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl border border-indigo-200 text-indigo-600 text-sm font-medium hover:bg-indigo-50 transition"
+                className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl border border-indigo-200 text-indigo-600 text-sm font-medium hover:bg-indigo-50 transition"
               >
                 View all observations <ArrowUpRight className="w-3.5 h-3.5" />
               </button>
+            </div>{/* end recent */}
+            </div>{/* end right column */}
+          </div>{/* end Ageing + Risk grid */}
+
+          {/* Work Permits KPI + Top Observers */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <button type="button" onClick={() => navigate('/work-permits')}
+              className="card text-left hover:shadow-md hover:-translate-y-0.5 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-7 h-7 bg-teal-50 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <FileCheck2 className="w-4 h-4 text-teal-600" />
+                </div>
+                <h2 className="font-semibold text-gray-900">Work Permits</h2>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl bg-teal-50/60 p-3">
+                  <p className="text-2xl font-bold text-teal-700">{permitStats?.issued_today ?? 0}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 leading-tight">Issued today</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 p-3">
+                  <p className="text-2xl font-bold text-gray-900">{permitStats?.total_issued ?? 0}</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 leading-tight">Total issued to date</p>
+                </div>
+              </div>
+            </button>
+
+            <div className="card lg:col-span-2">
+              <div className="flex items-center gap-2 mb-4">
+                <Users className="w-4 h-4 text-indigo-600" />
+                <h2 className="font-semibold text-gray-900">Top Observers</h2>
+                <span className="text-xs text-slate-400 ml-1">(by number of observations)</span>
+              </div>
+              {!details?.topObservers?.length ? (
+                <p className="text-sm text-slate-400 py-6 text-center">No observer data for the selected range.</p>
+              ) : (
+                <div className="space-y-2">
+                  {details.topObservers.slice(0, 5).map((o: any, i: number) => {
+                    const max = details.topObservers[0]?.count || 1
+                    const pct = Math.round((o.count / max) * 100)
+                    return (
+                      <div key={o.observer_name} className="flex items-center gap-3">
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0
+                          ${i === 0 ? 'bg-amber-100 text-amber-700' : i === 1 ? 'bg-slate-100 text-slate-700' : i === 2 ? 'bg-orange-100 text-orange-700' : 'bg-slate-50 text-slate-500'}`}>
+                          {i + 1}
+                        </span>
+                        <span className="w-32 sm:w-40 truncate font-medium text-slate-900 text-sm">{o.observer_name}</span>
+                        <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden">
+                          <div style={{ width: `${pct}%` }} className="h-full rounded-full bg-indigo-500" />
+                        </div>
+                        <span className="text-xs text-slate-600 w-16 text-right">{o.count} obs</span>
+                        {i === 0 && <ArrowUpRight className="w-4 h-4 text-amber-500 flex-shrink-0" />}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
+          </div>
+
+          {/* Activity Summary — rollup of the Monthly OH&S Statistics */}
+          <div className="card">
+            <div className="flex items-center gap-2 mb-1">
+              <Activity className="w-4 h-4 text-indigo-600" />
+              <h2 className="font-semibold text-gray-900">Activity Summary</h2>
+              <span className="text-xs text-slate-400 ml-1">(Monthly OH&amp;S Statistics, to date)</span>
+            </div>
+            <p className="text-[10px] text-gray-400 mb-4">
+              Totals across all saved OH&amp;S monthly records{projectIds.length ? ' for the selected project(s)' : ''}.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              {activityCards.map(({ label, value, icon: Icon, color, bg }) => (
+                <div key={label} className="rounded-xl border border-gray-100 p-3 flex items-center gap-3">
+                  <div className={`${bg} ${color} p-2 rounded-lg flex-shrink-0`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-lg font-bold text-gray-900 leading-none">{value}</p>
+                    <p className="text-[11px] text-gray-500 mt-1 leading-tight">{label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!ohsTotals?.records && (
+              <p className="text-xs text-slate-400 text-center mt-4">
+                No OH&amp;S statistics saved yet — enter data under Summary → Monthly OH&amp;S Statistics.
+              </p>
+            )}
           </div>
         </>
       )}

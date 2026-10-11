@@ -54,6 +54,14 @@ def _run_migrations():
         ("work_permits", "receiver_roles",    "TEXT",    None),
         ("work_permits", "receiver_user_ids", "TEXT",    None),
         ("work_permits", "floor",             "VARCHAR", None),
+        ("work_permits", "extension_status",       "VARCHAR",  None),
+        ("work_permits", "extension_hours",        "FLOAT",    None),
+        ("work_permits", "extension_new_expiry",   "VARCHAR",  None),
+        ("work_permits", "extension_reason",       "TEXT",     None),
+        ("work_permits", "extension_requested_by", "INTEGER REFERENCES users(id)", "INTEGER REFERENCES users(id)"),
+        ("work_permits", "extension_requested_at", "DATETIME", "TIMESTAMP"),
+        ("work_permits", "extension_approved_by",  "INTEGER REFERENCES users(id)", "INTEGER REFERENCES users(id)"),
+        ("work_permits", "extension_approved_at",  "DATETIME", "TIMESTAMP"),
     ]
     all_migrations = _obs_columns + _user_columns + _training_columns + _permit_columns
 

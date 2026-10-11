@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from pydantic import BaseModel
+import os
+import uuid
 from typing import Optional, List, Any
 import json
 import threading
 import logging
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
-from datetime import datetime
+from sqlalchemy import or_, func
+from datetime import datetime, date, timedelta
 from database import get_db, SessionLocal
 import models
 from auth import get_current_user
@@ -147,6 +149,12 @@ def permit_to_dict(p: models.WorkPermit) -> dict:
         "closed_at": p.closed_at.isoformat() if p.closed_at else None,
         "cancel_reason": p.cancel_reason,
         "cancelled_at": p.cancelled_at.isoformat() if p.cancelled_at else None,
+        "extension_status": p.extension_status,
+        "extension_hours": p.extension_hours,
+        "extension_new_expiry": p.extension_new_expiry,
+        "extension_reason": p.extension_reason,
+        "extension_requested_at": p.extension_requested_at.isoformat() if p.extension_requested_at else None,
+        "extension_approved_at": p.extension_approved_at.isoformat() if p.extension_approved_at else None,
         "history": _load(p.history, []),
         "created_by": p.created_by,
         "created_by_name": p.creator.name if p.creator else None,
@@ -154,6 +162,10 @@ def permit_to_dict(p: models.WorkPermit) -> dict:
         "created_by_mobile": p.creator.mobile if p.creator else None,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+        "images": [
+            {"id": im.id, "category": im.category, "file_path": im.file_path, "file_name": im.file_name}
+            for im in sorted(p.images, key=lambda x: x.id)
+        ],
     }
 
 
@@ -234,6 +246,9 @@ def _build_permit_email(p: models.WorkPermit, event: str, actor_name: str = "") 
         "cancelled": ("Permit Cancelled", "#dc2626"),
         "closure_requested": ("Permit Closure Requested", "#d97706"),
         "closed": ("Permit Closed", "#6b7280"),
+        "extension_requested": ("Permit Extension Requested", "#d97706"),
+        "extension_approved": ("Permit Extension Approved", "#16a34a"),
+        "extension_declined": ("Permit Extension Declined", "#dc2626"),
     }
     header, color = titles.get(event, ("Work Permit Notification", "#2563eb"))
     subject = f"[CHWP] {header} — {p.permit_no}"
@@ -249,6 +264,10 @@ def _build_permit_email(p: models.WorkPermit, event: str, actor_name: str = "") 
         extra = row("Reason", p.cancel_reason)
     if event in ("closure_requested", "closed") and p.closure_type:
         extra = row("Closure", p.closure_type) + (row("Note", p.closure_note) if p.closure_note else "")
+    if event.startswith("extension_"):
+        extra = row("Extension", f"{p.extension_hours or ''} hrs") + row("New expiry", p.extension_new_expiry)
+        if p.extension_reason:
+            extra += row("Reason", p.extension_reason)
     if event in ("approved", "declined", "closed") and actor_name:
         extra += row("Action by", actor_name)
 
@@ -299,6 +318,12 @@ def _fire_permit_email(permit_id: int, event: str, actor_name: str = ""):
             # Notify only the Issued-To folks (fall back to all approvers if none set), cc the contractor
             to = issued_to_emails or approver_emails
             cc = creator_email
+        elif event == "extension_requested":
+            # Reminder to both the Receiver and the Approver (EIC); cc the contractor
+            to = (issued_to_emails + approver_emails) or approver_emails
+            cc = creator_email
+        elif event in ("extension_approved", "extension_declined"):
+            to, cc = creator_email + approver_emails + issued_to_emails, []
         elif event in ("approved", "closed", "cancelled"):
             to, cc = creator_email + approver_emails, []
         elif event == "declined":
@@ -323,6 +348,62 @@ def _notify(permit_id: int, event: str, actor_name: str = ""):
     threading.Thread(target=_fire_permit_email, args=(permit_id, event, actor_name), daemon=True).start()
 
 
+def _fire_comment_email(permit_id: int, commenter_name: str, message: str, commenter_id: Optional[int] = None):
+    db = SessionLocal()
+    try:
+        p = db.query(models.WorkPermit).filter(models.WorkPermit.id == permit_id).first()
+        if not p:
+            return
+        smtp = db.query(models.SmtpSettings).first()
+        if not smtp or not smtp.enabled:
+            return
+        people = _permit_people(p, db)
+        # Contractor (creator) + assigned PIC / PSO / EIC + receivers
+        emails = [u.email for u in (people["pic"], people["pso"], people["eic"], people["creator"]) if u and u.email]
+        receiver_ids = _load(p.receiver_user_ids, [])
+        if receiver_ids:
+            emails += [u.email for u in db.query(models.User).filter(models.User.id.in_(receiver_ids)).all() if u and u.email]
+        # Admins / SuperAdmins — those with no project assignment (all projects) or assigned to this project
+        all_admins = db.query(models.User).filter(models.User.role.in_(["Admin", "SuperAdmin"])).all()
+        for u in all_admins:
+            pids = {up.project_id for up in u.user_projects}
+            if (not pids or p.project_id in pids) and u.email:
+                emails.append(u.email)
+
+        # Exclude the commenter's own email
+        commenter_email = None
+        if commenter_id:
+            cu = db.query(models.User).filter(models.User.id == commenter_id).first()
+            commenter_email = cu.email if cu else None
+        to = list(dict.fromkeys([e for e in emails if e and e != commenter_email]))
+        if not to:
+            return
+        subject = f"[CHWP] New comment on {p.permit_no}"
+        html = f"""<!DOCTYPE html><html><body style="margin:0;background:#f3f4f6;font-family:Arial,sans-serif;">
+<div style="max-width:620px;margin:28px auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+  <div style="background:#4f46e5;padding:22px 30px;">
+    <p style="margin:0 0 6px;color:#e5edff;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.6px;">New Comment</p>
+    <h1 style="margin:0;color:#fff;font-size:20px;">{p.permit_no}</h1>
+  </div>
+  <div style="padding:22px 30px;">
+    <p style="margin:0 0 6px;color:#374151;font-size:14px;"><strong>{commenter_name}</strong> commented:</p>
+    <div style="background:#f9fafb;border-left:3px solid #4f46e5;padding:10px 14px;color:#111827;font-size:14px;border-radius:4px;">{message}</div>
+  </div>
+  <div style="padding:14px 30px;background:#f9fafb;border-top:1px solid #e5e7eb;">
+    <p style="margin:0;color:#9ca3af;font-size:12px;">Automated notification from the Safety App — Construction Hazardous Work Permit system.</p>
+  </div>
+</div></body></html>"""
+        send_observation_email(smtp, to, [], subject, html)
+    except Exception as exc:
+        logger.error("Permit comment email failed for %s: %s", permit_id, exc)
+    finally:
+        db.close()
+
+
+def _notify_comment(permit_id: int, commenter_name: str, message: str, commenter_id: Optional[int] = None):
+    threading.Thread(target=_fire_comment_email, args=(permit_id, commenter_name, message, commenter_id), daemon=True).start()
+
+
 def _inapp(db: Session, user_ids: list, permit: models.WorkPermit, message: str):
     for uid in user_ids:
         if not uid:
@@ -331,6 +412,35 @@ def _inapp(db: Session, user_ids: list, permit: models.WorkPermit, message: str)
 
 
 # ── Lookups ──────────────────────────────────────────────────────────────────
+@router.get("/stats")
+def permit_stats(
+    project_id: List[int] = Query(default=[]),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Work-permit KPIs for the dashboard: permits issued today and total issued to date.
+    A permit is considered 'issued' once it has been Approved (status Approved or Closed)."""
+    allowed = get_allowed_project_ids(user)
+    q = db.query(models.WorkPermit)
+    if allowed is not None:
+        if not allowed:
+            return {"issued_today": 0, "total_issued": 0}
+        q = q.filter(models.WorkPermit.project_id.in_(allowed))
+    if project_id:
+        q = q.filter(models.WorkPermit.project_id.in_(project_id))
+
+    issued = q.filter(models.WorkPermit.status.in_(["Approved", "Closed"]))
+    total_issued = issued.count()
+    today = date.today().isoformat()
+    issued_today = issued.filter(
+        or_(
+            models.WorkPermit.issued_date == today,
+            func.date(models.WorkPermit.approved_at) == today,
+        )
+    ).count()
+    return {"issued_today": issued_today, "total_issued": total_issued}
+
+
 @router.get("/approvers")
 def list_approvers(
     role: str = Query(...),
@@ -410,6 +520,14 @@ def list_permits(
     project_id: List[int] = Query(default=[]),
     scope: Optional[str] = Query(None),   # 'mine' | 'to_approve'
     search: Optional[str] = Query(None),
+    eic_user_id: List[int] = Query(default=[]),
+    pso_user_id: List[int] = Query(default=[]),
+    pic_user_id: List[int] = Query(default=[]),
+    contractor_user_id: List[int] = Query(default=[]),
+    receiver_user_id: List[int] = Query(default=[]),
+    hazard_category: List[str] = Query(default=[]),
+    area: List[str] = Query(default=[]),
+    floor: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
@@ -450,9 +568,96 @@ def list_permits(
             models.WorkPermit.work_description.ilike(like),
             models.WorkPermit.receiver_name.ilike(like),
         ))
+    if eic_user_id:
+        q = q.filter(models.WorkPermit.eic_user_id.in_(eic_user_id))
+    if pso_user_id:
+        q = q.filter(models.WorkPermit.pso_user_id.in_(pso_user_id))
+    if pic_user_id:
+        q = q.filter(models.WorkPermit.pic_user_id.in_(pic_user_id))
+    if contractor_user_id:
+        q = q.filter(models.WorkPermit.created_by.in_(contractor_user_id))
+    if area:
+        q = q.filter(models.WorkPermit.area.in_(area))
+    if floor:
+        q = q.filter(models.WorkPermit.floor.in_(floor))
 
     rows = q.order_by(models.WorkPermit.created_at.desc()).all()
+
+    # JSON-list fields (receiver user ids, hazard categories) — match any, filtered in Python
+    if receiver_user_id:
+        want = set(receiver_user_id)
+        rows = [p for p in rows if want & set(_load(p.receiver_user_ids, []))]
+    if hazard_category:
+        want = set(hazard_category)
+        rows = [p for p in rows if want & set(_load(p.hazard_categories, []))]
+
     return [permit_to_dict(p) for p in rows]
+
+
+# ── Permit images ─────────────────────────────────────────────────────────────
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+_IMG_EXTS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif"}
+
+
+def _category_limit(category: str) -> int:
+    if category.startswith("hazard:"):
+        return 5          # 5 photos per hazardous work type
+    if category in ("prejob", "closure"):
+        return 2          # 2 photos each for pre-job discussion / closure
+    if category.startswith("comment:"):
+        return 6          # photos attached to a chat comment
+    return 5
+
+
+@router.post("/{permit_id}/images", status_code=201)
+async def upload_permit_images(
+    permit_id: int,
+    category: str = Form(...),
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    p = db.query(models.WorkPermit).filter(models.WorkPermit.id == permit_id).first()
+    if not p:
+        raise HTTPException(404, "Permit not found")
+    limit = _category_limit(category)
+    existing = db.query(models.PermitImage).filter(
+        models.PermitImage.permit_id == permit_id, models.PermitImage.category == category
+    ).count()
+    saved = []
+    for f in files:
+        if existing + len(saved) >= limit:
+            break
+        ext = os.path.splitext(f.filename or "")[1].lower()
+        if ext not in _IMG_EXTS:
+            continue
+        fname = f"{uuid.uuid4().hex}{ext}"
+        with open(os.path.join(UPLOAD_DIR, fname), "wb") as fp:
+            fp.write(await f.read())
+        img = models.PermitImage(permit_id=permit_id, category=category, file_path=fname,
+                                 file_name=f.filename or fname, uploaded_by=user.id)
+        db.add(img)
+        db.flush()
+        saved.append({"id": img.id, "category": category, "file_path": fname, "file_name": f.filename})
+    db.commit()
+    return saved
+
+
+@router.delete("/images/{image_id}")
+def delete_permit_image(image_id: int, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    im = db.query(models.PermitImage).filter(models.PermitImage.id == image_id).first()
+    if not im:
+        raise HTTPException(404)
+    if user.role not in ADMIN_ROLES and im.uploaded_by != user.id:
+        raise HTTPException(403)
+    try:
+        os.remove(os.path.join(UPLOAD_DIR, im.file_path))
+    except OSError:
+        pass
+    db.delete(im)
+    db.commit()
+    return {"success": True}
 
 
 @router.get("/{permit_id}")
@@ -467,6 +672,76 @@ def get_permit(permit_id: int, db: Session = Depends(get_db), user: models.User 
         if not (is_related or (allowed is None) or in_project):
             raise HTTPException(403, "Access denied to this permit")
     return permit_to_dict(p)
+
+
+# ── Comments / chat thread ────────────────────────────────────────────────────
+class CommentBody(BaseModel):
+    message: str
+
+
+def _can_view_permit(p: models.WorkPermit, user: models.User, db: Session) -> bool:
+    if user.role in ADMIN_ROLES:
+        return True
+    if p.created_by == user.id or _is_assigned_approver(p, user):
+        return True
+    if user.id in _load(p.receiver_user_ids, []):
+        return True
+    allowed = get_allowed_project_ids(user)
+    return allowed is None or (bool(allowed) and p.project_id in allowed)
+
+
+@router.get("/{permit_id}/comments")
+def list_permit_comments(permit_id: int, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    p = db.query(models.WorkPermit).filter(models.WorkPermit.id == permit_id).first()
+    if not p:
+        raise HTTPException(404, "Permit not found")
+    if not _can_view_permit(p, user, db):
+        raise HTTPException(403, "Access denied to this permit")
+    rows = db.query(models.PermitComment).filter(models.PermitComment.permit_id == permit_id).order_by(models.PermitComment.created_at).all()
+    # Attach any photos uploaded against each comment (category 'comment:<id>')
+    imgs = db.query(models.PermitImage).filter(
+        models.PermitImage.permit_id == permit_id,
+        models.PermitImage.category.like("comment:%"),
+    ).all()
+    by_comment: dict = {}
+    for im in imgs:
+        try:
+            cid = int(im.category.split(":", 1)[1])
+        except (ValueError, IndexError):
+            continue
+        by_comment.setdefault(cid, []).append({"id": im.id, "file_path": im.file_path, "file_name": im.file_name})
+    return [
+        {"id": c.id, "message": c.message, "user_id": c.user_id,
+         "user_name": c.user.name if c.user else None, "user_role": c.user.role if c.user else None,
+         "created_at": c.created_at.isoformat() if c.created_at else None,
+         "images": by_comment.get(c.id, [])}
+        for c in rows
+    ]
+
+
+@router.post("/{permit_id}/comments", status_code=201)
+def add_permit_comment(permit_id: int, body: CommentBody, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    p = db.query(models.WorkPermit).filter(models.WorkPermit.id == permit_id).first()
+    if not p:
+        raise HTTPException(404, "Permit not found")
+    if not _can_view_permit(p, user, db):
+        raise HTTPException(403, "Access denied to this permit")
+    msg = (body.message or "").strip()
+    if not msg:
+        raise HTTPException(400, "Comment cannot be empty")
+    c = models.PermitComment(permit_id=permit_id, user_id=user.id, message=msg)
+    db.add(c)
+    db.flush()
+    # In-app notify all other involved people
+    involved = {p.created_by, p.pic_user_id, p.pso_user_id, p.eic_user_id, *(_load(p.receiver_user_ids, []))}
+    involved.discard(user.id)
+    _inapp(db, list(involved), p, f"{user.name} commented on work permit {p.permit_no}.")
+    db.commit()
+    db.refresh(c)
+    # Email every involved person on each new comment (except the commenter)
+    _notify_comment(permit_id, user.name, msg, user.id)
+    return {"id": c.id, "message": c.message, "user_id": c.user_id, "user_name": user.name,
+            "user_role": user.role, "created_at": c.created_at.isoformat() if c.created_at else None}
 
 
 # ── Create / Update ──────────────────────────────────────────────────────────
@@ -579,6 +854,88 @@ def cancel_permit(permit_id: int, body: CancelBody, db: Session = Depends(get_db
     _inapp(db, [p.created_by, p.pic_user_id, p.pso_user_id, p.eic_user_id], p, f"Work permit {p.permit_no} was cancelled by {user.name}.")
     db.commit()
     _notify(p.id, "cancelled", user.name)
+    return permit_to_dict(p)
+
+
+class ExtensionRequestBody(BaseModel):
+    hours: float
+    reason: Optional[str] = None
+
+
+@router.post("/{permit_id}/request-extension")
+def request_extension(permit_id: int, body: ExtensionRequestBody, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    p = db.query(models.WorkPermit).filter(models.WorkPermit.id == permit_id).first()
+    if not p:
+        raise HTTPException(404, "Permit not found")
+    if p.status != "Approved":
+        raise HTTPException(400, "Only an approved (running) permit can be extended")
+    if not (p.created_by == user.id or user.role in ADMIN_ROLES):
+        raise HTTPException(403, "Only the contractor can request an extension")
+    if p.extension_status == "Requested":
+        raise HTTPException(400, "An extension request is already pending")
+    if not (0 < body.hours <= 4):
+        raise HTTPException(400, "Extension must be between 0 and 4 hours")
+    if not p.expires_at or not p.starts_at:
+        raise HTTPException(400, "Permit has no start/expiry time to extend")
+    try:
+        new_expiry = datetime.fromisoformat(p.expires_at) + timedelta(hours=body.hours)
+        total = (new_expiry - datetime.fromisoformat(p.starts_at)).total_seconds()
+    except (ValueError, TypeError):
+        raise HTTPException(400, "Permit start/expiry time is invalid")
+    if total > 12 * 3600 + 1:
+        raise HTTPException(400, "Total permit duration (start to extended expiry) cannot exceed 12 hours")
+
+    p.extension_status = "Requested"
+    p.extension_hours = body.hours
+    p.extension_new_expiry = new_expiry.strftime("%Y-%m-%dT%H:%M")
+    p.extension_reason = body.reason
+    p.extension_requested_by = user.id
+    p.extension_requested_at = datetime.now()
+    _append_history(p, "extension_requested", user, f"{body.hours} hrs → {p.extension_new_expiry}")
+    _inapp(db, [p.eic_user_id] + _load(p.receiver_user_ids, []), p,
+           f"Extension of {body.hours} hrs requested for work permit {p.permit_no}.")
+    db.commit()
+    _notify(p.id, "extension_requested", user.name)
+    return permit_to_dict(p)
+
+
+@router.post("/{permit_id}/approve-extension")
+def approve_extension(permit_id: int, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    p = db.query(models.WorkPermit).filter(models.WorkPermit.id == permit_id).first()
+    if not p:
+        raise HTTPException(404, "Permit not found")
+    if p.extension_status != "Requested":
+        raise HTTPException(400, "No extension request is pending")
+    if not (user.id == p.eic_user_id or user.role in ADMIN_ROLES):
+        raise HTTPException(403, "Only the assigned EIC can approve an extension")
+    if p.extension_new_expiry:
+        p.expires_at = p.extension_new_expiry
+    p.extension_status = "Approved"
+    p.extension_approved_by = user.id
+    p.extension_approved_at = datetime.now()
+    _append_history(p, "extension_approved", user, f"New expiry {p.expires_at}")
+    _inapp(db, [p.created_by] + _load(p.receiver_user_ids, []), p,
+           f"Extension approved for work permit {p.permit_no} — new expiry {p.expires_at}.")
+    db.commit()
+    _notify(p.id, "extension_approved", user.name)
+    return permit_to_dict(p)
+
+
+@router.post("/{permit_id}/decline-extension")
+def decline_extension(permit_id: int, body: DeclineBody, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    p = db.query(models.WorkPermit).filter(models.WorkPermit.id == permit_id).first()
+    if not p:
+        raise HTTPException(404, "Permit not found")
+    if p.extension_status != "Requested":
+        raise HTTPException(400, "No extension request is pending")
+    if not (user.id == p.eic_user_id or user.role in ADMIN_ROLES):
+        raise HTTPException(403, "Only the assigned EIC can decline an extension")
+    p.extension_status = "Declined"
+    p.extension_reason = (p.extension_reason or "") + (f" | Declined: {body.reason}" if body.reason else "")
+    _append_history(p, "extension_declined", user, body.reason or "")
+    _inapp(db, [p.created_by], p, f"Extension declined for work permit {p.permit_no}.")
+    db.commit()
+    _notify(p.id, "extension_declined", user.name)
     return permit_to_dict(p)
 
 

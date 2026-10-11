@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Float, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Float, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
+from datetime import datetime
 from database import Base
 
 
@@ -8,7 +9,7 @@ class Project(Base):
     __tablename__ = "projects"
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False, unique=True)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=datetime.now)
     buildings = relationship("Building", back_populates="project", cascade="all, delete")
     observers = relationship("Observer", back_populates="project", cascade="all, delete")
     user_projects = relationship("UserProject", back_populates="project", cascade="all, delete")
@@ -22,7 +23,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     role = Column(String, nullable=False)  # Admin, PIC, EIC, HO, PSO, Contractor, Observer
     mobile = Column(String, nullable=True)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=datetime.now)
     user_projects = relationship("UserProject", back_populates="user", cascade="all, delete")
 
 
@@ -155,8 +156,8 @@ class Observation(Base):
     ai_summary_at = Column(DateTime, nullable=True)       # when the summary was generated
     ai_summary_by = Column(Integer, ForeignKey("users.id"), nullable=True)  # who generated it
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     project = relationship("Project")
     building = relationship("Building")
@@ -183,7 +184,7 @@ class ObservationImage(Base):
     file_name = Column(String, nullable=False)
     uploaded_by = Column(Integer, ForeignKey("users.id"))
     image_type = Column(String, default="initial")
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=datetime.now)
     observation = relationship("Observation", back_populates="images")
     uploader = relationship("User")
 
@@ -194,7 +195,7 @@ class ObservationComment(Base):
     observation_id = Column(Integer, ForeignKey("observations.id", ondelete="CASCADE"))
     user_id = Column(Integer, ForeignKey("users.id"))
     comment = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=datetime.now)
     observation = relationship("Observation", back_populates="comments")
     user = relationship("User")
 
@@ -207,7 +208,7 @@ class Notification(Base):
     obs_ref = Column(String, nullable=True)      # human-readable obs ID
     message = Column(String, nullable=False)
     is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=datetime.now)
     user = relationship("User")
 
 
@@ -245,7 +246,7 @@ class EaseScoreEntry(Base):
     gradation = Column(String, nullable=True)
     overall_score = Column(Float, nullable=True)
     ease_category = Column(String, nullable=True)
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=datetime.now)
 
 
 class SmtpSettings(Base):
@@ -259,7 +260,7 @@ class SmtpSettings(Base):
     from_email = Column(String, nullable=False, default="")
     from_name = Column(String, nullable=False, default="Safety Observation System")
     enabled = Column(Boolean, default=False)
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
 class AiSettings(Base):
@@ -268,7 +269,7 @@ class AiSettings(Base):
     api_key = Column(String, nullable=False, default="")
     model = Column(String, nullable=False, default="claude-haiku-4-5-20251001")
     enabled = Column(Boolean, default=False)
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
 class EaseElementResponse(Base):
@@ -279,8 +280,8 @@ class EaseElementResponse(Base):
     period_month = Column(Integer, nullable=False)
     element_id = Column(Integer, ForeignKey("ease_evaluation_elements.id", ondelete="CASCADE"))
     response = Column(String, nullable=True)  # 'Yes', 'Tending Yes', 'Tending No', 'No', 'NA'
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
     element = relationship("EaseEvaluationElement")
 
 
@@ -323,8 +324,8 @@ class Training(Base):
     participants = Column(Text, nullable=True)          # JSON list: [{user_id, name, role, category, assessment_status, score, remarks}]
     participant_count = Column(Integer, default=0)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     project = relationship("Project")
     trainer = relationship("User", foreign_keys=[trainer_user_id])
@@ -349,7 +350,7 @@ class Guideline(Base):
     file_path = Column(String, nullable=False)     # stored filename in uploads dir
     file_name = Column(String, nullable=False)     # original filename
     uploaded_by = Column(Integer, ForeignKey("users.id"))
-    created_at = Column(DateTime, default=func.now())
+    created_at = Column(DateTime, default=datetime.now)
     uploader = relationship("User")
 
 
@@ -403,10 +404,21 @@ class WorkPermit(Base):
     cancelled_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     cancelled_at = Column(DateTime, nullable=True)
 
+    # Work extension (up to 4h beyond the base window, max 12h total) — requested by
+    # contractor, approved by EIC.
+    extension_status = Column(String, nullable=True)       # 'Requested' | 'Approved' | 'Declined'
+    extension_hours = Column(Float, nullable=True)
+    extension_new_expiry = Column(String, nullable=True)
+    extension_reason = Column(Text, nullable=True)
+    extension_requested_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    extension_requested_at = Column(DateTime, nullable=True)
+    extension_approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    extension_approved_at = Column(DateTime, nullable=True)
+
     history = Column(Text, nullable=True)                 # JSON list of {action, by, name, role, at, note}
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=func.now())
-    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
     project = relationship("Project")
     pic_user = relationship("User", foreign_keys=[pic_user_id])
@@ -452,6 +464,93 @@ class EscalationLog(Base):
     observation_id = Column(Integer, ForeignKey("observations.id", ondelete="CASCADE"), nullable=False)
     obs_ref = Column(String, nullable=True)        # human-readable observation_id
     reminder_number = Column(Integer, nullable=False, default=1)
-    sent_at = Column(DateTime, default=func.now())
+    sent_at = Column(DateTime, default=datetime.now)
     recipients_json = Column(Text, nullable=True)  # JSON list of email addresses
     observation = relationship("Observation")
+
+
+class MeetingMinutes(Base):
+    """Minutes of Meeting (MoM) — either typed directly in the app or uploaded as a PDF."""
+    __tablename__ = "meeting_minutes"
+    id = Column(Integer, primary_key=True)
+    title = Column(String, nullable=False)
+    meeting_date = Column(String, nullable=True)          # stored as ISO date string, like observations
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=True)
+    attendees = Column(Text, nullable=True)               # free-text list of attendees
+    entry_type = Column(String, nullable=False, default="text")  # 'text' | 'pdf'
+    content = Column(Text, nullable=True)                 # typed minutes body (entry_type='text')
+    file_path = Column(String, nullable=True)             # stored PDF filename (entry_type='pdf')
+    file_name = Column(String, nullable=True)             # original uploaded filename
+
+    ai_summary = Column(Text, nullable=True)
+    ai_summary_at = Column(DateTime, nullable=True)
+    ai_summary_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    project = relationship("Project")
+    creator = relationship("User", foreign_keys=[created_by])
+    ai_summary_user = relationship("User", foreign_keys=[ai_summary_by])
+
+
+class OhsStatistics(Base):
+    """Monthly OH&S Statistics (form OHS-016) for a project, keyed by project + month + year."""
+    __tablename__ = "ohs_statistics"
+    id = Column(Integer, primary_key=True)
+    project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)
+    month = Column(Integer, nullable=False)   # 1-12
+    year = Column(Integer, nullable=False)
+
+    company = Column(String, nullable=True)
+    expected_duration = Column(String, nullable=True)
+    current_age = Column(String, nullable=True)
+    contractors_present = Column(Text, nullable=True)
+
+    # JSON-encoded structures (descriptions/labels live on the client & in the report)
+    section_a = Column(Text, nullable=True)        # list[4] of {avg_persons, man_hours}
+    lti = Column(Text, nullable=True)              # list of {name, company, date, man_days_lost, investigated, report_sent}
+    general_summary = Column(Text, nullable=True)  # list[8] of {for_month, cumulative, remarks}
+    activities = Column(Text, nullable=True)       # list[14] of {for_month, cumulative, remarks}
+    violations = Column(Text, nullable=True)       # list of {date, issued_to, issued_by, type, reason}
+
+    safety_coordinator = Column(String, nullable=True)
+    site_incharge = Column(String, nullable=True)
+
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (UniqueConstraint("project_id", "month", "year", name="uq_ohs_period"),)
+
+    project = relationship("Project")
+    updater = relationship("User", foreign_keys=[updated_by])
+
+
+class PermitImage(Base):
+    """Optional photos attached to a work permit — precautions per hazardous work type,
+    pre-job discussion, and closure (work status / housekeeping)."""
+    __tablename__ = "permit_images"
+    id = Column(Integer, primary_key=True)
+    permit_id = Column(Integer, ForeignKey("work_permits.id", ondelete="CASCADE"), nullable=False)
+    category = Column(String, nullable=False)   # 'hazard:<code>' | 'prejob' | 'closure'
+    file_path = Column(String, nullable=False)
+    file_name = Column(String, nullable=True)
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+    permit = relationship("WorkPermit", backref="images")
+
+
+class PermitComment(Base):
+    """Chat/comment thread on a work permit — visible to all involved roles."""
+    __tablename__ = "permit_comments"
+    id = Column(Integer, primary_key=True)
+    permit_id = Column(Integer, ForeignKey("work_permits.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+    user = relationship("User", foreign_keys=[user_id])
+    permit = relationship("WorkPermit", backref="comments")

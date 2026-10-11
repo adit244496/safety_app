@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect } from 'react'
+import { useMemo, useState, useRef } from 'react'
 import { usePageTitle } from '../store/pageTitleContext'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
@@ -7,6 +7,7 @@ import {
 import { BarChart3, TrendingUp, ArrowUpRight, Users, Award, ClipboardList, Save, CheckCircle, SlidersHorizontal, X, ChevronRight, ChevronDown, Download } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import { generateSummaryPdf, generateEasePdf } from '../lib/printPdf'
+import OhsStatistics from './OhsStatistics'
 import api from '../lib/api'
 import { useAuth } from '../store/authStore'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
@@ -965,8 +966,8 @@ function EvaluationCriteria() {
         </div>
 
         {/* Filters */}
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <label className="space-y-1 text-sm text-slate-600">
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
+          <label className="space-y-1 text-sm text-slate-600 md:col-span-2">
             <span className="font-medium">Project *</span>
             <select
               value={projectFilter}
@@ -978,16 +979,26 @@ function EvaluationCriteria() {
             </select>
           </label>
           <label className="space-y-1 text-sm text-slate-600">
-            <span className="font-medium">Month / Year</span>
-            <input
-              type="month"
-              value={`${periodYear}-${String(periodMonth).padStart(2, '0')}`}
-              onChange={e => {
-                const [y, m] = e.target.value.split('-')
-                setPeriodYear(Number(y)); setPeriodMonth(Number(m)); setEdits({})
-              }}
+            <span className="font-medium">Month</span>
+            <select
+              value={periodMonth}
+              onChange={e => { setPeriodMonth(Number(e.target.value)); setEdits({}) }}
               className="w-full rounded-lg border border-slate-200 px-2 py-1.5 bg-white text-slate-900 text-sm"
-            />
+            >
+              {['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+                .map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm text-slate-600">
+            <span className="font-medium">Year</span>
+            <select
+              value={periodYear}
+              onChange={e => { setPeriodYear(Number(e.target.value)); setEdits({}) }}
+              className="w-full rounded-lg border border-slate-200 px-2 py-1.5 bg-white text-slate-900 text-sm"
+            >
+              {Array.from({ length: 6 }, (_, i) => now.getFullYear() - 3 + i)
+                .map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
           </label>
         </div>
       </div>
@@ -1176,146 +1187,9 @@ function EvaluationCriteria() {
   )
 }
 
-// ─── Manpower Details Tab ────────────────────────────────────────────────────
-
-const MANPOWER_STORAGE_KEY = 'she_manpower_data'
-
-interface ManpowerRow { name: string; manHours: number; avgPersons: number }
-
-function ManpowerDetails() {
-  const [rows, setRows] = useState<ManpowerRow[]>([])
-  const [savedMsg, setSavedMsg] = useState(false)
-
-  const { data: allProjects, isLoading } = useQuery({
-    queryKey: ['projects'],
-    queryFn: () => api.get('/projects/').then(r => r.data),
-  })
-
-  useEffect(() => {
-    if (!allProjects) return
-    const stored: ManpowerRow[] = (() => {
-      try { return JSON.parse(localStorage.getItem(MANPOWER_STORAGE_KEY) || '[]') } catch { return [] }
-    })()
-    const storedMap = new Map(stored.map(r => [r.name, r]))
-    setRows(
-      (allProjects as any[]).map((p: any) => {
-        const s = storedMap.get(p.name)
-        return { name: p.name, manHours: s?.manHours ?? 0, avgPersons: s?.avgPersons ?? 0 }
-      })
-    )
-  }, [allProjects])
-
-  const update = (idx: number, field: 'manHours' | 'avgPersons', val: string) => {
-    const num = parseFloat(val) || 0
-    setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: num } : r))
-  }
-
-  const handleSave = () => {
-    localStorage.setItem(MANPOWER_STORAGE_KEY, JSON.stringify(rows))
-    setSavedMsg(true)
-    setTimeout(() => setSavedMsg(false), 3000)
-  }
-
-  if (isLoading) return (
-    <div className="h-48 flex items-center justify-center">
-      <div className="animate-spin w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full" />
-    </div>
-  )
-
-  return (
-    <div className="space-y-5">
-      <div className="card">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Users className="w-5 h-5 text-indigo-600" />
-              <h2 className="font-semibold text-gray-900 text-lg">Manpower Details</h2>
-            </div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Enter man-hours and average persons per project for the report period. This data is used in the PDF report —
-              <span className="font-medium text-slate-500"> Page 6</span> (observation &amp; delay rates) and
-              <span className="font-medium text-slate-500"> Page 7</span> (man-hours &amp; distribution charts).
-              Data is saved locally and loaded automatically when generating the PDF.
-            </p>
-          </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {savedMsg && (
-              <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium">
-                <CheckCircle className="w-4 h-4" /> Saved
-              </span>
-            )}
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition"
-            >
-              <Save className="w-4 h-4" /> Save
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="card overflow-x-auto">
-        {rows.length === 0 ? (
-          <p className="text-sm text-slate-400 py-6 text-center">No projects found.</p>
-        ) : (
-          <table className="w-full text-sm text-left min-w-[480px]">
-            <thead>
-              <tr className="text-xs uppercase text-slate-500 border-b border-slate-200">
-                <th className="py-2 pr-4 font-medium tracking-wide">Project</th>
-                <th className="py-2 px-3 text-right w-44 font-medium tracking-wide">Man-Hours</th>
-                <th className="py-2 px-3 text-right w-44 font-medium tracking-wide">Avg Persons / Day</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={row.name} className="border-b border-slate-100 hover:bg-slate-50">
-                  <td className="py-3 pr-4 font-medium text-slate-900">{row.name}</td>
-                  <td className="py-2.5 px-3">
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={row.manHours || ''}
-                      onChange={e => update(i, 'manHours', e.target.value)}
-                      placeholder="0"
-                      className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 text-right focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                    />
-                  </td>
-                  <td className="py-2.5 px-3">
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={row.avgPersons || ''}
-                      onChange={e => update(i, 'avgPersons', e.target.value)}
-                      placeholder="0"
-                      className="w-full text-xs border border-gray-200 rounded-lg px-2.5 py-1.5 text-gray-700 text-right focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            <tfoot>
-              <tr className="bg-slate-50 text-xs text-slate-400 border-t-2 border-slate-200">
-                <td className="py-2 pr-4 font-medium">{rows.length} project{rows.length !== 1 ? 's' : ''}</td>
-                <td className="py-2 px-3 text-right font-semibold text-slate-600">
-                  {rows.reduce((s, r) => s + r.manHours, 0).toLocaleString()}
-                </td>
-                <td className="py-2 px-3 text-right font-semibold text-slate-600">
-                  {(rows.reduce((s, r) => s + r.avgPersons, 0) / Math.max(rows.filter(r => r.avgPersons > 0).length, 1)).toFixed(1)} avg
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ─── Main Summary Page ───────────────────────────────────────────────────────
 
-type Tab = 'ease' | 'compliance' | 'criteria' | 'manpower'
+type Tab = 'ease' | 'compliance' | 'criteria' | 'ohs'
 
 export default function Summary() {
   const [activeTab, setActiveTab] = useState<Tab>('ease')
@@ -1325,7 +1199,7 @@ export default function Summary() {
     { id: 'ease', label: 'SHE Score' },
     { id: 'compliance', label: 'Compliance Analysis' },
     { id: 'criteria', label: 'SHE Performance' },
-    { id: 'manpower', label: 'Man Power Details' },
+    { id: 'ohs', label: 'Monthly OH&S Statistics' },
   ]
 
   return (
@@ -1354,7 +1228,7 @@ export default function Summary() {
       {activeTab === 'ease' && <EaseScoreView />}
       {activeTab === 'compliance' && <ComplianceAnalysis />}
       {activeTab === 'criteria' && <EvaluationCriteria />}
-      {activeTab === 'manpower' && <ManpowerDetails />}
+      {activeTab === 'ohs' && <OhsStatistics />}
     </div>
   )
 }

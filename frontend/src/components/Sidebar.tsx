@@ -2,7 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, ClipboardList, PlusCircle,
   Settings, X, ChevronRight, ChevronsLeft, ChevronRightSquare,
-  LogOut, FileBarChart2, BarChart3, Database, GraduationCap, FileCheck2, BookOpen,
+  LogOut, FileBarChart2, BarChart3, Database, GraduationCap, FileCheck2, BookOpen, NotebookPen,
 } from 'lucide-react'
 import { useAuth } from '../store/authStore'
 import { useNavigate } from 'react-router-dom'
@@ -22,6 +22,7 @@ const NAV = [
   { to: '/summary', icon: BarChart3, label: 'Summary', exact: true, roles: ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Observer'] },
   { to: '/trainings', icon: GraduationCap, label: 'Training', exact: false, roles: null },
   { to: '/work-permits', icon: FileCheck2, label: 'Work Permits', exact: false, roles: null },
+  { to: '/meeting-minutes', icon: NotebookPen, label: 'Meeting Minutes', exact: false, roles: ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Observer'] },
   { to: '/guidelines', icon: BookOpen, label: 'Guidelines', exact: true, roles: null },
   { to: '/legacy-data', icon: Database, label: 'Legacy Data', exact: true, roles: ['SuperAdmin', 'Admin', 'HO'] },
 ]

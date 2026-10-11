@@ -9,7 +9,7 @@ from seed_ease import seed_ease_scores
 from seed_dummy import seed_dummy_data, seed_ease_dummy_data, seed_recent_observations
 from seed_ease_criteria import seed_ease_criteria
 from seed_permit_config import seed_permit_config
-from routers import auth, users, projects, observations, admin, uploads, notifications, ease_score, guidelines, trainings, work_permits
+from routers import auth, users, projects, observations, admin, uploads, notifications, ease_score, guidelines, trainings, work_permits, meeting_minutes, ohs_statistics
 from escalation_scheduler import start_scheduler, stop_scheduler
 
 app = FastAPI(title="Safety Observation API", version="1.0.0")
@@ -34,6 +34,8 @@ app.include_router(ease_score.router)
 app.include_router(trainings.router)
 app.include_router(work_permits.router)
 app.include_router(guidelines.router)
+app.include_router(meeting_minutes.router)
+app.include_router(ohs_statistics.router)
 
 # Serve uploaded files
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")

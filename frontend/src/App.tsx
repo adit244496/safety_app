@@ -19,6 +19,7 @@ import WorkPermitForm from './pages/WorkPermits/Form'
 import WorkPermitDetail from './pages/WorkPermits/Detail'
 import PermitDocument from './pages/WorkPermits/PermitDocument'
 import Guidelines from './pages/Guidelines'
+import MeetingMinutes from './pages/MeetingMinutes/index'
 
 function Guard({ children }: { children: React.ReactNode }) {
   const { token, user } = useAuth()
@@ -49,6 +50,14 @@ function LegacyDataGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   if (!user) return null
   if (!['SuperAdmin', 'Admin', 'HO'].includes(user.role)) return <Navigate to="/" replace />
+  return <>{children}</>
+}
+
+// Meeting minutes: everyone except contractors
+function MinutesGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  if (!user) return null
+  if (user.role === 'Contractor') return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -88,6 +97,7 @@ export default function App() {
           <Route path="work-permits/new" element={<PermitFormGuard><WorkPermitForm /></PermitFormGuard>} />
           <Route path="work-permits/:id" element={<WorkPermitDetail />} />
           <Route path="work-permits/:id/edit" element={<PermitFormGuard><WorkPermitForm /></PermitFormGuard>} />
+          <Route path="meeting-minutes" element={<MinutesGuard><MeetingMinutes /></MinutesGuard>} />
           <Route path="guidelines" element={<Guidelines />} />
           <Route path="admin/*" element={<AdminGuard><Admin /></AdminGuard>} />
         </Route>

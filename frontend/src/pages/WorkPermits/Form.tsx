@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, ArrowLeft, AlertTriangle, Send, FileText, ShieldAlert, ChevronDown, ChevronRight } from 'lucide-react'
+import { Save, ArrowLeft, AlertTriangle, Send, FileText, ShieldAlert, ChevronDown, ChevronRight, Camera, X } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '../../lib/api'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
@@ -47,7 +47,7 @@ export default function WorkPermitForm() {
       project_id: '', other_permits: '',
       receiver_user_ids: [] as number[],
       issued_date: t,
-      work_location: '', area: '', floor: '', starts_at: `${t}T09:00`, expires_at: `${t}T18:00`, work_description: '',
+      work_location: '', area: '', floor: '', starts_at: `${t}T09:00`, expires_at: `${t}T17:00`, work_description: '',
       pre_job_discussion: false, pic_user_id: '', pso_user_id: '', eic_user_id: '',
     }
   })
@@ -55,25 +55,49 @@ export default function WorkPermitForm() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [answers, setAnswers] = useState<Record<string, any>>({})  // { [code]: { [item_key]: value, __gas: [] } }
   const [saving, setSaving] = useState<'' | 'draft' | 'submit'>('')
+  const [photos, setPhotos] = useState<Record<string, File[]>>({})       // staged uploads keyed by category
+  const [existingImages, setExistingImages] = useState<any[]>([])        // already-uploaded (edit mode)
+
+  const imgLimit = (cat: string) => (cat === 'prejob' ? 2 : 5)
+  const existingFor = (cat: string) => existingImages.filter((im: any) => im.category === cat)
+  const stageFiles = (cat: string, files: FileList | null) => {
+    if (!files?.length) return
+    setPhotos(prev => {
+      const have = (prev[cat]?.length || 0) + existingFor(cat).length
+      const room = Math.max(0, imgLimit(cat) - have)
+      return { ...prev, [cat]: [...(prev[cat] || []), ...Array.from(files).slice(0, room)] }
+    })
+  }
+  const removeStaged = (cat: string, i: number) => setPhotos(prev => ({ ...prev, [cat]: (prev[cat] || []).filter((_, idx) => idx !== i) }))
+  const deleteExisting = async (imgId: number) => {
+    try { await api.delete(`/work-permits/images/${imgId}`); setExistingImages(prev => prev.filter((im: any) => im.id !== imgId)) }
+    catch { toast.error('Failed to remove photo') }
+  }
+  const uploadStaged = async (permitId: number) => {
+    for (const [cat, files] of Object.entries(photos)) {
+      if (!files.length) continue
+      const fd = new FormData()
+      fd.append('category', cat)
+      files.forEach(f => fd.append('files', f))
+      try { await api.post(`/work-permits/${permitId}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }) } catch { /* non-fatal */ }
+    }
+  }
   const [error, setError] = useState('')
 
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
-  // datetime-local formatter + max expiry = min(start + 12h, end of the start day)
+  // Permits are generally 8 hours and may run up to 12 hours — including OVERNIGHT
+  // (e.g. 9 pm → 6 am next day). Max expiry = start + 12h (may fall on the next day).
   const fmtLocal = (d: Date) => { const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
   const maxExpiry = (startStr: string): string | undefined => {
     if (!startStr) return undefined
     const s = new Date(startStr); if (isNaN(s.getTime())) return undefined
-    const plus12 = new Date(s.getTime() + 12 * 60 * 60 * 1000)
-    const endOfDay = new Date(s); endOfDay.setHours(23, 59, 0, 0)
-    return fmtLocal(plus12 < endOfDay ? plus12 : endOfDay)
+    return fmtLocal(new Date(s.getTime() + 12 * 60 * 60 * 1000))
   }
-  // When start changes, keep expiry within [start, maxExpiry]; clamp to max if out of range
+  // When start changes, auto-set expiry to start + 8h (the standard permit window).
+  // It can still be adjusted up to start + 12h (overnight allowed).
   const setStart = (v: string) => setForm((f: any) => {
-    let exp = f.expires_at
-    const max = maxExpiry(v)
-    if (v && max) {
-      if (!exp || exp <= v || exp > max) exp = max
-    }
+    const s = new Date(v)
+    const exp = (v && !isNaN(s.getTime())) ? fmtLocal(new Date(s.getTime() + 8 * 60 * 60 * 1000)) : f.expires_at
     return { ...f, starts_at: v, expires_at: exp }
   })
   // Setting an approver also drops any "Issued To" receiver that is no longer one of the three
@@ -151,6 +175,7 @@ export default function WorkPermitForm() {
       setSelectedCats(cats)
       setExpanded(Object.fromEntries(cats.map(c => [c, true])))
       setAnswers(existing.precautions || {})
+      setExistingImages(existing.images || [])
     }
   }, [existing])
 
@@ -205,8 +230,11 @@ export default function WorkPermitForm() {
       submit,
     }
     try {
+      let permitId = existing?.id
       if (isEdit) await api.put(`/work-permits/${existing?.id}`, payload)
-      else await api.post('/work-permits/', payload)
+      else { const res = await api.post('/work-permits/', payload); permitId = res.data?.id }
+      if (permitId) await uploadStaged(permitId)
+      setPhotos({})
       qc.invalidateQueries({ queryKey: ['work-permits'] })
       if (isEdit) qc.invalidateQueries({ queryKey: ['work-permit', id] })
       toast.success(submit ? 'Permit submitted for approval' : 'Draft saved')
@@ -273,7 +301,7 @@ export default function WorkPermitForm() {
             </select>
           </Field>
 
-          <Field label="Issued To — Name (Receiver)" hint="Choose from the assigned PIC / PSO / EIC above.">
+          <Field label="Issued by" hint="Choose from the assigned PIC / PSO / EIC above.">
             <MultiSelectFilter size="md"
               options={receiverOptions}
               value={form.receiver_user_ids}
@@ -295,7 +323,7 @@ export default function WorkPermitForm() {
           </Field>
           <Field label="For Work In — Equipment / Location"><input className="input" value={form.work_location} onChange={e => set('work_location', e.target.value)} /></Field>
           <Field label="Starts At"><input type="datetime-local" className="input" value={form.starts_at} onChange={e => setStart(e.target.value)} /></Field>
-          <Field label="Expires At" hint="Up to 12 hours from start, same day.">
+          <Field label="Expires At" hint="Auto-set to 8 hours; adjustable up to 12 hours (overnight allowed).">
             <input type="datetime-local" className="input" value={form.expires_at} min={form.starts_at || undefined} max={maxExpiry(form.starts_at)} disabled={!form.starts_at}
               onChange={e => {
                 let v = e.target.value
@@ -314,6 +342,11 @@ export default function WorkPermitForm() {
               <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={form.pre_job_discussion} onChange={e => set('pre_job_discussion', e.target.checked)} />
               <span className="text-sm text-gray-700">Held pre-job discussion with personnel assigned for the task</span>
             </label>
+            <div className="mt-2">
+              <p className="text-xs text-gray-500 mb-1.5">Pre-job discussion photos <span className="text-gray-400">(persons involved & attendance sheet — up to 2, optional)</span></p>
+              <PhotoSlots max={2} existing={existingFor('prejob')} staged={photos['prejob'] || []}
+                onPick={f => stageFiles('prejob', f)} onRemoveStaged={i => removeStaged('prejob', i)} onDeleteExisting={deleteExisting} />
+            </div>
           </div>
         </div>
       </SectionCard>
@@ -327,7 +360,9 @@ export default function WorkPermitForm() {
                 selected={selectedCats.includes(wt.code)} expanded={!!expanded[wt.code]}
                 onToggleSelect={() => toggleCat(wt.code)} onToggleExpand={() => setExpanded(e => ({ ...e, [wt.code]: !e[wt.code] }))}
                 getVal={(k) => getVal(wt.code, k)} setVal={(k, v) => setVal(wt.code, k, v)}
-                gas={getGas(wt.code)} setGas={(rows) => setGas(wt.code, rows)} />
+                gas={getGas(wt.code)} setGas={(rows) => setGas(wt.code, rows)}
+                photoExisting={existingFor(`hazard:${wt.code}`)} photoStaged={photos[`hazard:${wt.code}`] || []}
+                onPhotoPick={(f) => stageFiles(`hazard:${wt.code}`, f)} onPhotoRemove={(idx) => removeStaged(`hazard:${wt.code}`, idx)} onPhotoDelete={deleteExisting} />
             ))}
           </div>
         )}
@@ -338,6 +373,40 @@ export default function WorkPermitForm() {
         <button type="button" onClick={() => save(false)} disabled={!!saving} className="btn-secondary"><Save className="w-4 h-4" /> Save Draft</button>
         <button type="button" onClick={() => save(true)} disabled={!!saving} className="btn-primary px-6"><Send className="w-4 h-4" /> Submit for Approval</button>
       </div>
+    </div>
+  )
+}
+
+function PhotoSlots({ max, existing, staged, onPick, onRemoveStaged, onDeleteExisting }: {
+  max: number
+  existing: any[]
+  staged: File[]
+  onPick: (files: FileList | null) => void
+  onRemoveStaged: (i: number) => void
+  onDeleteExisting: (id: number) => void
+}) {
+  const count = existing.length + staged.length
+  return (
+    <div className="flex flex-wrap gap-2 items-center">
+      {existing.map((im: any) => (
+        <div key={im.id} className="relative w-16 h-16 rounded-lg overflow-hidden border border-gray-200 group">
+          <img src={`/uploads/${im.file_path}`} alt="" className="w-full h-full object-cover" />
+          <button type="button" onClick={() => onDeleteExisting(im.id)} className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-2.5 h-2.5" /></button>
+        </div>
+      ))}
+      {staged.map((f, i) => (
+        <div key={i} className="relative w-16 h-16 rounded-lg overflow-hidden border border-indigo-200 group">
+          <img src={URL.createObjectURL(f)} alt="" className="w-full h-full object-cover" />
+          <button type="button" onClick={() => onRemoveStaged(i)} className="absolute top-0.5 right-0.5 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><X className="w-2.5 h-2.5" /></button>
+        </div>
+      ))}
+      {count < max && (
+        <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/40 text-gray-400 transition-colors">
+          <Camera className="w-4 h-4" />
+          <span className="text-[9px] mt-0.5">{count}/{max}</span>
+          <input type="file" accept="image/*" multiple className="hidden" onChange={e => { onPick(e.target.files); e.currentTarget.value = '' }} />
+        </label>
+      )}
     </div>
   )
 }
@@ -353,11 +422,14 @@ function YesNo({ value, onChange }: { value: string; onChange: (v: string) => vo
   )
 }
 
-function CategoryBlock({ wt, index, selected, expanded, onToggleSelect, onToggleExpand, getVal, setVal, gas, setGas }: {
+function CategoryBlock({ wt, index, selected, expanded, onToggleSelect, onToggleExpand, getVal, setVal, gas, setGas,
+  photoExisting, photoStaged, onPhotoPick, onPhotoRemove, onPhotoDelete }: {
   wt: WorkType; index: number; selected: boolean; expanded: boolean
   onToggleSelect: () => void; onToggleExpand: () => void
   getVal: (k: string) => any; setVal: (k: string, v: any) => void
   gas: any[]; setGas: (rows: any[]) => void
+  photoExisting: any[]; photoStaged: File[]
+  onPhotoPick: (f: FileList | null) => void; onPhotoRemove: (i: number) => void; onPhotoDelete: (id: number) => void
 }) {
   // group precautions by section, preserving order
   const groups: { section: string; items: Precaution[] }[] = []
@@ -374,7 +446,7 @@ function CategoryBlock({ wt, index, selected, expanded, onToggleSelect, onToggle
         <input type="checkbox" className="w-4 h-4 accent-indigo-600 flex-shrink-0" checked={selected} onChange={onToggleSelect} />
         <span className="text-xs font-semibold text-gray-400 flex-shrink-0 w-6">{index}.</span>
         <span className="text-sm text-gray-800 flex-1 cursor-pointer" onClick={onToggleSelect}>{wt.name}</span>
-        {selected && (wt.precautions.length > 0 || wt.has_gas_table) && (
+        {selected && (
           <button type="button" onClick={onToggleExpand} className="btn-ghost btn-sm !p-1 text-gray-400 flex-shrink-0">
             {expanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           </button>
@@ -439,6 +511,12 @@ function CategoryBlock({ wt, index, selected, expanded, onToggleSelect, onToggle
               </div>
             </div>
           )}
+
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Precaution Photos <span className="normal-case font-normal text-gray-400">(up to 5, optional)</span></p>
+            <PhotoSlots max={5} existing={photoExisting} staged={photoStaged}
+              onPick={onPhotoPick} onRemoveStaged={onPhotoRemove} onDeleteExisting={onPhotoDelete} />
+          </div>
         </div>
       )}
     </div>

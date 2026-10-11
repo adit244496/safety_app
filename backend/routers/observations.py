@@ -10,7 +10,7 @@ import logging
 import ai_service
 from difflib import get_close_matches
 from sqlalchemy.orm import Session
-from sqlalchemy import func, extract, case, nullslast
+from sqlalchemy import func, extract, case, nullslast, and_, or_
 from datetime import datetime, date
 from database import get_db, SessionLocal
 import models
@@ -61,6 +61,60 @@ def get_allowed_project_ids(user: models.User) -> Optional[List[int]]:
     return project_ids
 
 
+# Statuses that are still "open" (not finally closed) — these flip to Overdue past target.
+_OPEN_STATUSES = ("Open", "Under Review", "Partially Closed")
+
+
+def _closed_date_iso(closed_at) -> Optional[str]:
+    if not closed_at:
+        return None
+    return closed_at.date().isoformat() if isinstance(closed_at, datetime) else str(closed_at)[:10]
+
+
+def effective_status(status: str, target_date_actual: Optional[str], closed_at, today: Optional[str] = None) -> str:
+    """Derive the display status:
+    - an open observation past its target date (and not closed) → "Overdue";
+    - a closed observation that was closed after its target date → "Overdue & Closed".
+    A manually-set "Overdue" stays "Overdue". Everything else keeps its stored status."""
+    today = today or date.today().isoformat()
+    if isinstance(today, date):
+        today = today.isoformat()
+    if status == "Overdue":
+        return "Overdue"
+    if status in _OPEN_STATUSES:
+        if target_date_actual and not closed_at and target_date_actual < today:
+            return "Overdue"
+        return status
+    if status == "Closed" and target_date_actual:
+        cd = _closed_date_iso(closed_at)
+        if cd and cd > target_date_actual:
+            return "Overdue & Closed"
+    return status
+
+
+def _status_filter_condition(status: List[str]):
+    """Translate an effective-status filter (incl. derived Overdue / Overdue & Closed) into SQL."""
+    today = date.today().isoformat()
+    O = models.Observation
+    past_target = and_(O.closed_at.is_(None), O.target_date_actual.isnot(None), O.target_date_actual < today)
+    closed_late = and_(O.status == "Closed", O.target_date_actual.isnot(None),
+                       func.date(O.closed_at) > O.target_date_actual)
+    conds = []
+    for s in status:
+        if s == "Overdue":
+            conds.append(or_(O.status == "Overdue", and_(O.status.in_(_OPEN_STATUSES), past_target)))
+        elif s == "Overdue & Closed":
+            conds.append(closed_late)
+        elif s in _OPEN_STATUSES:
+            conds.append(and_(O.status == s, or_(O.target_date_actual.is_(None), O.target_date_actual >= today)))
+        elif s == "Closed":
+            conds.append(and_(O.status == "Closed",
+                              or_(O.target_date_actual.is_(None), func.date(O.closed_at) <= O.target_date_actual)))
+        else:
+            conds.append(O.status == s)
+    return or_(*conds)
+
+
 def obs_to_dict(obs: models.Observation, db: Session) -> dict:
     images = db.query(models.ObservationImage).filter(models.ObservationImage.observation_id == obs.id).all()
     comments = db.query(models.ObservationComment).filter(models.ObservationComment.observation_id == obs.id).all()
@@ -108,7 +162,8 @@ def obs_to_dict(obs: models.Observation, db: Session) -> dict:
         "ai_summary_at": obs.ai_summary_at.isoformat() if obs.ai_summary_at else None,
         "ai_summary_by": obs.ai_summary_by,
         "ai_summary_by_name": obs.ai_summary_user.name if obs.ai_summary_user else None,
-        "status": obs.status,
+        "status": effective_status(obs.status, obs.target_date_actual, obs.closed_at),
+        "stored_status": obs.status,
         "created_by": obs.created_by,
         "created_by_name": obs.creator.name if obs.creator else None,
         "created_at": obs.created_at.isoformat() if obs.created_at else None,
@@ -278,9 +333,16 @@ def stats(
             bucket = _aging_bucket(_days_aging(target_str, closed_at, today))
             aging_buckets[bucket] = aging_buckets.get(bucket, 0) + 1
 
-    by_status = apply_all(
-        db.query(models.Observation.status, func.count().label("count"))
-    ).filter(models.Observation.status != 'Draft').group_by(models.Observation.status).all()
+    # By status — counted on the EFFECTIVE status (derives Overdue / Overdue & Closed)
+    status_rows = apply_all(
+        db.query(models.Observation.status, models.Observation.target_date_actual, models.Observation.closed_at)
+    ).filter(models.Observation.status != 'Draft').all()
+    _today_iso = today.isoformat() if hasattr(today, "isoformat") else str(today)
+    _eff_counts: dict = {}
+    for _st, _tgt, _cl in status_rows:
+        _es = effective_status(_st, _tgt, _cl, _today_iso)
+        _eff_counts[_es] = _eff_counts.get(_es, 0) + 1
+    by_status = sorted(_eff_counts.items(), key=lambda kv: -kv[1])
 
     by_risk = apply_all(
         db.query(models.Observation.risk_level, func.count().label("count"))
@@ -515,6 +577,14 @@ def list_observations(
     risk_level: List[str] = Query(default=[]),
     core_concern_id: List[int] = Query(default=[]),
     specific_concern_id: List[int] = Query(default=[]),
+    building_id: List[int] = Query(default=[]),
+    floor_id: List[int] = Query(default=[]),
+    eic_user_id: List[int] = Query(default=[]),
+    possible_outcome: List[str] = Query(default=[]),
+    violation_id: List[int] = Query(default=[]),
+    root_cause_category_id: List[int] = Query(default=[]),
+    root_cause_specific_id: List[int] = Query(default=[]),
+    aging: List[str] = Query(default=[]),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
@@ -531,7 +601,7 @@ def list_observations(
     if project_id:
         q = q.filter(models.Observation.project_id.in_(project_id))
     if status:
-        q = q.filter(models.Observation.status.in_(status))
+        q = q.filter(_status_filter_condition(status))
     if contractor_user_id:
         q = q.filter(models.Observation.contractor_user_id.in_(contractor_user_id))
     if risk_level:
@@ -540,6 +610,20 @@ def list_observations(
         q = q.filter(models.Observation.core_concern_id.in_(core_concern_id))
     if specific_concern_id:
         q = q.filter(models.Observation.specific_concern_id.in_(specific_concern_id))
+    if building_id:
+        q = q.filter(models.Observation.building_id.in_(building_id))
+    if floor_id:
+        q = q.filter(models.Observation.floor_id.in_(floor_id))
+    if eic_user_id:
+        q = q.filter(models.Observation.eic_user_id.in_(eic_user_id))
+    if possible_outcome:
+        q = q.filter(models.Observation.possible_outcome.in_(possible_outcome))
+    if violation_id:
+        q = q.filter(models.Observation.violation_id.in_(violation_id))
+    if root_cause_category_id:
+        q = q.filter(models.Observation.root_cause_category_id.in_(root_cause_category_id))
+    if root_cause_specific_id:
+        q = q.filter(models.Observation.root_cause_specific_id.in_(root_cause_specific_id))
     if date_from:
         q = q.filter(models.Observation.obs_date >= date_from)
     if date_to:
@@ -550,6 +634,46 @@ def list_observations(
         q = q.filter(
             (models.Observation.status != 'Draft') | (models.Observation.created_by == user.id)
         )
+
+    # Aging filter — supports the dashboard's granular buckets, "positive_approach",
+    # and the coarse values; computed in Python from target date + closure vs today.
+    if aging:
+        today = date.today()
+        rows = q.with_entities(
+            models.Observation.id, models.Observation.target_date_actual,
+            models.Observation.closed_at, models.Observation.status,
+        ).all()
+
+        def _aging_hit(days, status) -> bool:
+            for f in aging:
+                if f == "positive_approach":
+                    if status == "Positive Approach":
+                        return True
+                    continue
+                if status == "Positive Approach":
+                    continue  # day-based buckets exclude praiseworthy (mirrors the donut)
+                if f == "no_target":
+                    if days is None:
+                        return True
+                    continue
+                if days is None:
+                    continue
+                if f == "on_time" and days <= 0:
+                    return True
+                if f == "overdue_1_7" and 1 <= days <= 7:
+                    return True
+                if f == "overdue_8_30" and 8 <= days <= 30:
+                    return True
+                if f == "overdue_30_plus" and days > 30:
+                    return True
+                if f == "overdue" and days > 0:
+                    return True
+                if f == "due_soon" and -7 <= days <= 0:
+                    return True
+            return False
+
+        eligible = [r[0] for r in rows if _aging_hit(_days_aging(r[1], r[2], today), r[3])]
+        q = q.filter(models.Observation.id.in_(eligible))
 
     total = q.count()
     obs_list = q.order_by(
@@ -562,6 +686,29 @@ def list_observations(
         "total": total,
         "pages": (total + limit - 1) // limit,
     }
+
+
+@router.get("/status-options")
+def status_options(db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """Distinct effective statuses that actually have observations (within the user's scope),
+    so the filter only offers values that exist."""
+    allowed = get_allowed_project_ids(user)
+    q = db.query(
+        models.Observation.status, models.Observation.target_date_actual,
+        models.Observation.closed_at, models.Observation.created_by,
+    )
+    if allowed is not None:
+        if not allowed:
+            return []
+        q = q.filter(models.Observation.project_id.in_(allowed))
+    if user.role not in ("SuperAdmin", "Admin"):
+        q = q.filter((models.Observation.status != 'Draft') | (models.Observation.created_by == user.id))
+
+    today = date.today().isoformat()
+    present = {effective_status(st, tgt, cl, today) for st, tgt, cl, _cb in q.all()}
+    order = ['Draft', 'Open', 'Overdue', 'Under Review', 'Partially Closed',
+             'Closed', 'Overdue & Closed', 'Positive Approach', 'Unresolved & Closed']
+    return [s for s in order if s in present] + sorted(present - set(order))
 
 
 @router.get("/stats/she-report")
@@ -704,6 +851,348 @@ def she_report_stats(
     }
 
 
+# ── MIS SHE Performance Report ──────────────────────────────────────────────
+def _mis_num(v) -> float:
+    try:
+        return float(str(v).replace(",", "").strip())
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _ym_in_range(y: int, m: int, date_from: Optional[str], date_to: Optional[str]) -> bool:
+    if date_from and (y, m) < (int(date_from[:4]), int(date_from[5:7])):
+        return False
+    if date_to and (y, m) > (int(date_to[:4]), int(date_to[5:7])):
+        return False
+    return True
+
+
+def _mis_quarter_label(date_from: Optional[str]) -> str:
+    if not date_from:
+        return ""
+    y, m = int(date_from[:4]), int(date_from[5:7])
+    if m >= 4:
+        q = (m - 4) // 3 + 1
+        fy = y
+    else:
+        q = 4
+        fy = y - 1
+    roman = ["I", "II", "III", "IV"][q - 1]
+    return f"Q{roman}, {fy}-{str(fy + 1)[2:]}"
+
+
+def _mis_data(db: Session, user: models.User, date_from: Optional[str],
+              date_to: Optional[str], project_id: List[int]) -> dict:
+    from collections import defaultdict
+    allowed = get_allowed_project_ids(user)
+    today = date.today()
+
+    conds = [models.Observation.status != "Draft"]
+    if allowed is not None:
+        conds.append(models.Observation.project_id.in_(allowed))
+    if project_id:
+        conds.append(models.Observation.project_id.in_(project_id))
+    if date_from:
+        conds.append(models.Observation.obs_date >= date_from)
+    if date_to:
+        conds.append(models.Observation.obs_date <= date_to)
+    obs_list = db.query(models.Observation).filter(*conds).all()
+
+    # Project scope (names) for SHE score & manpower
+    pq = db.query(models.Project)
+    if allowed is not None:
+        pq = pq.filter(models.Project.id.in_(allowed))
+    if project_id:
+        pq = pq.filter(models.Project.id.in_(project_id))
+    scope_projects = pq.all()
+    scope_names = {p.name for p in scope_projects}
+    scope_ids = [p.id for p in scope_projects]
+
+    # ── Per-project rectification / delay / noteworthy ──
+    ps: dict = defaultdict(lambda: {"project_name": "", "raised": 0, "rectified": 0, "not_rectified": 0,
+                                    "timely": 0, "delayed": 0, "total_delay_days": 0, "noteworthy": 0,
+                                    "high": 0, "medium": 0, "low": 0})
+    status_counts: dict = defaultdict(int)
+    for o in obs_list:
+        p = ps[o.project_id or 0]
+        p["project_name"] = o.project.name if o.project else "Unknown"
+        p["raised"] += 1
+        if o.status == "Positive Approach":
+            p["noteworthy"] += 1
+        if o.risk_level in ("High", "Medium", "Low"):
+            p[o.risk_level.lower()] += 1
+        status_counts[effective_status(o.status, o.target_date_actual, o.closed_at, today.isoformat())] += 1
+        if o.status == "Closed":
+            p["rectified"] += 1
+            if o.closed_at and o.target_date_actual:
+                try:
+                    delay = ((o.closed_at.date() if hasattr(o.closed_at, "date") else o.closed_at)
+                             - date.fromisoformat(o.target_date_actual)).days
+                    if delay > 0:
+                        p["delayed"] += 1
+                        p["total_delay_days"] += delay
+                    else:
+                        p["timely"] += 1
+                except (ValueError, AttributeError):
+                    p["timely"] += 1
+            else:
+                p["timely"] += 1
+        else:
+            p["not_rectified"] += 1
+            if o.target_date_actual:
+                try:
+                    tgt = date.fromisoformat(o.target_date_actual)
+                    if today > tgt:
+                        p["total_delay_days"] += (today - tgt).days
+                except ValueError:
+                    pass
+
+    # ── Distributions ──
+    def _dist(attr_fn):
+        c: dict = defaultdict(int)
+        for o in obs_list:
+            v = attr_fn(o)
+            if v:
+                c[v.strip() if isinstance(v, str) else v] += 1
+        tot = sum(c.values()) or 1
+        return sorted([{"name": k, "count": v, "pct": round(v / tot * 100)} for k, v in c.items()],
+                      key=lambda x: -x["count"])
+
+    violation_area = _dist(lambda o: o.core_concern.name if o.core_concern else None)
+    consequence = _dist(lambda o: o.possible_outcome)
+    root_cause = _dist(lambda o: o.root_cause_category.name if o.root_cause_category else None)
+
+    # ── SHE score (EASE) for the period ──
+    ease = (db.query(models.EaseScoreEntry.project_name, models.EaseScoreEntry.period_year,
+                     models.EaseScoreEntry.period_month, models.EaseScoreEntry.overall_score)
+            .filter(models.EaseScoreEntry.overall_score.isnot(None)).all())
+    seen = set()
+    she_proj: dict = defaultdict(list)
+    for pn, y, m, ov in ease:
+        if pn not in scope_names or not _ym_in_range(y, m, date_from, date_to):
+            continue
+        if (pn, y, m) in seen:
+            continue
+        seen.add((pn, y, m))
+        she_proj[pn].append(ov)
+    she_by_project = sorted([{"project_name": pn, "score": round(sum(v) / len(v) * 100, 1)}
+                             for pn, v in she_proj.items()], key=lambda x: -x["score"])
+    she_overall = (round(sum(sum(v) / len(v) for v in she_proj.values()) / len(she_proj) * 100, 1)
+                   if she_proj else None)
+
+    # ── Manpower (from Monthly OH&S Statistics) ──
+    mp_rows = db.query(models.OhsStatistics).filter(
+        models.OhsStatistics.project_id.in_(scope_ids) if scope_ids else models.OhsStatistics.id.is_(None)
+    ).all()
+    mp: dict = defaultdict(lambda: {"project_name": "", "man_hours": 0.0, "persons_sum": 0.0, "months": 0})
+    name_by_id = {p.id: p.name for p in scope_projects}
+    for r in mp_rows:
+        if not _ym_in_range(r.year, r.month, date_from, date_to):
+            continue
+        sa = []
+        try:
+            sa = json.loads(r.section_a) if r.section_a else []
+        except (ValueError, TypeError):
+            sa = []
+        mh = sum(_mis_num(x.get("man_hours")) for x in sa if isinstance(x, dict))
+        pers = sum(_mis_num(x.get("avg_persons")) for x in sa if isinstance(x, dict))
+        e = mp[r.project_id]
+        e["project_name"] = name_by_id.get(r.project_id, "Unknown")
+        e["man_hours"] += mh
+        e["persons_sum"] += pers
+        e["months"] += 1
+    total_mh = sum(e["man_hours"] for e in mp.values()) or 0
+    manpower = sorted([
+        {"project_name": e["project_name"], "man_hours": round(e["man_hours"]),
+         "avg_persons": round(e["persons_sum"] / e["months"]) if e["months"] else 0,
+         "pct": round(e["man_hours"] / total_mh * 100, 1) if total_mh else 0}
+        for e in mp.values()], key=lambda x: -x["man_hours"])
+
+    # ── Assemble per-project rows (+ indices) ──
+    mh_by_name = {m["project_name"]: m["man_hours"] for m in manpower}
+    projects_rows = []
+    for v in sorted(ps.values(), key=lambda x: -x["raised"]):
+        mh = mh_by_name.get(v["project_name"], 0)
+        projects_rows.append({
+            **v,
+            "avg_delay": round(v["total_delay_days"] / v["raised"], 2) if v["raised"] else 0,
+            # Observation rate = observations per 1,00,000 man-hours; delay rate = % of rectifications delayed
+            "observation_rate": round(v["raised"] / mh * 100000, 2) if mh else None,
+            "delay_rate": round(v["delayed"] / v["rectified"] * 100, 1) if v["rectified"] else 0,
+        })
+
+    total_raised = sum(p["raised"] for p in projects_rows)
+    total_rectified = sum(p["rectified"] for p in projects_rows)
+    total_delayed = sum(p["delayed"] for p in projects_rows)
+    total_timely = sum(p["timely"] for p in projects_rows)
+    total_delay_days = sum(p["total_delay_days"] for p in projects_rows)
+
+    return {
+        "meta": {
+            "quarter": _mis_quarter_label(date_from),
+            "date_from": date_from, "date_to": date_to,
+            "generated_on": today.isoformat(),
+            "project_scope": "All Projects" if not project_id else
+                             (name_by_id.get(project_id[0], "") if len(project_id) == 1 else f"{len(project_id)} projects"),
+        },
+        "sheScore": {"overall": she_overall, "byProject": she_by_project},
+        "summary": {
+            "total": total_raised, "rectified": total_rectified, "not_rectified": total_raised - total_rectified,
+            "timely": total_timely, "delayed": total_delayed,
+            "avg_delay": round(total_delay_days / total_raised, 2) if total_raised else 0,
+            "byStatus": sorted(status_counts.items(), key=lambda kv: -kv[1]),
+        },
+        "projects": projects_rows,
+        "violationArea": violation_area,
+        "consequence": consequence,
+        "rootCause": root_cause,
+        "manpower": manpower,
+    }
+
+
+@router.get("/mis-report")
+def mis_report(
+    project_id: List[int] = Query(default=[]),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    return _mis_data(db, user, date_from, date_to, project_id)
+
+
+@router.get("/mis-report.docx")
+def mis_report_docx(
+    project_id: List[int] = Query(default=[]),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    import io as _io
+    from fastapi.responses import StreamingResponse
+    try:
+        from docx import Document
+        from docx.shared import Pt, RGBColor
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+    except ImportError:
+        raise HTTPException(500, "Word export is not available on the server (python-docx missing).")
+
+    d = _mis_data(db, user, date_from, date_to, project_id)
+    m = d["meta"]
+    doc = Document()
+
+    def fmt(v):
+        return "—" if v is None else str(v)
+
+    title = doc.add_heading(f"Project SHE Performance Report, {m['quarter']}", level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sub = doc.add_paragraph()
+    sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = sub.add_run(f"Ambuja Neotia  •  Safety, Health & Environment\n"
+                    f"Scope: {m['project_scope']}   |   Period: {fmt(m['date_from'])} to {fmt(m['date_to'])}"
+                    f"   |   Report date: {m['generated_on']}")
+    r.font.size = Pt(9); r.font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
+
+    def table(headers, rows, widths=None):
+        t = doc.add_table(rows=1, cols=len(headers))
+        t.style = "Light Grid Accent 1"
+        for i, h in enumerate(headers):
+            c = t.rows[0].cells[i]
+            c.text = h
+            for p in c.paragraphs:
+                for rr in p.runs:
+                    rr.font.bold = True; rr.font.size = Pt(9)
+        for row in rows:
+            cells = t.add_row().cells
+            for i, val in enumerate(row):
+                cells[i].text = fmt(val)
+                for p in cells[i].paragraphs:
+                    for rr in p.runs:
+                        rr.font.size = Pt(9)
+        doc.add_paragraph()
+
+    def heading(txt):
+        h = doc.add_heading(txt, level=1)
+        for rr in h.runs:
+            rr.font.color.rgb = RGBColor(0x43, 0x38, 0xCA)
+
+    # 1. SHE Scores
+    heading("1. SHE Scores of the Organisation & Projects")
+    doc.add_paragraph(f"Overall Ambuja Neotia SHE Score for {m['quarter']}: "
+                      f"{fmt(d['sheScore']['overall'])}{'%' if d['sheScore']['overall'] is not None else ''}")
+    if d["sheScore"]["byProject"]:
+        table(["Project", "SHE Score (%)"], [[p["project_name"], p["score"]] for p in d["sheScore"]["byProject"]])
+    else:
+        doc.add_paragraph("No SHE (EASE) scores recorded for this period.")
+
+    # 2. Observation summary
+    s = d["summary"]
+    heading("2. SHE Observation Summary")
+    table(["Metric", "Value"], [
+        ["Total observations raised", s["total"]],
+        ["Rectified (closed)", s["rectified"]],
+        ["Not rectified (open)", s["not_rectified"]],
+        ["Timely rectifications", s["timely"]],
+        ["Delayed rectifications", s["delayed"]],
+        ["Average delay days / observation", s["avg_delay"]],
+    ])
+    if s["byStatus"]:
+        table(["Status", "Count"], [[k, v] for k, v in s["byStatus"]])
+
+    # 3. Project-wise observations & rectifications
+    heading("3. Observations & Rectifications (Project-wise)")
+    table(["Project", "Raised", "Rectified", "Not Rect.", "Timely", "Delayed", "Avg Delay"],
+          [[p["project_name"], p["raised"], p["rectified"], p["not_rectified"],
+            p["timely"], p["delayed"], p["avg_delay"]] for p in d["projects"]] or [["—"] * 7])
+
+    # 4. Analysis
+    heading("4. Analysis of SHE Observations")
+    doc.add_paragraph("By Area of Concern").runs[0].bold = True
+    table(["Area / Core Concern", "Count", "%"], [[x["name"], x["count"], x["pct"]] for x in d["violationArea"]] or [["—", 0, 0]])
+    doc.add_paragraph("Predicted Consequence").runs[0].bold = True
+    table(["Consequence", "Count", "%"], [[x["name"], x["count"], x["pct"]] for x in d["consequence"]] or [["—", 0, 0]])
+    doc.add_paragraph("Root Cause").runs[0].bold = True
+    table(["Root Cause", "Count", "%"], [[x["name"], x["count"], x["pct"]] for x in d["rootCause"]] or [["—", 0, 0]])
+
+    # 5. Risk analysis
+    heading("5. Risk Analysis (Project-wise)")
+    table(["Project", "High", "Medium", "Low", "Total"],
+          [[p["project_name"], p["high"], p["medium"], p["low"], p["raised"]] for p in d["projects"]] or [["—"] * 5])
+
+    # 6. Noteworthy
+    heading("6. Noteworthy (Praiseworthy) Observations")
+    table(["Project", "Noteworthy"], [[p["project_name"], p["noteworthy"]] for p in d["projects"]] or [["—", 0]])
+
+    # 7. Observation indices
+    heading("7. Observation Indices")
+    doc.add_paragraph("Observation Rate = observations per 1,00,000 man-hours · Delay Rate = % of rectifications delayed.")
+    table(["Project", "Observation Rate", "Delay Rate (%)"],
+          [[p["project_name"], fmt(p["observation_rate"]), p["delay_rate"]] for p in d["projects"]] or [["—", "—", 0]])
+
+    # 8. Manpower
+    heading("8. Man-hours & Manpower")
+    table(["Project", "Man-hours", "Avg Persons/Day", "% Share"],
+          [[p["project_name"], p["man_hours"], p["avg_persons"], p["pct"]] for p in d["manpower"]]
+          or [["No OH&S statistics entered for this period", "—", "—", "—"]])
+
+    note = doc.add_paragraph()
+    nr = note.add_run("A higher 'Delay in Rectification' means a project stays with risks for more days. "
+                      "Increase the observation rate and reduce severity through timely rectification.")
+    nr.font.italic = True; nr.font.size = Pt(8); nr.font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
+    doc.add_paragraph("-End of Report-").alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    buf = _io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    fname = f"SHE_Performance_Report_{m['quarter'].replace(', ', '_').replace(' ', '')}.docx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
 @router.get("/report")
 def get_report_data(
     project_id: List[int] = Query(default=[]),
@@ -712,6 +1201,13 @@ def get_report_data(
     status: List[str] = Query(default=[]),
     contractor_user_id: List[int] = Query(default=[]),
     risk_level: List[str] = Query(default=[]),
+    building_id: List[int] = Query(default=[]),
+    floor_id: List[int] = Query(default=[]),
+    eic_user_id: List[int] = Query(default=[]),
+    possible_outcome: List[str] = Query(default=[]),
+    violation_id: List[int] = Query(default=[]),
+    root_cause_category_id: List[int] = Query(default=[]),
+    root_cause_specific_id: List[int] = Query(default=[]),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
@@ -727,11 +1223,25 @@ def get_report_data(
         q = q.filter(models.Observation.obs_date <= date_to)
     q = q.filter(models.Observation.status != 'Draft')
     if status:
-        q = q.filter(models.Observation.status.in_(status))
+        q = q.filter(_status_filter_condition(status))
     if contractor_user_id:
         q = q.filter(models.Observation.contractor_user_id.in_(contractor_user_id))
     if risk_level:
         q = q.filter(models.Observation.risk_level.in_(risk_level))
+    if building_id:
+        q = q.filter(models.Observation.building_id.in_(building_id))
+    if floor_id:
+        q = q.filter(models.Observation.floor_id.in_(floor_id))
+    if eic_user_id:
+        q = q.filter(models.Observation.eic_user_id.in_(eic_user_id))
+    if possible_outcome:
+        q = q.filter(models.Observation.possible_outcome.in_(possible_outcome))
+    if violation_id:
+        q = q.filter(models.Observation.violation_id.in_(violation_id))
+    if root_cause_category_id:
+        q = q.filter(models.Observation.root_cause_category_id.in_(root_cause_category_id))
+    if root_cause_specific_id:
+        q = q.filter(models.Observation.root_cause_specific_id.in_(root_cause_specific_id))
     obs_list = (
         q.order_by(models.Observation.obs_date.asc(), models.Observation.observation_id.asc())
         .limit(200)

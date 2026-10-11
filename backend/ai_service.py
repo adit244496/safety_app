@@ -141,3 +141,49 @@ def generate_summary(obs, obs_data: dict, db) -> str:
     if not text:
         raise RuntimeError("Empty AI summary response")
     return text
+
+
+# ── Meeting minutes (MoM) summarisation ─────────────────────────────────────
+MINUTES_SYSTEM_PROMPT = (
+    "You are an assistant that summarises Minutes of Meeting (MoM) for a construction company's "
+    "Safety, Health & Environment (SHE) team. Produce a CRISP and CONCISE summary of the minutes "
+    "provided. Keep it short and scannable. Use this plain-text structure with no markdown headers "
+    "and no bold:\n"
+    "A one or two sentence overview first.\n"
+    "Then, if present, a short list of key discussion points, decisions, and action items as lines "
+    "starting with '- '. For action items include the owner and any due date when stated.\n"
+    "Only use information present in the minutes — never invent attendees, dates, decisions or owners. "
+    "If the text is unclear or empty, say so briefly."
+)
+
+# Keep token usage bounded — summarise at most this many characters of source text.
+MINUTES_MAX_CHARS = 24000
+
+
+def summarize_minutes(source_text: str, db) -> str:
+    """Generate a crisp, concise summary of meeting-minutes text. Raises on failure."""
+    import anthropic
+
+    api_key, model = _resolve_config(db)
+    if not api_key:
+        raise RuntimeError("No Anthropic API key configured")
+
+    text = (source_text or "").strip()
+    if not text:
+        raise RuntimeError("No text to summarise")
+    if len(text) > MINUTES_MAX_CHARS:
+        text = text[:MINUTES_MAX_CHARS] + "\n\n[...truncated...]"
+
+    client = anthropic.Anthropic(api_key=api_key)
+    resp = client.messages.create(
+        model=model,
+        max_tokens=800,
+        system=MINUTES_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": [
+            {"type": "text", "text": "Meeting minutes:\n\n" + text + "\n\nWrite the crisp summary now."}
+        ]}],
+    )
+    out = "".join(b.text for b in resp.content if b.type == "text").strip()
+    if not out:
+        raise RuntimeError("Empty AI summary response")
+    return out

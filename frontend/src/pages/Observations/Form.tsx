@@ -259,7 +259,7 @@ export default function ObservationForm() {
         eic_user_ids: existing.eic_user_ids?.length
           ? existing.eic_user_ids
           : (existing.eic_user_id ? [existing.eic_user_id] : []),
-        status: existing.status || 'Open',
+        status: existing.stored_status || existing.status || 'Open',
       })
     }
   }, [existing])

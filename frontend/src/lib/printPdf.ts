@@ -455,7 +455,7 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
   const pdf   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const W = 210, H = 297, M = 12, CW = W - 2 * M
   const TOP = 19, BOT = H - 9
-  const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  const dateStr = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
   const ql = p.quarterLabel || ''
 
   // ══════════════════════════════════════════════════════════════════════
@@ -881,7 +881,7 @@ export async function generateDashboardPdf(p: DashboardPdfParams) {
 export async function generateEasePdf(p: EasePdfParams) {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const W = 297, H = 210, M = 14, PAGES = 2
-  const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
 
   const [projectImg, categoryImg] = await Promise.all([
     captureChart('ease-project-chart'),
@@ -931,7 +931,7 @@ export async function generateEasePdf(p: EasePdfParams) {
 export async function generateSummaryPdf(p: SummaryPdfParams) {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
   const W = 297, H = 210, M = 14
-  const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })
   const filterText = `${p.filterDesc}  |  Period: ${p.dateRange}`
 
   function drawCompPage(rows: any[], nameKey: string, title: string, pageNum: number) {

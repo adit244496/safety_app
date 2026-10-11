@@ -14,6 +14,7 @@ export const getStatusClass = (status?: string) => {
     case 'Under Review': return 'badge-review'
     case 'Partially Closed': return 'badge-partial'
     case 'Closed': return 'badge-closed'
+    case 'Overdue & Closed': return 'badge bg-orange-100 text-orange-800 border-orange-200'
     case 'Draft': return 'badge-draft'
     case 'Positive Approach': return 'badge bg-amber-100 text-[#8a6d1a] border-amber-200'
     case 'Unresolved & Closed': return 'badge bg-violet-100 text-violet-800 border-violet-200'
@@ -35,14 +36,24 @@ export const getRoleClass = (role?: string) => {
   return map[role || ''] || 'bg-gray-100 text-gray-700'
 }
 
+const IST = 'Asia/Kolkata'
+// Parse a backend value as IST: tz-less datetimes/dates are treated as Indian time
+// so display is always IST regardless of the viewer's browser timezone.
+const parseIST = (s: string): Date => {
+  const str = String(s)
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(str)) return new Date(str)          // already has a timezone
+  if (/\d{1,2}:\d{2}/.test(str)) return new Date(str.replace(' ', 'T') + '+05:30')  // datetime → IST
+  return new Date(str + 'T00:00:00+05:30')                              // date only → IST midnight
+}
+
 export const fmtDate = (s?: string | null) => {
   if (!s) return '—'
-  return new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  return parseIST(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: IST })
 }
 
 export const fmtDateTime = (s?: string | null) => {
   if (!s) return '—'
-  return new Date(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return parseIST(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: IST })
 }
 
 export const calcRisk = (s: number, p: number) => {
@@ -50,5 +61,5 @@ export const calcRisk = (s: number, p: number) => {
   return { factor: f, level: f <= 4 ? 'Low' : f <= 12 ? 'Medium' : 'High' }
 }
 
-export const STATUSES = ['Draft', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach', 'Unresolved & Closed']
+export const STATUSES = ['Draft', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Overdue & Closed', 'Positive Approach', 'Unresolved & Closed']
 export const ROLES = ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Contractor', 'Observer']

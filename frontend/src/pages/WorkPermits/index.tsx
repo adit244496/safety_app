@@ -32,21 +32,68 @@ export default function WorkPermits() {
 
   const [statusFilter, setStatusFilter] = useState<(string | number)[]>([])
   const [projectIds, setProjectIds] = useState<(string | number)[]>([])
+  const [eicIds, setEicIds] = useState<(string | number)[]>([])
+  const [psoIds, setPsoIds] = useState<(string | number)[]>([])
+  const [picIds, setPicIds] = useState<(string | number)[]>([])
+  const [contractorIds, setContractorIds] = useState<(string | number)[]>([])
+  const [receiverIds, setReceiverIds] = useState<(string | number)[]>([])
+  const [hazardCats, setHazardCats] = useState<(string | number)[]>([])
+  const [areas, setAreas] = useState<(string | number)[]>([])
+  const [floors, setFloors] = useState<(string | number)[]>([])
   const [scope, setScope] = useState<'' | 'mine' | 'to_approve'>('')
   const [search, setSearch] = useState('')
 
-  const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => api.get('/projects/').then(r => r.data), staleTime: 300_000 })
-  const projectOptions: MSOption[] = useMemo(() => (projects || []).map((p: any) => ({ value: p.id, label: p.name })), [projects])
+  const STABLE = { staleTime: 300_000 }
+  const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => api.get('/projects/').then(r => r.data), ...STABLE })
+  const { data: eicUsers } = useQuery({ queryKey: ['permit-eic'], queryFn: () => api.get('/work-permits/approvers', { params: { role: 'EIC' } }).then(r => r.data), ...STABLE })
+  const { data: psoUsers } = useQuery({ queryKey: ['permit-pso'], queryFn: () => api.get('/work-permits/approvers', { params: { role: 'PSO' } }).then(r => r.data), ...STABLE })
+  const { data: picUsers } = useQuery({ queryKey: ['permit-pic'], queryFn: () => api.get('/work-permits/approvers', { params: { role: 'PIC' } }).then(r => r.data), ...STABLE })
+  const { data: contractorUsers } = useQuery({ queryKey: ['contractors'], queryFn: () => api.get('/users/contractors').then(r => r.data), ...STABLE })
+  const { data: permitUsers } = useQuery({ queryKey: ['permit-users-all'], queryFn: () => api.get('/work-permits/users').then(r => r.data), ...STABLE })
+  const { data: workTypes } = useQuery({ queryKey: ['permit-config'], queryFn: () => api.get('/work-permits/config').then(r => r.data), ...STABLE })
+  const { data: allBuildings } = useQuery({ queryKey: ['all-buildings'], queryFn: () => api.get('/admin/buildings').then(r => r.data), ...STABLE })
+  const { data: allFloors } = useQuery({ queryKey: ['all-floors'], queryFn: () => api.get('/admin/floors').then(r => r.data), ...STABLE })
 
-  const params = { status: statusFilter, project_id: projectIds, scope: scope || undefined, search: search || undefined }
+  const projectOptions: MSOption[] = useMemo(() => (projects || []).map((p: any) => ({ value: p.id, label: p.name })), [projects])
+  const userOpts = (arr: any[]): MSOption[] => (arr || []).map((u: any) => ({ value: u.id, label: u.name }))
+  const eicOptions = useMemo(() => userOpts(eicUsers), [eicUsers])
+  const psoOptions = useMemo(() => userOpts(psoUsers), [psoUsers])
+  const picOptions = useMemo(() => userOpts(picUsers), [picUsers])
+  const contractorOptions = useMemo(() => {
+    const seen = new Set<number>()
+    return (contractorUsers || []).filter((c: any) => !seen.has(c.id) && seen.add(c.id)).map((c: any) => ({ value: c.id, label: c.company ? `${c.name} (${c.company})` : c.name }))
+  }, [contractorUsers])
+  const receiverOptions = useMemo(() => userOpts(permitUsers), [permitUsers])
+  const hazardOptions: MSOption[] = useMemo(() => (workTypes || []).map((w: any) => ({ value: w.code, label: w.name })), [workTypes])
+  // Area / Floor cascade on selected project(s)
+  const selProjIds = projectIds.map(Number)
+  const scopedBuildings = useMemo(() => (allBuildings || []).filter((b: any) => !selProjIds.length || selProjIds.includes(b.project_id)), [allBuildings, projectIds])
+  const areaOptions: MSOption[] = useMemo(() => {
+    const seen = new Set<string>()
+    return scopedBuildings.filter((b: any) => b.name && !seen.has(b.name) && seen.add(b.name)).map((b: any) => ({ value: b.name, label: b.name }))
+  }, [scopedBuildings])
+  const floorOptions: MSOption[] = useMemo(() => {
+    const bids = new Set(scopedBuildings.map((b: any) => b.id))
+    const seen = new Set<string>()
+    return (allFloors || []).filter((f: any) => bids.has(f.building_id) && f.name && !seen.has(f.name) && seen.add(f.name)).map((f: any) => ({ value: f.name, label: f.name }))
+  }, [allFloors, scopedBuildings])
+
+  const params = {
+    status: statusFilter, project_id: projectIds, scope: scope || undefined, search: search || undefined,
+    eic_user_id: eicIds, pso_user_id: psoIds, pic_user_id: picIds, contractor_user_id: contractorIds,
+    receiver_user_id: receiverIds, hazard_category: hazardCats, area: areas, floor: floors,
+  }
   const { data: permits, isLoading } = useQuery({
     queryKey: ['work-permits', params],
     queryFn: () => api.get('/work-permits/', { params }).then(r => r.data),
   })
   const list: any[] = permits || []
 
-  const hasFilters = statusFilter.length || projectIds.length || scope || search
-  const clearFilters = () => { setStatusFilter([]); setProjectIds([]); setScope(''); setSearch('') }
+  const hasFilters = statusFilter.length || projectIds.length || scope || search || eicIds.length || psoIds.length || picIds.length || contractorIds.length || receiverIds.length || hazardCats.length || areas.length || floors.length
+  const clearFilters = () => {
+    setStatusFilter([]); setProjectIds([]); setScope(''); setSearch('')
+    setEicIds([]); setPsoIds([]); setPicIds([]); setContractorIds([]); setReceiverIds([]); setHazardCats([]); setAreas([]); setFloors([])
+  }
 
   return (
     <div className="space-y-4">
@@ -80,9 +127,41 @@ export default function WorkPermits() {
             <label className="label">Status</label>
             <MultiSelectFilter size="sm" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} placeholder="All statuses" />
           </div>
-          <div className="min-w-[160px]">
+          <div className="min-w-[150px]">
             <label className="label">Project</label>
-            <MultiSelectFilter size="sm" options={projectOptions} value={projectIds} onChange={setProjectIds} placeholder="All projects" />
+            <MultiSelectFilter size="sm" options={projectOptions} value={projectIds} onChange={v => { setProjectIds(v); setAreas([]); setFloors([]) }} placeholder="All projects" />
+          </div>
+          <div className="min-w-[130px]">
+            <label className="label">Area</label>
+            <MultiSelectFilter size="sm" options={areaOptions} value={areas} onChange={setAreas} placeholder="All areas" />
+          </div>
+          <div className="min-w-[130px]">
+            <label className="label">Floor</label>
+            <MultiSelectFilter size="sm" options={floorOptions} value={floors} onChange={setFloors} placeholder="All floors" />
+          </div>
+          <div className="min-w-[140px]">
+            <label className="label">Contractor</label>
+            <MultiSelectFilter size="sm" options={contractorOptions} value={contractorIds} onChange={setContractorIds} placeholder="All contractors" />
+          </div>
+          <div className="min-w-[140px]">
+            <label className="label">Receiver</label>
+            <MultiSelectFilter size="sm" options={receiverOptions} value={receiverIds} onChange={setReceiverIds} placeholder="All receivers" />
+          </div>
+          <div className="min-w-[130px]">
+            <label className="label">EIC</label>
+            <MultiSelectFilter size="sm" options={eicOptions} value={eicIds} onChange={setEicIds} placeholder="All EIC" />
+          </div>
+          <div className="min-w-[130px]">
+            <label className="label">PSO</label>
+            <MultiSelectFilter size="sm" options={psoOptions} value={psoIds} onChange={setPsoIds} placeholder="All PSO" />
+          </div>
+          <div className="min-w-[130px]">
+            <label className="label">PIC</label>
+            <MultiSelectFilter size="sm" options={picOptions} value={picIds} onChange={setPicIds} placeholder="All PIC" />
+          </div>
+          <div className="min-w-[160px]">
+            <label className="label">Hazardous Work Type</label>
+            <MultiSelectFilter size="sm" options={hazardOptions} value={hazardCats} onChange={setHazardCats} placeholder="All work types" />
           </div>
           <div className="flex-1 min-w-[180px]">
             <label className="label">Search</label>

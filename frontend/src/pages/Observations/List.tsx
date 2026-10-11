@@ -10,13 +10,14 @@ import { useAuth } from '../../store/authStore'
 
 const STABLE = { staleTime: 5 * 60 * 1000 } as const
 
-const STATUS_OPTIONS:   MSOption[] = STATUSES.map(s => ({ value: s, label: s }))
 const RISK_OPTIONS:     MSOption[] = ['High', 'Medium', 'Low'].map(r => ({ value: r, label: r }))
 
 const AGEING_OPTIONS: MSOption[] = [
-  { value: 'overdue', label: 'Overdue' },
-  { value: 'due_soon', label: 'Due within 7 days' },
-  { value: 'on_time', label: 'On time / Closed on time' },
+  { value: 'overdue_30_plus', label: 'Overdue 30+ days' },
+  { value: 'overdue_8_30', label: 'Overdue 8–30 days' },
+  { value: 'overdue_1_7', label: 'Overdue 1–7 days' },
+  { value: 'on_time', label: 'On time' },
+  { value: 'no_target', label: 'No target date' },
 ]
 
 function calcAgeingDays(obs: any): number | null {
@@ -57,6 +58,13 @@ export default function ObservationsList() {
   const riskLevels          = searchParams.getAll('risk')
   const coreConcernIds      = searchParams.getAll('core_concern').map(Number)
   const specificConcernIds  = searchParams.getAll('specific_concern').map(Number)
+  const buildingIds         = searchParams.getAll('building_id').map(Number)
+  const floorIds            = searchParams.getAll('floor_id').map(Number)
+  const eicIds              = searchParams.getAll('eic').map(Number)
+  const outcomeFilter       = searchParams.getAll('outcome')
+  const violationIds        = searchParams.getAll('violation').map(Number)
+  const rcCatIds            = searchParams.getAll('root_cause').map(Number)
+  const rcSpecIds           = searchParams.getAll('root_cause_specific').map(Number)
   const ageingFilter        = searchParams.getAll('ageing')
   const dateFrom            = searchParams.get('date_from') || ''
   const dateTo              = searchParams.get('date_to') || ''
@@ -65,7 +73,9 @@ export default function ObservationsList() {
   // Auto-open filters panel if there are active filter params (e.g. when navigating back)
   const hasActiveFilters = searchParams.has('status') || searchParams.has('project_id') ||
     searchParams.has('contractor') || searchParams.has('risk') || searchParams.has('core_concern') ||
-    searchParams.has('specific_concern') || searchParams.has('ageing') ||
+    searchParams.has('specific_concern') || searchParams.has('building_id') || searchParams.has('floor_id') ||
+    searchParams.has('eic') || searchParams.has('outcome') || searchParams.has('violation') ||
+    searchParams.has('root_cause') || searchParams.has('root_cause_specific') || searchParams.has('ageing') ||
     searchParams.has('date_from') || searchParams.has('date_to')
   const [showFilters, setShowFilters] = useState(hasActiveFilters)
 
@@ -114,12 +124,19 @@ export default function ObservationsList() {
     (riskLevels.length > 0 ? 1 : 0) +
     (coreConcernIds.length > 0 ? 1 : 0) +
     (specificConcernIds.length > 0 ? 1 : 0) +
+    (buildingIds.length > 0 ? 1 : 0) +
+    (floorIds.length > 0 ? 1 : 0) +
+    (eicIds.length > 0 ? 1 : 0) +
+    (outcomeFilter.length > 0 ? 1 : 0) +
+    (violationIds.length > 0 ? 1 : 0) +
+    (rcCatIds.length > 0 ? 1 : 0) +
+    (rcSpecIds.length > 0 ? 1 : 0) +
     (ageingFilter.length > 0 ? 1 : 0) +
     (dateFrom ? 1 : 0) +
     (dateTo ? 1 : 0)
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ['observations', statuses, projectIds, selectedContractors, riskLevels, coreConcernIds, specificConcernIds, dateFrom, dateTo, page],
+    queryKey: ['observations', statuses, projectIds, selectedContractors, riskLevels, coreConcernIds, specificConcernIds, buildingIds, floorIds, eicIds, outcomeFilter, violationIds, rcCatIds, rcSpecIds, ageingFilter, dateFrom, dateTo, page],
     queryFn: () => api.get('/observations/', {
       params: {
         status:               statuses.length              ? statuses              : undefined,
@@ -128,6 +145,14 @@ export default function ObservationsList() {
         risk_level:           riskLevels.length        ? riskLevels        : undefined,
         core_concern_id:      coreConcernIds.length    ? coreConcernIds    : undefined,
         specific_concern_id:  specificConcernIds.length ? specificConcernIds : undefined,
+        building_id:          buildingIds.length       ? buildingIds       : undefined,
+        floor_id:             floorIds.length          ? floorIds          : undefined,
+        eic_user_id:          eicIds.length            ? eicIds            : undefined,
+        possible_outcome:     outcomeFilter.length     ? outcomeFilter     : undefined,
+        violation_id:         violationIds.length      ? violationIds      : undefined,
+        root_cause_category_id: rcCatIds.length        ? rcCatIds          : undefined,
+        root_cause_specific_id: rcSpecIds.length       ? rcSpecIds         : undefined,
+        aging:                ageingFilter.length      ? ageingFilter      : undefined,
         date_from:            dateFrom                 || undefined,
         date_to:              dateTo                   || undefined,
         page,
@@ -143,6 +168,13 @@ export default function ObservationsList() {
     queryFn: () => api.get('/projects/').then(r => r.data),
     ...STABLE,
   })
+  // Status filter options = only statuses that actually exist in the data
+  const { data: statusOptionsData } = useQuery({
+    queryKey: ['status-options'],
+    queryFn: () => api.get('/observations/status-options').then(r => r.data),
+    staleTime: 60_000,
+  })
+  const statusOptions: MSOption[] = ((statusOptionsData as string[]) || STATUSES).map(s => ({ value: s, label: s }))
   const { data: contractors = [] as any[] } = useQuery({
     queryKey: ['contractors'],
     queryFn: () => api.get('/users/contractors').then(r => r.data),
@@ -158,6 +190,28 @@ export default function ObservationsList() {
     queryFn: () => api.get('/admin/specific-concerns').then(r => r.data),
     ...STABLE,
   })
+  // Reference data for the extended filters (fetched once; cascading done client-side)
+  const { data: allBuildings } = useQuery({ queryKey: ['all-buildings'], queryFn: () => api.get('/admin/buildings').then(r => r.data), ...STABLE })
+  const { data: allFloors } = useQuery({ queryKey: ['all-floors'], queryFn: () => api.get('/admin/floors').then(r => r.data), ...STABLE })
+  const { data: eicUsers } = useQuery({ queryKey: ['eic-users', projectIds], queryFn: () => api.get('/users/eic', { params: { project_id: projectIds.length ? projectIds : undefined } }).then(r => r.data), ...STABLE })
+  const { data: possibleOutcomes } = useQuery({ queryKey: ['possible-outcomes'], queryFn: () => api.get('/admin/possible-outcomes').then(r => r.data), ...STABLE })
+  const { data: violations } = useQuery({ queryKey: ['violations'], queryFn: () => api.get('/admin/violations').then(r => r.data), ...STABLE })
+  const { data: rcCategories } = useQuery({ queryKey: ['rc-categories'], queryFn: () => api.get('/admin/root-cause-categories').then(r => r.data), ...STABLE })
+  const { data: allRcSpecifics } = useQuery({ queryKey: ['all-rc-specifics'], queryFn: () => api.get('/admin/root-cause-specifics').then(r => r.data), ...STABLE })
+
+  const buildingOptions: MSOption[] = useMemo(() =>
+    (allBuildings || []).filter((b: any) => !projectIds.length || projectIds.includes(b.project_id)).map((b: any) => ({ value: b.id, label: b.name })),
+    [allBuildings, projectIds])
+  const floorOptions: MSOption[] = useMemo(() =>
+    !buildingIds.length ? [] : (allFloors || []).filter((f: any) => buildingIds.includes(f.building_id)).map((f: any) => ({ value: f.id, label: f.name })),
+    [allFloors, buildingIds])
+  const eicOptions: MSOption[] = useMemo(() => (eicUsers || []).map((u: any) => ({ value: u.id, label: u.name })), [eicUsers])
+  const outcomeOptions: MSOption[] = useMemo(() => (possibleOutcomes || []).map((o: any) => ({ value: o.name, label: o.name })), [possibleOutcomes])
+  const violationOptions: MSOption[] = useMemo(() => (violations || []).map((v: any) => ({ value: v.id, label: v.name })), [violations])
+  const rcCategoryOptions: MSOption[] = useMemo(() => (rcCategories || []).map((c: any) => ({ value: c.id, label: c.name })), [rcCategories])
+  const rcSpecificOptions: MSOption[] = useMemo(() =>
+    !rcCatIds.length ? [] : (allRcSpecifics || []).filter((s: any) => rcCatIds.includes(s.root_cause_category_id)).map((s: any) => ({ value: s.id, label: s.name })),
+    [allRcSpecifics, rcCatIds])
 
   // Cascading: contractor options narrowed by selected projects
   const contractorOptions: MSOption[] = useMemo(() => {
@@ -218,18 +272,8 @@ export default function ObservationsList() {
     }, { replace: true })
   }
 
-  const visibleObs = useMemo(() => {
-    if (ageingFilter.length === 0) return obs
-    return obs.filter((o: any) => {
-      const days = calcAgeingDays(o)
-      return ageingFilter.some(f => {
-        if (f === 'overdue') return days !== null && days > 0
-        if (f === 'due_soon') return days !== null && days <= 0 && days >= -7
-        if (f === 'on_time') return days !== null && days <= 0
-        return true
-      })
-    })
-  }, [obs, ageingFilter])
+  // Aging is filtered server-side (accurate across pagination); render rows as returned.
+  const visibleObs = obs
 
   return (
     <div className="space-y-5">
@@ -265,14 +309,14 @@ export default function ObservationsList() {
         <div className={showFilters ? 'flex flex-wrap items-center gap-2 mt-3' : 'hidden'}>
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
 
-          <MultiSelectFilter size="sm" options={STATUS_OPTIONS} value={statuses}
+          <MultiSelectFilter size="sm" options={statusOptions} value={statuses}
             onChange={v => updateFilter({ status: v as string[] })}
             placeholder="Status" className="w-full sm:w-auto sm:min-w-[110px]" />
 
           <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
             onChange={v => {
               const ids = v as number[]
-              const updates: Record<string, string[]> = { project_id: ids.map(String) }
+              const updates: Record<string, string[]> = { project_id: ids.map(String), building_id: [], floor_id: [], eic: [] }
               if (ids.length > 0) {
                 const validNames = new Set(contractors.filter((c: any) => (c.projects || []).some((p: any) => ids.includes(p.id))).map((c: any) => c.name))
                 updates.contractor = selectedContractors.filter(n => validNames.has(n))
@@ -280,6 +324,14 @@ export default function ObservationsList() {
               updateFilter(updates)
             }}
             placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
+
+          <MultiSelectFilter size="sm" options={buildingOptions} value={buildingIds}
+            onChange={v => updateFilter({ building_id: (v as number[]).map(String), floor_id: [] })}
+            placeholder="Building" className="w-full sm:w-auto sm:min-w-[120px]" />
+
+          <MultiSelectFilter size="sm" options={floorOptions} value={floorIds}
+            onChange={v => updateFilter({ floor_id: (v as number[]).map(String) })}
+            placeholder={buildingIds.length ? 'Floor' : 'Floor (select building)'} className="w-full sm:w-auto sm:min-w-[120px]" />
 
           {isContractor ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1.5 rounded-lg cursor-default col-span-1">
@@ -300,6 +352,10 @@ export default function ObservationsList() {
               placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
           )}
 
+          <MultiSelectFilter size="sm" options={eicOptions} value={eicIds}
+            onChange={v => updateFilter({ eic: (v as number[]).map(String) })}
+            placeholder="Concerned EIC" className="w-full sm:w-auto sm:min-w-[130px]" />
+
           <MultiSelectFilter size="sm" options={RISK_OPTIONS} value={riskLevels}
             onChange={v => updateFilter({ risk: v as string[] })}
             placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
@@ -311,6 +367,22 @@ export default function ObservationsList() {
           <MultiSelectFilter size="sm" options={specificConcernOptions} value={specificConcernIds}
             onChange={v => updateFilter({ specific_concern: (v as number[]).map(String) })}
             placeholder="Specific Concern" className="w-full sm:w-auto sm:min-w-[150px]" />
+
+          <MultiSelectFilter size="sm" options={outcomeOptions} value={outcomeFilter}
+            onChange={v => updateFilter({ outcome: v as string[] })}
+            placeholder="Possible Outcome" className="w-full sm:w-auto sm:min-w-[150px]" />
+
+          <MultiSelectFilter size="sm" options={violationOptions} value={violationIds}
+            onChange={v => updateFilter({ violation: (v as number[]).map(String) })}
+            placeholder="Violation" className="w-full sm:w-auto sm:min-w-[140px]" />
+
+          <MultiSelectFilter size="sm" options={rcCategoryOptions} value={rcCatIds}
+            onChange={v => updateFilter({ root_cause: (v as number[]).map(String), root_cause_specific: [] })}
+            placeholder="Root Cause" className="w-full sm:w-auto sm:min-w-[130px]" />
+
+          <MultiSelectFilter size="sm" options={rcSpecificOptions} value={rcSpecIds}
+            onChange={v => updateFilter({ root_cause_specific: (v as number[]).map(String) })}
+            placeholder={rcCatIds.length ? 'Specific Root Cause' : 'Specific Root Cause (select root cause)'} className="w-full sm:w-auto sm:min-w-[160px]" />
 
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input
@@ -395,6 +467,7 @@ export default function ObservationsList() {
                 <div className="flex items-center justify-between mt-1.5">
                   <div className="text-xs text-gray-400 space-y-0.5">
                     <p>{o.project_name || '—'} · {fmtDate(o.obs_date || o.created_at)}</p>
+                    {o.target_date_actual && <p>Target: {fmtDate(o.target_date_actual)}</p>}
                     <p className="text-gray-400">{o.observer_name || o.created_by_name || '—'}</p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -437,14 +510,15 @@ export default function ObservationsList() {
         {/* Desktop table — hidden on small screens */}
         {!isLoading && visibleObs.length > 0 && (
           <div className="hidden sm:block overflow-x-auto overflow-y-auto max-h-[75vh]">
-            <table className="w-full min-w-[860px]">
+            <table className="w-full min-w-[960px]">
               <thead className="sticky top-0 z-10 bg-white">
                 <tr className="border-b border-gray-100">
                   <th className="th">Obs. ID</th>
                   <th className="th">Project</th>
                   <th className="th">Core Concern</th>
                   <th className="th">Observer</th>
-                  <th className="th">Date</th>
+                  <th className="th">Obs Date</th>
+                  <th className="th">Target Date</th>
                   <th className="th">Risk</th>
                   <th className="th">Status</th>
                   <th className="th">Ageing</th>
@@ -480,6 +554,7 @@ export default function ObservationsList() {
                     </td>
                     <td className="td text-gray-500 text-xs">{o.observer_name || o.created_by_name || '—'}</td>
                     <td className="td text-gray-400 text-xs whitespace-nowrap">{fmtDate(o.obs_date || o.created_at)}</td>
+                    <td className="td text-gray-500 text-xs whitespace-nowrap">{o.target_date_actual ? fmtDate(o.target_date_actual) : '—'}</td>
                     <td className="td">
                       {o.risk_level
                         ? <span className={getRiskClass(o.risk_level)}>{o.risk_level} · {o.risk_factor}</span>

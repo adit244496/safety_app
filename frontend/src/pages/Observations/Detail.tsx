@@ -856,7 +856,7 @@ export default function ObservationDetail() {
               )}
               {canEdit && !isContractor && (
                 <button
-                  onClick={() => { setStatusOpen(o => !o); setNewStatus(obs.status) }}
+                  onClick={() => { setStatusOpen(o => !o); setNewStatus(obs.stored_status || obs.status) }}
                   className="ml-auto flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 px-2 py-1 rounded-lg hover:bg-indigo-50 transition-colors"
                 >
                   <RefreshCw className="w-3 h-3" /> Change Status

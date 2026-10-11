@@ -3,11 +3,12 @@ import { usePageTitle } from '../../store/pageTitleContext'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../store/authStore'
-import { FileText, AlertTriangle, ZoomIn, ZoomOut, X, Download, LayoutList } from 'lucide-react'
+import { FileText, AlertTriangle, ZoomIn, ZoomOut, X, Download, LayoutList, BarChart3, ChevronUp, SlidersHorizontal } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import { generateHtmlReportPdf } from '../../lib/printPdf'
 import api from '../../lib/api'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
+import MisReport from './MisReport'
 
 const STALE = { staleTime: 5 * 60 * 1000 } as const
 
@@ -48,7 +49,7 @@ function fmtD(s?: string | null) {
   if (!s) return ''
   try {
     const d = s.includes('T') ? new Date(s) : new Date(s + 'T00:00:00')
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Asia/Kolkata' }).replace(/\//g, '-')
   } catch { return s }
 }
 
@@ -1241,20 +1242,33 @@ export default function ReportPage() {
   usePageTitle('SHE Reports', 'Surveillance Safety, Health & Environment report generator')
   const { user } = useAuth()
   const isContractor = user?.role === 'Contractor'
-  const last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today  = new Date().toISOString().slice(0, 10)
+  // Fiscal-year quarter start (Apr/Jul/Oct/Jan) — the default "Date From" for quarterly reports
+  const quarterStart = (() => {
+    const d = new Date()
+    const sm = [0, 0, 0, 3, 3, 3, 6, 6, 6, 9, 9, 9][d.getMonth()]
+    return `${d.getFullYear()}-${String(sm + 1).padStart(2, '0')}-01`
+  })()
 
-  const [activeTab,       setActiveTab]       = useState<'inspection' | 'tracker'>('inspection')
+  const [activeTab,       setActiveTab]       = useState<'inspection' | 'tracker' | 'mis'>('inspection')
   const [projectIds,      setProjectIds]      = useState<number[]>([])
-  const [dateFrom,        setDateFrom]        = useState(last30)
+  const [dateFrom,        setDateFrom]        = useState(quarterStart)
   const [dateTo,          setDateTo]          = useState(today)
   const [selectedContractors, setSelectedContractors] = useState<string[]>(
     () => isContractor && user?.name ? [user.name] : []
   )
   const [riskLevels,      setRiskLevels]      = useState<string[]>([])
+  const [buildingIds,     setBuildingIds]     = useState<number[]>([])
+  const [floorIds,        setFloorIds]        = useState<number[]>([])
+  const [eicIds,          setEicIds]          = useState<number[]>([])
+  const [outcomeFilter,   setOutcomeFilter]   = useState<string[]>([])
+  const [violationIds,    setViolationIds]    = useState<number[]>([])
+  const [rcCatIds,        setRcCatIds]        = useState<number[]>([])
+  const [rcSpecIds,       setRcSpecIds]       = useState<number[]>([])
   const [reportDate,      setReportDate]      = useState(new Date().toISOString().slice(0, 10))
   const [trackerNo,       setTrackerNo]       = useState('')
   const [generated,       setGenerated]       = useState(false)
+  const [filtersOpen,     setFiltersOpen]     = useState(true)
   const [exportingExcel,  setExportingExcel]  = useState(false)
   const [exportingPdfInsp, setExportingPdfInsp] = useState(false)
 
@@ -1264,6 +1278,22 @@ export default function ReportPage() {
   const { data: contractors = [] as any[] } = useQuery({
     queryKey: ['contractors'], queryFn: () => api.get('/users/contractors').then(r => r.data), ...STALE,
   })
+  // Reference data for the extended filters (cascading done client-side)
+  const { data: allBuildings } = useQuery({ queryKey: ['all-buildings'], queryFn: () => api.get('/admin/buildings').then(r => r.data), ...STALE })
+  const { data: allFloors } = useQuery({ queryKey: ['all-floors'], queryFn: () => api.get('/admin/floors').then(r => r.data), ...STALE })
+  const { data: eicUsers } = useQuery({ queryKey: ['eic-users', projectIds], queryFn: () => api.get('/users/eic', { params: { project_id: projectIds.length ? projectIds : undefined } }).then(r => r.data), ...STALE })
+  const { data: possibleOutcomes } = useQuery({ queryKey: ['possible-outcomes'], queryFn: () => api.get('/admin/possible-outcomes').then(r => r.data), ...STALE })
+  const { data: violations } = useQuery({ queryKey: ['violations'], queryFn: () => api.get('/admin/violations').then(r => r.data), ...STALE })
+  const { data: rcCategories } = useQuery({ queryKey: ['rc-categories'], queryFn: () => api.get('/admin/root-cause-categories').then(r => r.data), ...STALE })
+  const { data: allRcSpecifics } = useQuery({ queryKey: ['all-rc-specifics'], queryFn: () => api.get('/admin/root-cause-specifics').then(r => r.data), ...STALE })
+
+  const buildingOptions: MSOption[] = useMemo(() => (allBuildings || []).filter((b: any) => !projectIds.length || projectIds.includes(b.project_id)).map((b: any) => ({ value: b.id, label: b.name })), [allBuildings, projectIds])
+  const floorOptions: MSOption[] = useMemo(() => !buildingIds.length ? [] : (allFloors || []).filter((f: any) => buildingIds.includes(f.building_id)).map((f: any) => ({ value: f.id, label: f.name })), [allFloors, buildingIds])
+  const eicOptions: MSOption[] = useMemo(() => (eicUsers || []).map((u: any) => ({ value: u.id, label: u.name })), [eicUsers])
+  const outcomeOptions: MSOption[] = useMemo(() => (possibleOutcomes || []).map((o: any) => ({ value: o.name, label: o.name })), [possibleOutcomes])
+  const violationOptions: MSOption[] = useMemo(() => (violations || []).map((v: any) => ({ value: v.id, label: v.name })), [violations])
+  const rcCategoryOptions: MSOption[] = useMemo(() => (rcCategories || []).map((c: any) => ({ value: c.id, label: c.name })), [rcCategories])
+  const rcSpecificOptions: MSOption[] = useMemo(() => !rcCatIds.length ? [] : (allRcSpecifics || []).filter((s: any) => rcCatIds.includes(s.root_cause_category_id)).map((s: any) => ({ value: s.id, label: s.name })), [allRcSpecifics, rcCatIds])
 
   const projectOptions:    MSOption[] = (projects || []).map((p: any) => ({ value: p.id, label: p.name }))
   const contractorOptions: MSOption[] = useMemo(() => {
@@ -1286,7 +1316,7 @@ export default function ReportPage() {
   ]
 
   const { data: reportData, isFetching } = useQuery({
-    queryKey: ['report', projectIds, dateFrom, dateTo, selectedContractors, riskLevels],
+    queryKey: ['report', projectIds, dateFrom, dateTo, selectedContractors, riskLevels, buildingIds, floorIds, eicIds, outcomeFilter, violationIds, rcCatIds, rcSpecIds],
     queryFn: () => api.get('/observations/report', {
       params: {
         project_id:         projectIds.length            ? projectIds            : undefined,
@@ -1294,6 +1324,13 @@ export default function ReportPage() {
         date_to:            dateTo                       || undefined,
         contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
         risk_level:         riskLevels.length    ? riskLevels    : undefined,
+        building_id:        buildingIds.length   ? buildingIds   : undefined,
+        floor_id:           floorIds.length      ? floorIds      : undefined,
+        eic_user_id:        eicIds.length        ? eicIds        : undefined,
+        possible_outcome:   outcomeFilter.length ? outcomeFilter : undefined,
+        violation_id:       violationIds.length  ? violationIds  : undefined,
+        root_cause_category_id: rcCatIds.length  ? rcCatIds      : undefined,
+        root_cause_specific_id: rcSpecIds.length ? rcSpecIds     : undefined,
       },
     }).then(r => r.data),
     enabled: generated,
@@ -1329,9 +1366,11 @@ export default function ReportPage() {
   const effectiveTrackerNo = trackerNo.trim() || defaultTrackerNo
 
   const reset = () => {
-    setProjectIds([]); setDateFrom(last30); setDateTo(today)
+    setProjectIds([]); setDateFrom(quarterStart); setDateTo(today)
     if (!isContractor) setSelectedContractors([])
-    setRiskLevels([]); setGenerated(false); setTrackerNo('')
+    setRiskLevels([]); setBuildingIds([]); setFloorIds([]); setEicIds([])
+    setOutcomeFilter([]); setViolationIds([]); setRcCatIds([]); setRcSpecIds([])
+    setGenerated(false); setTrackerNo('')
   }
 
   return (
@@ -1367,22 +1406,69 @@ export default function ReportPage() {
               <LayoutList className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="hidden xs:inline">SHE </span>Tracker
             </button>
+            <button
+              onClick={() => setActiveTab('mis')}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all ${
+                activeTab === 'mis'
+                  ? 'bg-white text-indigo-700 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <BarChart3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="hidden xs:inline">MIS </span>Report
+            </button>
           </div>
         </div>
 
         {/* Shared filter panel */}
         <div className="card shadow-md !p-3">
-          <h2 className="text-sm font-semibold text-gray-800 mb-2">Report Parameters</h2>
+          {filtersOpen ? (
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <h2 className="text-sm font-semibold text-gray-800">Report Parameters</h2>
+              {generated && (
+                <button onClick={() => setFiltersOpen(false)}
+                  className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                  <ChevronUp className="w-3.5 h-3.5" /> Collapse
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center flex-wrap gap-x-2.5 gap-y-1 text-xs text-gray-500">
+              <span><span className="text-gray-400">Project:</span> <span className="font-medium text-gray-700">{projectLabel}</span></span>
+              <span className="text-gray-300">·</span>
+              <span><span className="text-gray-400">Period:</span> <span className="font-medium text-gray-700">{dateRange}</span></span>
+              {!isContractor && selectedContractors.length > 0 && <><span className="text-gray-300">·</span><span><span className="text-gray-400">Contractor:</span> <span className="font-medium text-gray-700">{contractorLabel}</span></span></>}
+              {riskLevels.length > 0 && <><span className="text-gray-300">·</span><span><span className="text-gray-400">Priority:</span> <span className="font-medium text-gray-700">{priorityLabel}</span></span></>}
+              {!isFetching && <span className="text-gray-400">· {observations.length} found</span>}
+              <button onClick={() => setFiltersOpen(true)}
+                className="ml-auto flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                <SlidersHorizontal className="w-3.5 h-3.5" /> Edit filters
+              </button>
+            </div>
+          )}
+          {filtersOpen && (
           <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6">
             <div>
               <label className="label">Project</label>
               <MultiSelectFilter
                 options={projectOptions}
                 value={projectIds}
-                onChange={v => { setProjectIds(v as number[]); setGenerated(false) }}
+                onChange={v => { setProjectIds(v as number[]); setBuildingIds([]); setFloorIds([]); setEicIds([]); setGenerated(false) }}
                 placeholder="All Projects"
                 className="w-full"
               />
+            </div>
+            <div>
+              <label className="label">Building</label>
+              <MultiSelectFilter options={buildingOptions} value={buildingIds}
+                onChange={v => { setBuildingIds(v as number[]); setFloorIds([]); setGenerated(false) }}
+                placeholder="All Buildings" className="w-full" />
+            </div>
+            <div>
+              <label className="label">Floor</label>
+              <MultiSelectFilter options={floorOptions} value={floorIds}
+                onChange={v => { setFloorIds(v as number[]); setGenerated(false) }}
+                placeholder={buildingIds.length ? 'All Floors' : 'Select building'} className="w-full" />
             </div>
             <div>
               <label className="label">Contractor</label>
@@ -1401,6 +1487,12 @@ export default function ReportPage() {
               )}
             </div>
             <div>
+              <label className="label">Concerned EIC</label>
+              <MultiSelectFilter options={eicOptions} value={eicIds}
+                onChange={v => { setEicIds(v as number[]); setGenerated(false) }}
+                placeholder="All EICs" className="w-full" />
+            </div>
+            <div>
               <label className="label">Issue Priority</label>
               <MultiSelectFilter
                 options={priorityOptions}
@@ -1409,6 +1501,30 @@ export default function ReportPage() {
                 placeholder="All Priorities"
                 className="w-full"
               />
+            </div>
+            <div>
+              <label className="label">Possible Outcome</label>
+              <MultiSelectFilter options={outcomeOptions} value={outcomeFilter}
+                onChange={v => { setOutcomeFilter(v as string[]); setGenerated(false) }}
+                placeholder="All Outcomes" className="w-full" />
+            </div>
+            <div>
+              <label className="label">Violation Caused Due To</label>
+              <MultiSelectFilter options={violationOptions} value={violationIds}
+                onChange={v => { setViolationIds(v as number[]); setGenerated(false) }}
+                placeholder="All Violations" className="w-full" />
+            </div>
+            <div>
+              <label className="label">Root Cause</label>
+              <MultiSelectFilter options={rcCategoryOptions} value={rcCatIds}
+                onChange={v => { setRcCatIds(v as number[]); setRcSpecIds([]); setGenerated(false) }}
+                placeholder="All Root Causes" className="w-full" />
+            </div>
+            <div>
+              <label className="label">Specific Root Cause</label>
+              <MultiSelectFilter options={rcSpecificOptions} value={rcSpecIds}
+                onChange={v => { setRcSpecIds(v as number[]); setGenerated(false) }}
+                placeholder={rcCatIds.length ? 'All Specifics' : 'Select root cause'} className="w-full" />
             </div>
             <div>
               <label className="label">Date From</label>
@@ -1423,9 +1539,11 @@ export default function ReportPage() {
               <input type="date" className="input w-full" value={reportDate} onChange={e => setReportDate(e.target.value)} />
             </div>
           </div>
+          )}
 
+          {filtersOpen && (
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            <button onClick={() => setGenerated(true)} disabled={isFetching} className="btn-primary w-full sm:w-auto justify-center">
+            <button onClick={() => { setGenerated(true); setFiltersOpen(false) }} disabled={isFetching} className="btn-primary w-full sm:w-auto justify-center">
               {isFetching
                 ? <><span className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" /> Generating…</>
                 : <><FileText className="w-4 h-4" /> Generate {activeTab === 'tracker' ? 'Tracker' : 'Report'}</>}
@@ -1475,6 +1593,7 @@ export default function ReportPage() {
               </div>
             )}
           </div>
+          )}
         </div>
 
         {generated && !isFetching && observations.length === 0 && (
@@ -1553,6 +1672,10 @@ export default function ReportPage() {
           reportDate={reportDate}
           trackerNo={effectiveTrackerNo}
         />
+      )}
+
+      {activeTab === 'mis' && (
+        <MisReport projectIds={projectIds} dateFrom={dateFrom} dateTo={dateTo} generated={generated} />
       )}
     </div>
   )
