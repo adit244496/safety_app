@@ -7,12 +7,15 @@ import {
 import api from '../../lib/api'
 
 interface AiForm {
+  provider: string
   api_key: string
   model: string
+  openai_api_key: string
+  openai_model: string
   enabled: boolean
 }
 
-const EMPTY: AiForm = { api_key: '', model: 'claude-haiku-4-5-20251001', enabled: false }
+const EMPTY: AiForm = { provider: 'anthropic', api_key: '', model: 'claude-haiku-4-5-20251001', openai_api_key: '', openai_model: 'gpt-4o-mini', enabled: false }
 
 export default function AiSettingsTab() {
   const qc = useQueryClient()
@@ -32,11 +35,22 @@ export default function AiSettingsTab() {
     'claude-haiku-4-5-20251001': 'Claude Haiku 4.5 (fast, low cost)',
     'claude-sonnet-5': 'Claude Sonnet 5 (higher quality)',
   }
+  const openaiModels: Record<string, string> = data?.openai_models || {
+    'gpt-4o-mini': 'GPT-4o mini (fast, low cost)',
+    'gpt-4o': 'GPT-4o (higher quality)',
+  }
   const hasKey: boolean = data?.has_key ?? false
+  const hasOpenaiKey: boolean = data?.has_openai_key ?? false
+  const isOpenai = form.provider === 'openai'
 
   useEffect(() => {
     if (!data) return
-    setForm({ api_key: '', model: data.model || 'claude-haiku-4-5-20251001', enabled: data.enabled ?? false })
+    setForm({
+      provider: data.provider || 'anthropic',
+      api_key: '', model: data.model || 'claude-haiku-4-5-20251001',
+      openai_api_key: '', openai_model: data.openai_model || 'gpt-4o-mini',
+      enabled: data.enabled ?? false,
+    })
   }, [data])
 
   const set = (k: keyof AiForm, v: any) => setForm(f => ({ ...f, [k]: v }))
@@ -56,7 +70,8 @@ export default function AiSettingsTab() {
     setTesting(true); setTestMsg(null)
     try {
       const res = await api.post('/admin/ai-settings/test')
-      setTestMsg({ ok: true, text: `Connection OK — ${models[res.data.model] || res.data.model} replied “${res.data.reply}”.` })
+      const label = models[res.data.model] || openaiModels[res.data.model] || res.data.model
+      setTestMsg({ ok: true, text: `Connection OK — ${label} replied “${res.data.reply}”.` })
     } catch (err: any) {
       setTestMsg({ ok: false, text: err.response?.data?.detail || 'Test failed. Check the API key.' })
     } finally { setTesting(false) }
@@ -133,9 +148,25 @@ export default function AiSettingsTab() {
           </div>
 
           <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Provider</label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                <Cpu className="w-3.5 h-3.5 text-gray-400" />
+              </span>
+              <select className="input w-full pl-8 appearance-none" value={form.provider} onChange={e => set('provider', e.target.value)}>
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openai">OpenAI (GPT)</option>
+              </select>
+            </div>
+            <p className="text-xs text-gray-400">Summaries are generated using the selected provider's key & model.</p>
+          </div>
+
+          <div className="h-px bg-gray-100" />
+
+          <div className="space-y-1.5">
             <div className="flex items-baseline justify-between">
-              <label className="text-sm font-medium text-gray-700">Anthropic API Key</label>
-              <span className="text-xs text-gray-400">{hasKey ? 'Leave blank to keep existing' : 'Required'}</span>
+              <label className="text-sm font-medium text-gray-700">{isOpenai ? 'OpenAI API Key' : 'Anthropic API Key'}</label>
+              <span className="text-xs text-gray-400">{(isOpenai ? hasOpenaiKey : hasKey) ? 'Leave blank to keep existing' : 'Required'}</span>
             </div>
             <div className="relative">
               <span className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
@@ -144,9 +175,9 @@ export default function AiSettingsTab() {
               <input
                 className="input w-full pl-8 pr-10"
                 type={showKey ? 'text' : 'password'}
-                placeholder={hasKey ? '•••••••••• (saved)' : 'sk-ant-…'}
-                value={form.api_key}
-                onChange={e => set('api_key', e.target.value)}
+                placeholder={(isOpenai ? hasOpenaiKey : hasKey) ? '•••••••••• (saved)' : (isOpenai ? 'sk-…' : 'sk-ant-…')}
+                value={isOpenai ? form.openai_api_key : form.api_key}
+                onChange={e => set(isOpenai ? 'openai_api_key' : 'api_key', e.target.value)}
                 autoComplete="off"
               />
               <button
@@ -172,16 +203,16 @@ export default function AiSettingsTab() {
               </span>
               <select
                 className="input w-full pl-8 appearance-none"
-                value={form.model}
-                onChange={e => set('model', e.target.value)}
+                value={isOpenai ? form.openai_model : form.model}
+                onChange={e => set(isOpenai ? 'openai_model' : 'model', e.target.value)}
               >
-                {Object.entries(models).map(([id, label]) => (
+                {Object.entries(isOpenai ? openaiModels : models).map(([id, label]) => (
                   <option key={id} value={id}>{label}</option>
                 ))}
               </select>
             </div>
             <p className="text-xs text-gray-400">
-              Haiku is cheapest and fastest; Sonnet gives higher-quality summaries at a higher cost.
+              The "mini / Haiku" model is cheapest and fastest; the larger model gives higher-quality summaries at a higher cost.
             </p>
           </div>
         </div>
@@ -195,7 +226,7 @@ export default function AiSettingsTab() {
           <ul className="space-y-2 text-xs text-violet-700">
             <li className="flex items-start gap-2">
               <Wand2 className="mt-0.5 w-3.5 h-3.5 flex-shrink-0" />
-              <span>Each observation's details and photos are sent to Claude to produce a short plain-text summary.</span>
+              <span>Each observation's details and photos are sent to the selected AI provider to produce a short plain-text summary.</span>
             </li>
             <li className="flex items-start gap-2">
               <Sparkles className="mt-0.5 w-3.5 h-3.5 flex-shrink-0" />
@@ -204,7 +235,7 @@ export default function AiSettingsTab() {
           </ul>
           <div className="mt-3 pt-3 border-t border-violet-200 space-y-1.5 text-xs text-violet-600">
             <p>• Enable the toggle and save a key to turn the feature on.</p>
-            <p>• Get an API key from console.anthropic.com.</p>
+            <p>• Get an API key from console.anthropic.com (Anthropic) or platform.openai.com (OpenAI).</p>
           </div>
         </div>
       </div>

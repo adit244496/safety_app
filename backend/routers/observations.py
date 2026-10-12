@@ -994,8 +994,9 @@ def _mis_data(db: Session, user: models.User, date_from: Optional[str],
             sa = json.loads(r.section_a) if r.section_a else []
         except (ValueError, TypeError):
             sa = []
-        mh = sum(_mis_num(x.get("man_hours")) for x in sa if isinstance(x, dict))
-        pers = sum(_mis_num(x.get("avg_persons")) for x in sa if isinstance(x, dict))
+        sa_vals = list(sa.values()) if isinstance(sa, dict) else sa   # dict (by key) or legacy list
+        mh = sum(_mis_num(x.get("man_hours")) for x in sa_vals if isinstance(x, dict))
+        pers = sum(_mis_num(x.get("avg_persons")) for x in sa_vals if isinstance(x, dict))
         e = mp[r.project_id]
         e["project_name"] = name_by_id.get(r.project_id, "Unknown")
         e["man_hours"] += mh
@@ -1278,8 +1279,10 @@ def generate_ai_summary(obs_id: str, db: Session = Depends(get_db), user: models
         raise HTTPException(404, "Observation not found")
     _assert_obs_access(obs, user)
 
+    if not ai_service.is_enabled(db):
+        raise HTTPException(503, "AI summaries are turned off. Enable them in Admin → AI Summary.")
     if not ai_service.is_configured(db):
-        raise HTTPException(503, "AI summary is not configured. Add an Anthropic API key in Admin → AI Summary.")
+        raise HTTPException(503, "AI summary is not configured. Add an API key in Admin → AI Summary.")
 
     try:
         summary = ai_service.generate_summary(obs, obs_to_dict(obs, db), db)

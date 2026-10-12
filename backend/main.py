@@ -9,6 +9,7 @@ from seed_ease import seed_ease_scores
 from seed_dummy import seed_dummy_data, seed_ease_dummy_data, seed_recent_observations
 from seed_ease_criteria import seed_ease_criteria
 from seed_permit_config import seed_permit_config
+from seed_ohs_form import seed_ohs_form
 from routers import auth, users, projects, observations, admin, uploads, notifications, ease_score, guidelines, trainings, work_permits, meeting_minutes, ohs_statistics
 from escalation_scheduler import start_scheduler, stop_scheduler
 
@@ -98,6 +99,7 @@ def startup():
         seed_data(db)
         seed_ease_criteria(db)
         seed_permit_config(db)
+        seed_ohs_form(db)
         _seed_risk_labels(db)
         _seed_training_categories(db)
         if not _IS_PROD:

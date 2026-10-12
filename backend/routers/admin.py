@@ -491,8 +491,11 @@ def update_smtp_settings(body: SmtpBody, db: Session = Depends(get_db), _=Depend
 # ── AI Summary Settings ──────────────────────────────────────────────────────
 
 class AiSettingsBody(BaseModel):
+    provider: str = "anthropic"
     api_key: str = ""
     model: str = ai_service.DEFAULT_MODEL
+    openai_api_key: str = ""
+    openai_model: str = ai_service.OPENAI_DEFAULT_MODEL
     enabled: bool = False
 
 
@@ -510,41 +513,47 @@ def _get_or_create_ai(db: Session) -> models.AiSettings:
 def get_ai_settings(db: Session = Depends(get_db), _=Depends(require_admin)):
     s = _get_or_create_ai(db)
     return {
+        "provider": s.provider or "anthropic",
         "model": s.model if s.model in ai_service.ALLOWED_MODELS else ai_service.DEFAULT_MODEL,
+        "openai_model": s.openai_model if s.openai_model in ai_service.OPENAI_MODELS else ai_service.OPENAI_DEFAULT_MODEL,
         "enabled": s.enabled,
-        "has_key": bool(s.api_key),          # never expose the key itself
-        "models": ai_service.ALLOWED_MODELS,  # {id: label} for the UI dropdown
+        "has_key": bool(s.api_key),               # Anthropic key present (never exposed)
+        "has_openai_key": bool(s.openai_api_key),  # OpenAI key present (never exposed)
+        "models": ai_service.ALLOWED_MODELS,       # {id: label} — Anthropic
+        "openai_models": ai_service.OPENAI_MODELS,  # {id: label} — OpenAI
     }
 
 
 @router.put("/ai-settings")
 def update_ai_settings(body: AiSettingsBody, db: Session = Depends(get_db), _=Depends(require_admin)):
+    provider = (body.provider or "anthropic").lower()
+    if provider not in ("anthropic", "openai"):
+        raise HTTPException(400, "Unsupported provider.")
     if body.model not in ai_service.ALLOWED_MODELS:
-        raise HTTPException(400, "Unsupported model selected.")
+        raise HTTPException(400, "Unsupported Anthropic model selected.")
+    if body.openai_model not in ai_service.OPENAI_MODELS:
+        raise HTTPException(400, "Unsupported OpenAI model selected.")
     s = _get_or_create_ai(db)
-    if body.api_key.strip():  # only overwrite when a new key is supplied
+    s.provider = provider
+    if body.api_key.strip():          # only overwrite when a new key is supplied
         s.api_key = body.api_key.strip()
+    if body.openai_api_key.strip():
+        s.openai_api_key = body.openai_api_key.strip()
     s.model = body.model
+    s.openai_model = body.openai_model
     s.enabled = body.enabled
     db.commit()
-    return {"success": True, "has_key": bool(s.api_key)}
+    return {"success": True, "has_key": bool(s.api_key), "has_openai_key": bool(s.openai_api_key)}
 
 
 @router.post("/ai-settings/test")
 def test_ai_settings(db: Session = Depends(get_db), _=Depends(require_admin)):
-    api_key, model = ai_service._resolve_config(db)
+    provider, api_key, model = ai_service._resolve_config(db)
     if not api_key:
-        raise HTTPException(400, "No API key saved. Enter and save a key first.")
+        raise HTTPException(400, "No API key saved for the selected provider. Enter and save a key first.")
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
-            model=model,
-            max_tokens=16,
-            messages=[{"role": "user", "content": "Reply with the word OK."}],
-        )
-        text = "".join(b.text for b in resp.content if b.type == "text").strip()
-        return {"success": True, "model": model, "reply": text or "(empty)"}
+        reply = ai_service._complete(provider, api_key, model, "You are a test.", "Reply with the word OK.", [], 16)
+        return {"success": True, "provider": provider, "model": model, "reply": reply or "(empty)"}
     except Exception as exc:
         raise HTTPException(400, f"Test failed: {exc}")
 

@@ -1,4 +1,4 @@
-"""AI summary generation for safety observations, using the Anthropic Claude API."""
+"""AI summary generation for safety observations — supports Anthropic (Claude) and OpenAI."""
 import os
 import base64
 import logging
@@ -7,13 +7,19 @@ import models
 
 logger = logging.getLogger(__name__)
 
-# Selectable models exposed in the admin UI (label → model id). Kept small on
-# purpose: Haiku for low cost / high volume, Sonnet for higher quality.
+# Anthropic models exposed in the admin UI (label → model id).
 ALLOWED_MODELS = {
     "claude-haiku-4-5-20251001": "Claude Haiku 4.5 (fast, low cost)",
     "claude-sonnet-5": "Claude Sonnet 5 (higher quality)",
 }
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+
+# OpenAI models exposed in the admin UI.
+OPENAI_MODELS = {
+    "gpt-4o-mini": "GPT-4o mini (fast, low cost)",
+    "gpt-4o": "GPT-4o (higher quality)",
+}
+OPENAI_DEFAULT_MODEL = "gpt-4o-mini"
 
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 MAX_IMAGES = 3
@@ -34,29 +40,53 @@ SYSTEM_PROMPT = (
 
 
 def _resolve_config(db=None):
-    """Resolve (api_key, model) from the admin DB settings, falling back to env vars.
-
-    A key/model saved in the admin UI takes precedence over the environment.
-    """
-    # 1. Admin UI settings win when enabled and a key is present.
+    """Resolve (provider, api_key, model) from the admin DB settings, falling back to env vars.
+    The admin-saved provider/key/model wins when AI summaries are enabled."""
     if db is not None:
         try:
             s = db.query(models.AiSettings).first()
-            if s and s.enabled and s.api_key:
-                model = s.model if s.model in ALLOWED_MODELS else DEFAULT_MODEL
-                return s.api_key, model
+            # Resolve the saved provider/key/model regardless of the `enabled` toggle —
+            # `enabled` only gates whether summaries are generated (see is_enabled),
+            # so admins can save & test a key before turning the feature on.
+            if s:
+                provider = (s.provider or "anthropic").lower()
+                if provider == "openai" and s.openai_api_key:
+                    model = s.openai_model if s.openai_model in OPENAI_MODELS else OPENAI_DEFAULT_MODEL
+                    return "openai", s.openai_api_key, model
+                if provider == "anthropic" and s.api_key:
+                    model = s.model if s.model in ALLOWED_MODELS else DEFAULT_MODEL
+                    return "anthropic", s.api_key, model
         except Exception as exc:  # table may not exist yet / db error — fall back to env
             logger.warning("Could not read AiSettings: %s", exc)
 
-    # 2. Fall back to environment configuration.
+    # Environment fallback
+    if os.getenv("AI_PROVIDER", "").lower() == "openai" and os.getenv("OPENAI_API_KEY"):
+        env_model = os.getenv("AI_SUMMARY_MODEL")
+        model = env_model if env_model in OPENAI_MODELS else OPENAI_DEFAULT_MODEL
+        return "openai", os.getenv("OPENAI_API_KEY"), model
     env_model = os.getenv("AI_SUMMARY_MODEL")
     model = env_model if env_model in ALLOWED_MODELS else DEFAULT_MODEL
-    return os.getenv("ANTHROPIC_API_KEY", ""), model
+    return "anthropic", os.getenv("ANTHROPIC_API_KEY", ""), model
 
 
 def is_configured(db=None) -> bool:
-    api_key, _ = _resolve_config(db)
+    """A usable key is resolvable (regardless of the on/off toggle)."""
+    _provider, api_key, _model = _resolve_config(db)
     return bool(api_key)
+
+
+def is_enabled(db=None) -> bool:
+    """The admin has turned AI summaries on (the toggle). Summary generation
+    requires this AND a configured key."""
+    if db is not None:
+        try:
+            s = db.query(models.AiSettings).first()
+            if s is not None:
+                return bool(s.enabled)
+        except Exception as exc:
+            logger.warning("Could not read AiSettings: %s", exc)
+    # Env fallback: enabled implicitly when a provider key is set in the environment.
+    return bool(os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY"))
 
 
 def _observation_text(d: dict) -> str:
@@ -89,8 +119,9 @@ def _observation_text(d: dict) -> str:
     return "\n".join(lines)
 
 
-def _image_blocks(obs, db) -> list:
-    blocks = []
+def _image_raw(obs, db) -> list:
+    """Return a list of (media_type, base64_data) for the observation's photos."""
+    out = []
     images = (
         db.query(models.ObservationImage)
         .filter(models.ObservationImage.observation_id == obs.id)
@@ -106,41 +137,51 @@ def _image_blocks(obs, db) -> list:
             continue
         try:
             with open(path, "rb") as f:
-                data = base64.standard_b64encode(f.read()).decode("utf-8")
-            blocks.append({
-                "type": "image",
-                "source": {"type": "base64", "media_type": mt, "data": data},
-            })
+                out.append((mt, base64.standard_b64encode(f.read()).decode("utf-8")))
         except OSError as exc:
             logger.warning("Could not read image %s for AI summary: %s", img.file_path, exc)
-    return blocks
+    return out
+
+
+def _complete(provider: str, api_key: str, model: str, system: str, text: str,
+              images: list, max_tokens: int) -> str:
+    """Provider-agnostic completion. images = list of (media_type, base64)."""
+    if provider == "openai":
+        from openai import OpenAI
+        content = [{"type": "text", "text": text}]
+        for mt, data in images:
+            content.append({"type": "image_url", "image_url": {"url": f"data:{mt};base64,{data}"}})
+        client = OpenAI(api_key=api_key)
+        resp = client.chat.completions.create(
+            model=model,
+            max_tokens=max_tokens,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": content}],
+        )
+        return (resp.choices[0].message.content or "").strip()
+
+    # default: Anthropic
+    import anthropic
+    content = [{"type": "image", "source": {"type": "base64", "media_type": mt, "data": data}}
+               for mt, data in images]
+    content.append({"type": "text", "text": text})
+    client = anthropic.Anthropic(api_key=api_key)
+    resp = client.messages.create(
+        model=model, max_tokens=max_tokens, system=system,
+        messages=[{"role": "user", "content": content}],
+    )
+    return "".join(b.text for b in resp.content if b.type == "text").strip()
 
 
 def generate_summary(obs, obs_data: dict, db) -> str:
     """Generate an AI summary for an observation. Raises on failure."""
-    import anthropic
-
-    api_key, model = _resolve_config(db)
+    provider, api_key, model = _resolve_config(db)
     if not api_key:
-        raise RuntimeError("No Anthropic API key configured")
-
-    content = _image_blocks(obs, db)
-    content.append({
-        "type": "text",
-        "text": _observation_text(obs_data) + "\n\nWrite the summary now.",
-    })
-
-    client = anthropic.Anthropic(api_key=api_key)
-    resp = client.messages.create(
-        model=model,
-        max_tokens=700,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": content}],
-    )
-    text = "".join(b.text for b in resp.content if b.type == "text").strip()
-    if not text:
+        raise RuntimeError("No AI API key configured")
+    text = _observation_text(obs_data) + "\n\nWrite the summary now."
+    out = _complete(provider, api_key, model, SYSTEM_PROMPT, text, _image_raw(obs, db), 700)
+    if not out:
         raise RuntimeError("Empty AI summary response")
-    return text
+    return out
 
 
 # ── Meeting minutes (MoM) summarisation ─────────────────────────────────────
@@ -162,28 +203,16 @@ MINUTES_MAX_CHARS = 24000
 
 def summarize_minutes(source_text: str, db) -> str:
     """Generate a crisp, concise summary of meeting-minutes text. Raises on failure."""
-    import anthropic
-
-    api_key, model = _resolve_config(db)
+    provider, api_key, model = _resolve_config(db)
     if not api_key:
-        raise RuntimeError("No Anthropic API key configured")
-
+        raise RuntimeError("No AI API key configured")
     text = (source_text or "").strip()
     if not text:
         raise RuntimeError("No text to summarise")
     if len(text) > MINUTES_MAX_CHARS:
         text = text[:MINUTES_MAX_CHARS] + "\n\n[...truncated...]"
-
-    client = anthropic.Anthropic(api_key=api_key)
-    resp = client.messages.create(
-        model=model,
-        max_tokens=800,
-        system=MINUTES_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": [
-            {"type": "text", "text": "Meeting minutes:\n\n" + text + "\n\nWrite the crisp summary now."}
-        ]}],
-    )
-    out = "".join(b.text for b in resp.content if b.type == "text").strip()
+    out = _complete(provider, api_key, model, MINUTES_SYSTEM_PROMPT,
+                    "Meeting minutes:\n\n" + text + "\n\nWrite the crisp summary now.", [], 800)
     if not out:
         raise RuntimeError("Empty AI summary response")
     return out

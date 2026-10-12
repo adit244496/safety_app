@@ -266,8 +266,11 @@ class SmtpSettings(Base):
 class AiSettings(Base):
     __tablename__ = "ai_settings"
     id = Column(Integer, primary_key=True)
-    api_key = Column(String, nullable=False, default="")
+    provider = Column(String, nullable=False, default="anthropic")   # 'anthropic' | 'openai'
+    api_key = Column(String, nullable=False, default="")             # Anthropic key
     model = Column(String, nullable=False, default="claude-haiku-4-5-20251001")
+    openai_api_key = Column(String, nullable=True, default="")       # OpenAI key
+    openai_model = Column(String, nullable=True, default="gpt-4o-mini")
     enabled = Column(Boolean, default=False)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
@@ -554,3 +557,16 @@ class PermitComment(Base):
     created_at = Column(DateTime, default=datetime.now)
     user = relationship("User", foreign_keys=[user_id])
     permit = relationship("WorkPermit", backref="comments")
+
+
+class OhsFormItem(Base):
+    """Admin-managed row of the Monthly OH&S Statistics form (OHS-016).
+    Covers the fixed-description sections: 'section_a', 'general_summary', 'activities'.
+    Values are stored on OhsStatistics keyed by item_key, so rows can be renamed/reordered."""
+    __tablename__ = "ohs_form_items"
+    id = Column(Integer, primary_key=True)
+    section = Column(String, nullable=False)        # 'section_a' | 'general_summary' | 'activities'
+    item_key = Column(String, nullable=False)       # stable slug used to key stored values
+    label = Column(Text, nullable=False)
+    sort_order = Column(Integer, default=0)
+    active = Column(Boolean, default=True)

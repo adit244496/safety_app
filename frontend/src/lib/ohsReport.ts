@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf'
 import {
-  OhsData, OHS_DOC_NO, SECTION_A_ROWS, GENERAL_SUMMARY_ROWS, ACTIVITY_ROWS, monthName,
+  OhsData, OhsFormConfig, OHS_DOC_NO, monthName,
 } from './ohsConfig'
 
 type RGB = [number, number, number]
@@ -16,7 +16,7 @@ const WHITE: RGB = [255, 255, 255]
 
 interface Col { label: string; w: number; align?: 'left' | 'center' }
 
-export async function generateOhsStatisticsPdf(d: OhsData) {
+export async function generateOhsStatisticsPdf(d: OhsData, config: OhsFormConfig) {
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const W = pdf.internal.pageSize.getWidth()
   const H = pdf.internal.pageSize.getHeight()
@@ -159,7 +159,7 @@ export async function generateOhsStatisticsPdf(d: OhsData) {
   table(
     [{ label: 'Sl.', w: 12, align: 'center' }, { label: 'Description', w: 98 },
      { label: 'Avg. persons / day', w: 38, align: 'center' }, { label: 'Man-hours (Monthly)', w: 38, align: 'center' }],
-    SECTION_A_ROWS.map((desc, i) => [String(i + 1), desc, S(d.section_a[i]?.avg_persons), S(d.section_a[i]?.man_hours)]),
+    config.section_a.map((it, i) => [String(i + 1), it.label, S(d.section_a[it.item_key]?.avg_persons), S(d.section_a[it.item_key]?.man_hours)]),
     { zebra: true },
   )
   gap(5)
@@ -184,7 +184,7 @@ export async function generateOhsStatisticsPdf(d: OhsData) {
     { label: 'Remarks', w: 28 },
   ]
   table(cdCols,
-    GENERAL_SUMMARY_ROWS.map((desc, i) => [String(i + 1), desc, S(d.general_summary[i]?.for_month), S(d.general_summary[i]?.cumulative), S(d.general_summary[i]?.remarks)]),
+    config.general_summary.map((it, i) => [String(i + 1), it.label, S(d.general_summary[it.item_key]?.for_month), S(d.general_summary[it.item_key]?.cumulative), S(d.general_summary[it.item_key]?.remarks)]),
     { zebra: true },
   )
   gap(5)
@@ -192,7 +192,7 @@ export async function generateOhsStatisticsPdf(d: OhsData) {
   // D — Activities
   sectionHead('D', 'Activities')
   table(cdCols,
-    ACTIVITY_ROWS.map((desc, i) => [String(i + 1), desc, S(d.activities[i]?.for_month), S(d.activities[i]?.cumulative), S(d.activities[i]?.remarks)]),
+    config.activities.map((it, i) => [String(i + 1), it.label, S(d.activities[it.item_key]?.for_month), S(d.activities[it.item_key]?.cumulative), S(d.activities[it.item_key]?.remarks)]),
     { zebra: true },
   )
   gap(5)

@@ -1,6 +1,6 @@
 import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
 import { usePageTitle } from '../../store/pageTitleContext'
-import { Users, Database, Shield, ClipboardList, Mail, TriangleAlert, FileUp, FileCheck2, GraduationCap, BookOpen, Sparkles } from 'lucide-react'
+import { Users, Database, Shield, ClipboardList, Mail, TriangleAlert, FileUp, FileCheck2, GraduationCap, BookOpen, Sparkles, ListChecks } from 'lucide-react'
 import UsersTab from './UsersTab'
 import DataInputTab from './DataInputTab'
 import SafetyMeasuresTab from './SafetyMeasuresTab'
@@ -12,6 +12,7 @@ import PermitConfigTab from './PermitConfigTab'
 import TrainingCategoriesTab from './TrainingCategoriesTab'
 import GuidelinesTab from './GuidelinesTab'
 import AiSettingsTab from './AiSettingsTab'
+import OhsFormTab from './OhsFormTab'
 
 const TABS = [
   { to: '/admin', label: 'Users', icon: Users, exact: true },
@@ -19,6 +20,7 @@ const TABS = [
   { to: '/admin/safety', label: 'Safety Measures', icon: Shield },
   { to: '/admin/risk-labels', label: 'Risk Labels', icon: TriangleAlert },
   { to: '/admin/ease-criteria', label: 'SHE Criteria', icon: ClipboardList },
+  { to: '/admin/ohs-form', label: 'OH&S Form', icon: ListChecks },
   { to: '/admin/training-categories', label: 'Training', icon: GraduationCap },
   { to: '/admin/permit-config', label: 'Work Permits', icon: FileCheck2 },
   { to: '/admin/guidelines', label: 'Guidelines', icon: BookOpen },
@@ -66,6 +68,7 @@ export default function Admin() {
         <Route path="safety" element={<SafetyMeasuresTab />} />
         <Route path="risk-labels" element={<RiskLabelsTab />} />
         <Route path="ease-criteria" element={<EaseCriteriaTab />} />
+        <Route path="ohs-form" element={<OhsFormTab />} />
         <Route path="permit-config" element={<PermitConfigTab />} />
         <Route path="training-categories" element={<TrainingCategoriesTab />} />
         <Route path="guidelines" element={<GuidelinesTab />} />

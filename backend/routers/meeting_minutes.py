@@ -227,8 +227,10 @@ def generate_ai_summary(mom_id: int, db: Session = Depends(get_db), user: models
     if not m:
         raise HTTPException(404, "Meeting minutes not found")
     _assert_project_access(m, user)
+    if not ai_service.is_enabled(db):
+        raise HTTPException(503, "AI summaries are turned off. Enable them in Admin → AI Summary.")
     if not ai_service.is_configured(db):
-        raise HTTPException(503, "AI summary is not configured. Add an Anthropic API key in Admin → AI Summary.")
+        raise HTTPException(503, "AI summary is not configured. Add an API key in Admin → AI Summary.")
 
     # Gather the source text: extracted PDF text, or the typed content.
     if m.entry_type == "pdf" and m.file_path:

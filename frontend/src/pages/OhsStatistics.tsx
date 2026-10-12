@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import api from '../lib/api'
 import { useAuth } from '../store/authStore'
 import {
-  OhsData, SECTION_A_ROWS, GENERAL_SUMMARY_ROWS, ACTIVITY_ROWS, MONTHS,
+  OhsData, OhsFormConfig, FormItem, MONTHS,
   emptyOhsData, normalizeOhsData, SummaryRow, LtiRow, ViolationRow,
 } from '../lib/ohsConfig'
 import { generateOhsStatisticsPdf } from '../lib/ohsReport'
@@ -15,6 +15,8 @@ const MANPOWER_STORAGE_KEY = 'she_manpower_data'
 
 const now = new Date()
 const YEARS = Array.from({ length: 6 }, (_, i) => now.getFullYear() - 3 + i)
+
+const EMPTY_CONFIG: OhsFormConfig = { section_a: [], general_summary: [], activities: [] }
 
 const num = (v: any) => { const n = parseFloat(String(v ?? '').replace(/,/g, '').trim()); return isNaN(n) ? 0 : n }
 const fmtNum = (n: number) => String(+n.toFixed(2))
@@ -54,6 +56,13 @@ export default function OhsStatistics() {
 
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => api.get('/projects/').then(r => r.data) })
 
+  // Admin-managed form rows (sections A / C / D) — keyed by item_key.
+  const { data: configData } = useQuery({
+    queryKey: ['ohs-form-config'],
+    queryFn: () => api.get('/ohs-statistics/form-config').then(r => r.data),
+  })
+  const config: OhsFormConfig = configData || EMPTY_CONFIG
+
   // default to first project once loaded
   useEffect(() => {
     if (projectId === '' && projects?.length) setProjectId(projects[0].id)
@@ -74,24 +83,33 @@ export default function OhsStatistics() {
     queryFn: () => api.get('/ohs-statistics/cumulative', { params: { project_id: projectId, month, year } }).then(r => r.data),
   })
 
-  // Cumulative = prior saved history + this month's live "For the month" value.
-  const genCum = form.general_summary.map((r, i) => (prior?.general_summary?.[i] ?? 0) + num(r.for_month))
-  const actCum = form.activities.map((r, i) => (prior?.activities?.[i] ?? 0) + num(r.for_month))
-  const withCum = (rows: SummaryRow[], cums: number[]) =>
-    rows.map((r, i) => ({ ...r, cumulative: fmtNum(cums[i] ?? 0) }))
+  // Cumulative = prior saved history + this month's live "For the month" value (keyed by item_key).
+  const cumFor = (items: FormItem[], data: Record<string, SummaryRow>, priorSums: any): Record<string, number> => {
+    const out: Record<string, number> = {}
+    items.forEach(it => { out[it.item_key] = (priorSums?.[it.item_key] ?? 0) + num(data[it.item_key]?.for_month) })
+    return out
+  }
+  const genCum = cumFor(config.general_summary, form.general_summary, prior?.general_summary)
+  const actCum = cumFor(config.activities, form.activities, prior?.activities)
 
-  // populate the form whenever the record (or the selected period) changes
+  const withCum = (data: Record<string, SummaryRow>, cums: Record<string, number>): Record<string, SummaryRow> => {
+    const out: Record<string, SummaryRow> = {}
+    for (const k of Object.keys(data)) out[k] = { ...data[k], cumulative: fmtNum(cums[k] ?? 0) }
+    return out
+  }
+
+  // populate the form whenever the record / config / selected period changes
   useEffect(() => {
     if (projectId === '') return
-    setForm(normalizeOhsData(Number(projectId), month, year, record))
-  }, [record, projectId, month, year])
+    setForm(normalizeOhsData(Number(projectId), month, year, record, config))
+  }, [record, projectId, month, year, configData]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const set = <K extends keyof OhsData>(k: K, v: OhsData[K]) => setForm(f => ({ ...f, [k]: v }))
 
-  const setSecA = (i: number, k: 'avg_persons' | 'man_hours', v: string) =>
-    setForm(f => ({ ...f, section_a: f.section_a.map((r, idx) => idx === i ? { ...r, [k]: v } : r) }))
-  const setSummary = (key: 'general_summary' | 'activities', i: number, k: keyof SummaryRow, v: string) =>
-    setForm(f => ({ ...f, [key]: (f[key] as SummaryRow[]).map((r, idx) => idx === i ? { ...r, [k]: v } : r) }))
+  const setSecA = (key: string, k: 'avg_persons' | 'man_hours', v: string) =>
+    setForm(f => ({ ...f, section_a: { ...f.section_a, [key]: { ...(f.section_a[key] || { avg_persons: '', man_hours: '' }), [k]: v } } }))
+  const setSummary = (section: 'general_summary' | 'activities', key: string, k: keyof SummaryRow, v: string) =>
+    setForm(f => ({ ...f, [section]: { ...f[section], [key]: { ...(f[section][key] || { for_month: '', cumulative: '', remarks: '' }), [k]: v } } }))
   const setLti = (i: number, k: keyof LtiRow, v: string) =>
     setForm(f => ({ ...f, lti: f.lti.map((r, idx) => idx === i ? { ...r, [k]: v } : r) }))
   const setViol = (i: number, k: keyof ViolationRow, v: string) =>
@@ -105,8 +123,9 @@ export default function OhsStatistics() {
     if (!projectName) return
     try {
       const stored: any[] = JSON.parse(localStorage.getItem(MANPOWER_STORAGE_KEY) || '[]')
-      const manHours = form.section_a.reduce((s, r) => s + (parseFloat(r.man_hours) || 0), 0)
-      const avgPersons = form.section_a.reduce((s, r) => s + (parseFloat(r.avg_persons) || 0), 0)
+      const rows = Object.values(form.section_a)
+      const manHours = rows.reduce((s, r) => s + (parseFloat(r.man_hours) || 0), 0)
+      const avgPersons = rows.reduce((s, r) => s + (parseFloat(r.avg_persons) || 0), 0)
       const map = new Map(stored.map(r => [r.name, r]))
       map.set(projectName, { name: projectName, manHours, avgPersons })
       localStorage.setItem(MANPOWER_STORAGE_KEY, JSON.stringify([...map.values()]))
@@ -141,7 +160,7 @@ export default function OhsStatistics() {
       ...form, project_id: Number(projectId), project_name: projectName, month, year,
       general_summary: withCum(form.general_summary, genCum),
       activities: withCum(form.activities, actCum),
-    })
+    }, config)
   }
 
   return (
@@ -157,6 +176,7 @@ export default function OhsStatistics() {
             <p className="text-xs text-slate-400 leading-relaxed max-w-2xl">
               Form <span className="font-medium text-slate-500">OHS-016</span>. Select a project and period, fill in the
               monthly statistics, and generate the report. Section A also feeds the manpower figures used in the SHE dashboard PDF.
+              Rows are managed in <span className="font-medium text-slate-500">Admin → OH&amp;S Form</span>.
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
@@ -220,12 +240,12 @@ export default function OhsStatistics() {
                 </tr>
               </thead>
               <tbody>
-                {SECTION_A_ROWS.map((desc, i) => (
-                  <tr key={i} className="border-b border-slate-100">
+                {config.section_a.map((it, i) => (
+                  <tr key={it.item_key} className="border-b border-slate-100">
                     <td className="py-2 pr-2 text-slate-400">{i + 1}</td>
-                    <td className="py-2 pr-3 text-slate-700">{desc}</td>
-                    <td className="py-1.5 px-2"><Cell align="center" disabled={!canWrite} value={form.section_a[i]?.avg_persons || ''} onChange={v => setSecA(i, 'avg_persons', v)} /></td>
-                    <td className="py-1.5 px-2"><Cell align="center" disabled={!canWrite} value={form.section_a[i]?.man_hours || ''} onChange={v => setSecA(i, 'man_hours', v)} /></td>
+                    <td className="py-2 pr-3 text-slate-700">{it.label}</td>
+                    <td className="py-1.5 px-2"><Cell align="center" disabled={!canWrite} value={form.section_a[it.item_key]?.avg_persons || ''} onChange={v => setSecA(it.item_key, 'avg_persons', v)} /></td>
+                    <td className="py-1.5 px-2"><Cell align="center" disabled={!canWrite} value={form.section_a[it.item_key]?.man_hours || ''} onChange={v => setSecA(it.item_key, 'man_hours', v)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -265,10 +285,10 @@ export default function OhsStatistics() {
           </div>
 
           {/* C — General Summary */}
-          <SummaryTable letter="C" title="General Summary" rows={GENERAL_SUMMARY_ROWS} data={form.general_summary} cumulative={genCum} disabled={!canWrite} onChange={(i, k, v) => setSummary('general_summary', i, k, v)} />
+          <SummaryTable letter="C" title="General Summary" items={config.general_summary} data={form.general_summary} cumulative={genCum} disabled={!canWrite} onChange={(key, k, v) => setSummary('general_summary', key, k, v)} />
 
           {/* D — Activities */}
-          <SummaryTable letter="D" title="Activities" rows={ACTIVITY_ROWS} data={form.activities} cumulative={actCum} disabled={!canWrite} onChange={(i, k, v) => setSummary('activities', i, k, v)} />
+          <SummaryTable letter="D" title="Activities" items={config.activities} data={form.activities} cumulative={actCum} disabled={!canWrite} onChange={(key, k, v) => setSummary('activities', key, k, v)} />
 
           {/* E — Violations */}
           <div className="card overflow-x-auto">
@@ -315,9 +335,9 @@ export default function OhsStatistics() {
 }
 
 // ── reusable summary table (sections C & D) ──────────────────────────────────
-function SummaryTable({ letter, title, rows, data, cumulative, disabled, onChange }: {
-  letter: string; title: string; rows: string[]; data: SummaryRow[]; cumulative: number[]; disabled: boolean
-  onChange: (i: number, k: keyof SummaryRow, v: string) => void
+function SummaryTable({ letter, title, items, data, cumulative, disabled, onChange }: {
+  letter: string; title: string; items: FormItem[]; data: Record<string, SummaryRow>; cumulative: Record<string, number>; disabled: boolean
+  onChange: (key: string, k: keyof SummaryRow, v: string) => void
 }) {
   return (
     <div className="card overflow-x-auto">
@@ -335,18 +355,18 @@ function SummaryTable({ letter, title, rows, data, cumulative, disabled, onChang
           </tr>
         </thead>
         <tbody>
-          {rows.map((desc, i) => (
-            <tr key={i} className="border-b border-slate-100">
+          {items.map((it, i) => (
+            <tr key={it.item_key} className="border-b border-slate-100">
               <td className="py-2 pr-2 text-slate-400">{i + 1}</td>
-              <td className="py-2 pr-3 text-slate-700">{desc}</td>
-              <td className="py-1.5 px-2"><Cell align="center" disabled={disabled} value={data[i]?.for_month || ''} onChange={v => onChange(i, 'for_month', v)} /></td>
+              <td className="py-2 pr-3 text-slate-700">{it.label}</td>
+              <td className="py-1.5 px-2"><Cell align="center" disabled={disabled} value={data[it.item_key]?.for_month || ''} onChange={v => onChange(it.item_key, 'for_month', v)} /></td>
               <td className="py-1.5 px-2 text-center">
                 <span className="inline-block w-full text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-100 rounded-md px-2 py-1.5"
                   title="Project-to-date total (history + this month), auto-calculated">
-                  {fmtNum(cumulative[i] ?? 0)}
+                  {fmtNum(cumulative[it.item_key] ?? 0)}
                 </span>
               </td>
-              <td className="py-1.5 px-2"><Cell disabled={disabled} value={data[i]?.remarks || ''} onChange={v => onChange(i, 'remarks', v)} /></td>
+              <td className="py-1.5 px-2"><Cell disabled={disabled} value={data[it.item_key]?.remarks || ''} onChange={v => onChange(it.item_key, 'remarks', v)} /></td>
             </tr>
           ))}
         </tbody>

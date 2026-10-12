@@ -63,7 +63,12 @@ def _run_migrations():
         ("work_permits", "extension_approved_by",  "INTEGER REFERENCES users(id)", "INTEGER REFERENCES users(id)"),
         ("work_permits", "extension_approved_at",  "DATETIME", "TIMESTAMP"),
     ]
-    all_migrations = _obs_columns + _user_columns + _training_columns + _permit_columns
+    _ai_columns = [
+        ("ai_settings", "provider",       "VARCHAR", None),
+        ("ai_settings", "openai_api_key", "VARCHAR", None),
+        ("ai_settings", "openai_model",   "VARCHAR", None),
+    ]
+    all_migrations = _obs_columns + _user_columns + _training_columns + _permit_columns + _ai_columns
 
     with engine.connect() as conn:
         if is_sqlite:

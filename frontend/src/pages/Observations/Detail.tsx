@@ -359,13 +359,16 @@ function ReplyForm({ onSubmit, isPending, isContractor, defaultImageType = 'foll
 }
 
 // ── AI summary ────────────────────────────────────────────────────────────
-function AiSummaryCard({ obs }: { obs: any }) {
+function AiSummaryCard({ obs, queryId }: { obs: any; queryId?: string }) {
   const qc = useQueryClient()
   const gen = useMutation({
     mutationFn: () =>
       api.post(`/observations/${obs.id}/ai-summary`).then(r => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['observation', String(obs.id)] })
+    onSuccess: (data) => {
+      // Merge the fresh summary straight into the cached observation so it shows
+      // immediately, then refetch to stay in sync.
+      qc.setQueryData(['observation', queryId], (prev: any) => prev ? { ...prev, ...data } : prev)
+      qc.invalidateQueries({ queryKey: ['observation', queryId] })
       toast.success('AI summary generated')
     },
     onError: (e: any) =>
@@ -635,6 +638,9 @@ export default function ObservationDetail() {
             </div>
             <p className="text-xs text-gray-500 mt-1">
               {obs.created_by_name} &nbsp;·&nbsp; {fmtDateTime(obs.created_at)}
+              {obs.target_date_name && (
+                <> &nbsp;·&nbsp; <span className="text-gray-400">Target:</span> <span className="font-medium text-gray-600">{obs.target_date_name}</span></>
+              )}
             </p>
           </div>
         </div>
@@ -681,7 +687,7 @@ export default function ObservationDetail() {
         <div className="space-y-4 min-w-0">
 
           {/* AI summary */}
-          <AiSummaryCard obs={obs} />
+          <AiSummaryCard obs={obs} queryId={id} />
 
           {/* Risk assessment */}
           {obs.risk_level && <RiskCard obs={obs} />}

@@ -213,19 +213,19 @@ export default function Dashboard() {
   const MONTHS_SHORT  = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
   // Activity rollup from the Monthly OH&S Statistics (project-to-date totals).
-  const act = (i: number) => Math.round(ohsTotals?.activities?.[i] ?? 0)
-  const gen = (i: number) => Math.round(ohsTotals?.general_summary?.[i] ?? 0)
+  const act = (k: string) => Math.round(ohsTotals?.activities?.[k] ?? 0)
+  const gen = (k: string) => Math.round(ohsTotals?.general_summary?.[k] ?? 0)
   const activityCards = [
-    { label: 'Tool Box Talks',        value: act(7),                 icon: HardHat,       color: 'text-amber-600',   bg: 'bg-amber-50'   },
-    { label: 'Trainings Held',        value: act(1) + act(2) + act(3), icon: GraduationCap, color: 'text-indigo-600',  bg: 'bg-indigo-50'  },
-    { label: 'Safety Inductions',     value: act(0),                 icon: ShieldCheck,   color: 'text-emerald-600', bg: 'bg-emerald-50' },
-    { label: 'Mock Drills',           value: act(8),                 icon: Siren,         color: 'text-rose-600',    bg: 'bg-rose-50'    },
-    { label: 'First-Aid Cases',       value: gen(4),                 icon: HeartPulse,    color: 'text-red-600',     bg: 'bg-red-50'     },
-    { label: 'Pre-Employment Medicals', value: act(9),               icon: Stethoscope,   color: 'text-sky-600',     bg: 'bg-sky-50'     },
-    { label: 'Medical Camps',         value: act(10),                icon: Activity,      color: 'text-teal-600',    bg: 'bg-teal-50'    },
-    { label: 'Safety Campaigns',      value: act(11),                icon: Megaphone,     color: 'text-violet-600',  bg: 'bg-violet-50'  },
-    { label: 'Near-Misses',           value: gen(2),                 icon: AlertTriangle, color: 'text-orange-600',  bg: 'bg-orange-50'  },
-    { label: 'H&S Audits',            value: act(12),                icon: ClipboardCheck, color: 'text-lime-600',   bg: 'bg-lime-50'    },
+    { label: 'Tool Box Talks',        value: act('toolbox_talks'),   icon: HardHat,       color: 'text-amber-600',   bg: 'bg-amber-50'   },
+    { label: 'Trainings Held',        value: act('training_an_staff') + act('training_contractor_staff') + act('training_contractor_workers'), icon: GraduationCap, color: 'text-indigo-600',  bg: 'bg-indigo-50'  },
+    { label: 'Safety Inductions',     value: act('inductions'),      icon: ShieldCheck,   color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { label: 'Mock Drills',           value: act('mock_drills'),     icon: Siren,         color: 'text-rose-600',    bg: 'bg-rose-50'    },
+    { label: 'First-Aid Cases',       value: gen('first_aid'),       icon: HeartPulse,    color: 'text-red-600',     bg: 'bg-red-50'     },
+    { label: 'Pre-Employment Medicals', value: act('pre_employment_medical'), icon: Stethoscope, color: 'text-sky-600',  bg: 'bg-sky-50'     },
+    { label: 'Medical Camps',         value: act('medical_camps'),   icon: Activity,      color: 'text-teal-600',    bg: 'bg-teal-50'    },
+    { label: 'Safety Campaigns',      value: act('safety_campaigns'), icon: Megaphone,    color: 'text-violet-600',  bg: 'bg-violet-50'  },
+    { label: 'Near-Misses',           value: gen('near_misses'),     icon: AlertTriangle, color: 'text-orange-600',  bg: 'bg-orange-50'  },
+    { label: 'H&S Audits',            value: act('hs_audits'),       icon: ClipboardCheck, color: 'text-lime-600',   bg: 'bg-lime-50'    },
   ]
 
   const monthData = ((data?.byMonthStatus || []) as any[]).map((d: any) => ({
