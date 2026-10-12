@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import Sidebar from './Sidebar'
@@ -12,6 +12,22 @@ export default function Layout() {
   // Legacy Data is a wide embedded dashboard — let it use the full content area
   // (no max-width cap, no padding) instead of the standard constrained page layout.
   const fullBleed = loc.pathname.startsWith('/legacy-data')
+
+  // SHE Report is wide and docks its own filter rail — auto-collapse the nav sidebar
+  // on entry (remembering the prior state) and restore it on leave. Fires only on the
+  // enter/leave transition, so a manual expand while on the report isn't overridden.
+  const isReport = loc.pathname.startsWith('/report')
+  const prevCollapsed = useRef<boolean | null>(null)
+  useEffect(() => {
+    if (isReport) {
+      if (prevCollapsed.current === null) prevCollapsed.current = collapsed
+      setCollapsed(true)
+    } else if (prevCollapsed.current !== null) {
+      setCollapsed(prevCollapsed.current)
+      prevCollapsed.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReport])
 
   return (
     <PageTitleProvider>

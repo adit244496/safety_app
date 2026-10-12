@@ -1378,11 +1378,11 @@ export default function ReportPage() {
       {/* ── Control panel ── */}
       {/* Sticky filter pane. Negative `top` rides the pane up over the page's top padding while
           matching top padding keeps its content in place — so the report never peeks above it. */}
-      <div className="no-print trk-no-print sticky -top-4 md:-top-6 z-30 bg-slate-50 pt-4 md:pt-6 pb-2">
+      <div className="no-print trk-no-print sticky -top-4 md:-top-6 z-30 bg-slate-50 pt-2 md:pt-3 pb-1">
         <style dangerouslySetInnerHTML={{ __html: STYLE }} />
 
         {/* Tabs (title lives in the app header) */}
-        <div className="flex items-center justify-end gap-2 mb-2">
+        <div className="flex items-center justify-end gap-2">
           <div className="flex gap-1 bg-slate-100 rounded-xl p-1 self-start sm:self-auto flex-shrink-0">
             <button
               onClick={() => setActiveTab('inspection')}
@@ -1419,9 +1419,13 @@ export default function ReportPage() {
             </button>
           </div>
         </div>
+      </div>
 
-        {/* Shared filter panel */}
-        <div className="card shadow-md !p-3">
+      {/* Body: filters dock to the left when open; report fills the rest. */}
+      <div className={filtersOpen ? 'flex flex-col lg:flex-row gap-4 items-start' : ''}>
+        {/* Filter panel — left rail when open, full-width summary bar when collapsed */}
+        <div className={filtersOpen ? 'w-full lg:w-80 xl:w-96 flex-shrink-0 lg:sticky lg:top-2 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto thin-scroll' : ''}>
+          <div className="card shadow-md !p-3">
           {filtersOpen ? (
             <div className="flex items-center justify-between gap-2 mb-2">
               <h2 className="text-sm font-semibold text-gray-800">Report Parameters</h2>
@@ -1447,7 +1451,7 @@ export default function ReportPage() {
             </div>
           )}
           {filtersOpen && (
-          <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6">
+          <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-1">
             <div>
               <label className="label">Project</label>
               <MultiSelectFilter
@@ -1594,15 +1598,17 @@ export default function ReportPage() {
             )}
           </div>
           )}
+          </div>
         </div>
 
+        {/* Report output — fills the width beside the filter rail */}
+        <div className={filtersOpen ? 'flex-1 min-w-0 space-y-4' : 'space-y-4'}>
         {generated && !isFetching && observations.length === 0 && (
           <div className="card flex items-center gap-3 text-gray-500">
             <AlertTriangle className="w-5 h-5 text-amber-500" />
             No observations found for the selected filters.
           </div>
         )}
-      </div>
 
       {/* ── SHE Inspection Report output ── */}
       {generated && !isFetching && observations.length > 0 && activeTab === 'inspection' && (
@@ -1677,6 +1683,8 @@ export default function ReportPage() {
       {activeTab === 'mis' && (
         <MisReport projectIds={projectIds} dateFrom={dateFrom} dateTo={dateTo} generated={generated} />
       )}
+        </div>
+      </div>
     </div>
   )
 }

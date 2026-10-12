@@ -648,17 +648,25 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
    DATA
    ============================================================ */
 const RAW = JSON.parse(document.getElementById('she-data').textContent);
-const HEADER = RAW.header;
+let HEADER = RAW.header;
 const IDX = {};
-HEADER.forEach(function(h,i){ IDX[h]=i; });
+function setHeader(h){ HEADER = h; for (var k in IDX){ delete IDX[k]; } HEADER.forEach(function(x,i){ IDX[x]=i; }); }
+setHeader(RAW.header);
 let ROWS = RAW.rows.slice();
 
-/* ---- Persistence: keep uploaded data across page reloads (IndexedDB) ---- */
-const IDB_NAME='she_legacy', IDB_STORE='kv', IDB_KEY='rows';
-function idbOpen(){ return new Promise(function(res,rej){ var r=indexedDB.open(IDB_NAME,1); r.onupgradeneeded=function(){ r.result.createObjectStore(IDB_STORE); }; r.onsuccess=function(){ res(r.result); }; r.onerror=function(){ rej(r.error); }; }); }
-function idbSet(k,v){ return idbOpen().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction(IDB_STORE,'readwrite'); tx.objectStore(IDB_STORE).put(v,k); tx.oncomplete=function(){ res(); }; tx.onerror=function(){ rej(tx.error); }; }); }); }
-function idbGet(k){ return idbOpen().then(function(db){ return new Promise(function(res,rej){ var tx=db.transaction(IDB_STORE,'readonly'); var g=tx.objectStore(IDB_STORE).get(k); g.onsuccess=function(){ res(g.result); }; g.onerror=function(){ rej(g.error); }; }); }); }
-function persistRows(){ try { idbSet(IDB_KEY, ROWS).catch(function(){}); } catch(e){} }
+/* ---- Shared persistence: one legacy dataset on the server for every user. ----
+   Admin/SuperAdmin uploads replace it (PUT); everyone reads it (GET). The token is
+   shared with the main app via same-origin localStorage. */
+let IS_ADMIN = false;
+function authHeaders(){ var t=null; try { t=localStorage.getItem('token'); } catch(e){} return t ? { 'Authorization':'Bearer '+t } : {}; }
+function apiGet(path){ return fetch('/api'+path, { headers: authHeaders() }).then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); }); }
+function apiPut(path, body){ return fetch('/api'+path, { method:'PUT', headers: Object.assign({ 'Content-Type':'application/json' }, authHeaders()), body: JSON.stringify(body) }).then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); }); }
+function persistRows(){
+  if (!IS_ADMIN) return;
+  apiPut('/legacy-data/', { header: HEADER, rows: ROWS }).catch(function(err){
+    showToast(err===403 ? 'You are not authorized to change legacy data.' : 'Could not save data to the server. Changes may not be visible to others.', 'error');
+  });
+}
 
 const MULTI_FIELDS = ['project','status','fy','quarter','month','violation_category','root_cause','hazard_type','severity','probability','risk_grade','contractor','eic','target_date'];
 
@@ -1648,6 +1656,10 @@ function parseTrackerSheet(ws, fallbackName){
 }
 
 function handleFiles(fileList){
+  if (!IS_ADMIN){
+    showToast('Only an Admin or SuperAdmin can upload legacy data.', 'error');
+    return;
+  }
   const files = Array.from(fileList || []).filter(function(f){ return /\.xlsx?$/i.test(f.name); });
   if (!files.length){
     showToast('No .xlsx files were selected.', 'error');
@@ -1741,6 +1753,12 @@ function initDataControls(){
   const fileInput = document.getElementById('fileInput');
   const clearBtn = document.getElementById('clearDataBtn');
 
+  // Only Admin/SuperAdmin manage the shared dataset; hide the controls for everyone else.
+  if (!IS_ADMIN){
+    if (uploadBtn) uploadBtn.style.display = 'none';
+    if (clearBtn) clearBtn.style.display = 'none';
+  }
+
   uploadBtn.addEventListener('click', function(){ fileInput.click(); });
   fileInput.addEventListener('change', function(e){
     handleFiles(e.target.files);
@@ -1802,10 +1820,17 @@ function init(){
     });
     update();
   }
-  // Restore any previously uploaded/cleared data before first render
-  idbGet(IDB_KEY).then(function(saved){
-    if (saved && Array.isArray(saved)){
-      ROWS = saved;
+  // Load the shared server dataset (and the viewer's role) before first render.
+  Promise.all([
+    apiGet('/auth/me').catch(function(){ return null; }),
+    apiGet('/legacy-data/').catch(function(){ return null; })
+  ]).then(function(res){
+    var me = res[0], server = res[1];
+    IS_ADMIN = !!(me && (me.role === 'SuperAdmin' || me.role === 'Admin'));
+    if (server && server.header && Array.isArray(server.rows)){
+      // Server has an uploaded dataset — it replaces the bundled default for everyone.
+      setHeader(server.header);
+      ROWS = server.rows;
       refreshDerivedData();
     }
     boot();

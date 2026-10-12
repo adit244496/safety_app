@@ -570,3 +570,15 @@ class OhsFormItem(Base):
     label = Column(Text, nullable=False)
     sort_order = Column(Integer, default=0)
     active = Column(Boolean, default=True)
+
+
+class LegacyData(Base):
+    """Single shared store for the Legacy Data dashboard dataset. Admin/SuperAdmin
+    upload replaces the stored JSON ({header, rows}); every user with access reads it,
+    so legacy data is the same for everyone instead of living in each browser."""
+    __tablename__ = "legacy_data"
+    id = Column(Integer, primary_key=True)
+    data = Column(Text, nullable=True)              # JSON: {"header": [...], "rows": [[...], ...]}
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+    updater = relationship("User", foreign_keys=[updated_by])
