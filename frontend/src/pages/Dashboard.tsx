@@ -35,6 +35,12 @@ const PRIORITY_OPTIONS: MSOption[] = [
   { value: 'Low',    label: 'Low'    },
 ]
 
+// Status filter options — effective statuses (incl. derived Overdue / Overdue & Closed).
+const STATUS_OPTIONS: MSOption[] = [
+  'Open', 'Under Review', 'Partially Closed', 'Closed',
+  'Overdue', 'Overdue & Closed', 'Unresolved & Closed', 'Positive Approach',
+].map(s => ({ value: s, label: STATUS_DISPLAY[s] || s }))
+
 const AGEING_FILTER_OPTIONS: MSOption[] = [
   { value: 'overdue',   label: 'Overdue'           },
   { value: 'due_soon',  label: 'Due within 7 days' },
@@ -89,6 +95,7 @@ export default function Dashboard() {
   )
   const [coreConcernIds, setCoreConcernIds] = useState<number[]>([])
   const [riskLevels,     setRiskLevels]     = useState<string[]>([])
+  const [statusFilter,   setStatusFilter]   = useState<string[]>([])
   const [ageingFilter,   setAgeingFilter]   = useState<string[]>([])
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -99,6 +106,7 @@ export default function Dashboard() {
     (!isContractor && selectedContractors.length > 0 ? 1 : 0) +
     (coreConcernIds.length > 0 ? 1 : 0) +
     (riskLevels.length    > 0 ? 1 : 0) +
+    (statusFilter.length  > 0 ? 1 : 0) +
     (ageingFilter.length  > 0 ? 1 : 0) +
     (dateFrom             ? 1 : 0) +
     (dateTo               ? 1 : 0)
@@ -160,7 +168,7 @@ export default function Dashboard() {
 
   // ── Stats query ─────────────────────────────────────────────────────────
   const { data, isLoading } = useQuery({
-    queryKey: ['stats', projectIds, buildingId, selectedContractors, dateFrom, dateTo, coreConcernIds, riskLevels, ageingFilter],
+    queryKey: ['stats', projectIds, buildingId, selectedContractors, dateFrom, dateTo, coreConcernIds, riskLevels, statusFilter, ageingFilter],
     queryFn: () => api.get('/observations/stats/summary', {
       params: {
         project_id:         projectIds.length          ? projectIds          : undefined,
@@ -170,6 +178,7 @@ export default function Dashboard() {
         date_to:            dateTo               || undefined,
         core_concern_id:    coreConcernIds.length ? coreConcernIds : undefined,
         risk_level:         riskLevels.length    ? riskLevels    : undefined,
+        status:             statusFilter.length  ? statusFilter  : undefined,
         aging:              ageingFilter.length  ? ageingFilter  : undefined,
       },
     }).then(r => r.data),
@@ -299,7 +308,7 @@ export default function Dashboard() {
   const resetFilters = () => {
     setProjectIds([]); setBuildingId('')
     if (!isContractor) setSelectedContractors([])
-    setCoreConcernIds([]); setRiskLevels([]); setAgeingFilter([])
+    setCoreConcernIds([]); setRiskLevels([]); setStatusFilter([]); setAgeingFilter([])
     setDateFrom(''); setDateTo('')
   }
 
@@ -765,6 +774,8 @@ export default function Dashboard() {
             onChange={v => setRiskLevels(v as string[])} placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
           <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}
             onChange={v => setCoreConcernIds(v as number[])} placeholder="Core Concern" className="w-full sm:w-auto sm:min-w-[130px]" />
+          <MultiSelectFilter size="sm" options={STATUS_OPTIONS} value={statusFilter}
+            onChange={v => setStatusFilter(v as string[])} placeholder="Status" className="w-full sm:w-auto sm:min-w-[120px]" />
           <MultiSelectFilter size="sm" options={AGEING_FILTER_OPTIONS} value={ageingFilter}
             onChange={v => setAgeingFilter(v as string[])} placeholder="Ageing" className="w-full sm:w-auto sm:min-w-[130px]" />
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">

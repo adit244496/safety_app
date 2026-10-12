@@ -274,6 +274,7 @@ def stats(
     date_to: Optional[str] = Query(None),
     core_concern_id: List[int] = Query(default=[]),
     risk_level: List[str] = Query(default=[]),
+    status: List[str] = Query(default=[]),
     aging: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
@@ -298,6 +299,8 @@ def stats(
             q = q.filter(models.Observation.core_concern_id.in_(core_concern_id))
         if risk_level:
             q = q.filter(models.Observation.risk_level.in_(risk_level))
+        if status:
+            q = q.filter(_status_filter_condition(status))
         return q
 
     # Resolve aging filter → set of eligible observation IDs
@@ -326,8 +329,8 @@ def stats(
         .all()
     )
     aging_buckets: dict = {"positive_approach": 0, "no_target": 0, "on_time": 0, "overdue_1_7": 0, "overdue_8_30": 0, "overdue_30_plus": 0}
-    for target_str, closed_at, status in aging_rows:
-        if status == 'Positive Approach':
+    for target_str, closed_at, _row_status in aging_rows:
+        if _row_status == 'Positive Approach':
             aging_buckets["positive_approach"] += 1
         else:
             bucket = _aging_bucket(_days_aging(target_str, closed_at, today))
