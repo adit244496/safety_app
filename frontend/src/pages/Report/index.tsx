@@ -3,7 +3,7 @@ import { usePageTitle } from '../../store/pageTitleContext'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../store/authStore'
-import { FileText, AlertTriangle, ZoomIn, ZoomOut, X, Download, LayoutList, BarChart3, ChevronUp, SlidersHorizontal } from 'lucide-react'
+import { FileText, AlertTriangle, ZoomIn, ZoomOut, X, Download, LayoutList, BarChart3, ChevronUp, SlidersHorizontal, Maximize2, Minimize2 } from 'lucide-react'
 import ExcelJS from 'exceljs'
 import { generateHtmlReportPdf } from '../../lib/printPdf'
 import api from '../../lib/api'
@@ -1276,6 +1276,15 @@ export default function ReportPage() {
   const [filtersOpen,     setFiltersOpen]     = useState(true)
   const [exportingExcel,  setExportingExcel]  = useState(false)
   const [exportingPdfInsp, setExportingPdfInsp] = useState(false)
+  const [fullscreen,      setFullscreen]      = useState(false)
+
+  // Full-screen (maximize) mode — overlay the report over the whole viewport; Esc exits.
+  useEffect(() => {
+    if (!fullscreen) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setFullscreen(false) }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [fullscreen])
 
   const { data: projects } = useQuery({
     queryKey: ['projects'], queryFn: () => api.get('/projects/').then(r => r.data), ...STALE,
@@ -1379,7 +1388,7 @@ export default function ReportPage() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className={fullscreen ? 'fixed inset-0 z-[60] bg-slate-50 overflow-auto thin-scroll p-4 md:p-6 space-y-5' : 'space-y-5'}>
       {/* ── Control panel ── */}
       {/* Sticky filter pane. Negative `top` rides the pane up over the page's top padding while
           matching top padding keeps its content in place — so the report never peeks above it. */}
@@ -1388,6 +1397,14 @@ export default function ReportPage() {
 
         {/* Tabs (title lives in the app header) */}
         <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => setFullscreen(f => !f)}
+            title={fullscreen ? 'Exit full screen (Esc)' : 'Full screen'}
+            className="mr-auto flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-slate-100 text-gray-600 hover:text-indigo-700 hover:bg-slate-200 transition flex-shrink-0"
+          >
+            {fullscreen ? <Minimize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+            <span className="hidden sm:inline">{fullscreen ? 'Exit full screen' : 'Full screen'}</span>
+          </button>
           <div className="flex gap-1 bg-slate-100 rounded-xl p-1 self-start sm:self-auto flex-shrink-0">
             <button
               onClick={() => setActiveTab('inspection')}

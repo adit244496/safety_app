@@ -927,7 +927,8 @@ export default function Dashboard() {
               <p className="text-[10px] text-gray-400 mb-3">Entire filtered tenure</p>
               {statusPie.length > 0 ? (
                 <>
-                  <div className="relative">
+                  <div className="flex items-center gap-2">
+                  <div className="relative w-1/2 flex-shrink-0">
                     <ResponsiveContainer width="100%" height={190}>
                       <PieChart>
                         <Pie
@@ -969,18 +970,19 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  <div className="space-y-1.5 mt-2">
+                  <div className="flex-1 min-w-0 space-y-1">
                     {statusPie.map((s: any) => (
                       <button key={s.name} type="button" onClick={() => goToObservations({ status: [s.name] })}
                         title={`View ${displayStatus(s.name)} observations`}
-                        className="w-full flex items-center justify-between text-xs rounded-md px-1.5 py-1 -mx-1.5 hover:bg-gray-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                        <div className="flex items-center gap-1.5">
+                        className="min-w-0 w-full flex items-center justify-between gap-1.5 text-xs rounded-md px-1.5 py-1 hover:bg-gray-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                        <div className="flex items-center gap-1.5 min-w-0">
                           <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: STATUS_COLORS[s.name] }} />
-                          <span className="text-gray-600">{displayStatus(s.name)}</span>
+                          <span className="text-gray-600 truncate">{displayStatus(s.name)}</span>
                         </div>
-                        <span className="font-semibold text-gray-900">{s.value}</span>
+                        <span className="font-semibold text-gray-900 flex-shrink-0">{s.value}</span>
                       </button>
                     ))}
+                  </div>
                   </div>
                 </>
               ) : <div className="h-40 flex items-center justify-center text-gray-400 text-sm">No data</div>}
@@ -1002,7 +1004,8 @@ export default function Dashboard() {
                   <p className="text-[10px] text-gray-400 mb-3">Days past target rectification date</p>
                   {agingPie.length > 0 ? (
                     <>
-                      <div className="relative">
+                      <div className="flex items-center gap-2">
+                      <div className="relative w-1/2 flex-shrink-0">
                         <ResponsiveContainer width="100%" height={190}>
                           <PieChart>
                             <Pie
@@ -1043,18 +1046,19 @@ export default function Dashboard() {
                           </div>
                         </div>
                       </div>
-                      <div className="space-y-1.5 mt-auto pt-3">
+                      <div className="flex-1 min-w-0 space-y-1">
                         {agingPie.map((d) => (
                           <button key={d.key} type="button" onClick={() => goToAgeing(d.key)}
                             title={`View ${d.name} observations`}
-                            className="w-full flex items-center justify-between text-xs rounded-md px-1.5 py-1 -mx-1.5 hover:bg-gray-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                            <div className="flex items-center gap-1.5">
+                            className="min-w-0 w-full flex items-center justify-between gap-1.5 text-xs rounded-md px-1.5 py-1 hover:bg-gray-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                            <div className="flex items-center gap-1.5 min-w-0">
                               <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: AGEING_COLORS[d.key] }} />
-                              <span className="text-gray-600">{d.name}</span>
+                              <span className="text-gray-600 truncate">{d.name}</span>
                             </div>
-                            <span className="font-semibold text-gray-900">{d.value}</span>
+                            <span className="font-semibold text-gray-900 flex-shrink-0">{d.value}</span>
                           </button>
                         ))}
+                      </div>
                       </div>
                     </>
                   ) : <div className="h-40 flex items-center justify-center text-gray-400 text-sm">No data</div>}
@@ -1093,47 +1097,6 @@ export default function Dashboard() {
               ) : <div className="text-gray-400 text-sm text-center py-10">No risk data</div>}
             </div>
 
-            {/* Recent observations — compact */}
-            <div className="card">
-              <h2 className="text-sm font-semibold text-gray-900 mb-2">Recent Observations <span className="text-[11px] font-normal text-gray-400">(latest 2)</span></h2>
-              {(data?.recent || []).length === 0 ? (
-                <div className="text-center py-5 text-gray-400 text-sm">No observations for the selected filters</div>
-              ) : (
-                <div className="space-y-1.5">
-                  {(data?.recent || []).slice(0, 2).map((o: any) => (
-                    <div
-                      key={o.observation_id}
-                      onClick={() => navigate(`/observations/${o.observation_id}`)}
-                      className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/40 cursor-pointer transition-all"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded flex-shrink-0">
-                            {o.observation_id}
-                          </span>
-                          {o.core_concern_name && (
-                            <span className="text-xs text-gray-600 truncate">{o.core_concern_name}</span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-gray-400 mt-0.5 truncate">
-                          {o.project_name} · {o.obs_date ? fmtDate(o.obs_date) : fmtDate(o.created_at)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        {o.risk_level && <span className={getRiskClass(o.risk_level)}>{o.risk_level}</span>}
-                        <span className={getStatusClass(o.status)}>{displayStatus(o.status)}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <button
-                onClick={() => navigate('/observations')}
-                className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl border border-indigo-200 text-indigo-600 text-sm font-medium hover:bg-indigo-50 transition"
-              >
-                View all observations <ArrowUpRight className="w-3.5 h-3.5" />
-              </button>
-            </div>{/* end recent */}
             </div>{/* end right column */}
           </div>{/* end Ageing + Risk grid */}
 
@@ -1220,6 +1183,48 @@ export default function Dashboard() {
                 No OH&amp;S statistics saved yet — enter data under Summary → Monthly OH&amp;S Statistics.
               </p>
             )}
+          </div>
+
+          {/* Recent observations — full width at the bottom */}
+          <div className="card">
+            <h2 className="text-sm font-semibold text-gray-900 mb-2">Recent Observations <span className="text-[11px] font-normal text-gray-400">(latest 2)</span></h2>
+            {(data?.recent || []).length === 0 ? (
+              <div className="text-center py-5 text-gray-400 text-sm">No observations for the selected filters</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {(data?.recent || []).slice(0, 2).map((o: any) => (
+                  <div
+                    key={o.observation_id}
+                    onClick={() => navigate(`/observations/${o.observation_id}`)}
+                    className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-gray-100 hover:border-indigo-200 hover:bg-indigo-50/40 cursor-pointer transition-all"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-[11px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded flex-shrink-0">
+                          {o.observation_id}
+                        </span>
+                        {o.core_concern_name && (
+                          <span className="text-xs text-gray-600 truncate">{o.core_concern_name}</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-gray-400 mt-0.5 truncate">
+                        {o.project_name} · {o.obs_date ? fmtDate(o.obs_date) : fmtDate(o.created_at)}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      {o.risk_level && <span className={getRiskClass(o.risk_level)}>{o.risk_level}</span>}
+                      <span className={getStatusClass(o.status)}>{displayStatus(o.status)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              onClick={() => navigate('/observations')}
+              className="mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl border border-indigo-200 text-indigo-600 text-sm font-medium hover:bg-indigo-50 transition"
+            >
+              View all observations <ArrowUpRight className="w-3.5 h-3.5" />
+            </button>
           </div>
         </>
       )}
