@@ -36,9 +36,24 @@ DEFAULT_ITEMS = [
 
 
 def seed_ohs_form(db):
+    # Remove any duplicate (section, item_key) rows left by concurrent multi-worker
+    # seeding — keep the earliest. Values are keyed by item_key, so this is data-safe.
+    seen = set()
+    for it in db.query(models.OhsFormItem).order_by(models.OhsFormItem.id).all():
+        k = (it.section, it.item_key)
+        if k in seen:
+            db.delete(it)
+        else:
+            seen.add(k)
+    db.commit()
+
     if db.query(models.OhsFormItem).count() > 0:
         return
     for i, (section, key, label) in enumerate(DEFAULT_ITEMS):
         db.add(models.OhsFormItem(section=section, item_key=key, label=label, sort_order=i, active=True))
-    db.commit()
-    print("OH&S form items seeded.")
+    try:
+        db.commit()
+        print("OH&S form items seeded.")
+    except Exception:
+        # Another worker seeded first (blocked by the unique index) — that's fine.
+        db.rollback()

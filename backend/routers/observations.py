@@ -106,7 +106,12 @@ def _status_filter_condition(status: List[str]):
         elif s == "Overdue & Closed":
             conds.append(closed_late)
         elif s in _OPEN_STATUSES:
-            conds.append(and_(O.status == s, or_(O.target_date_actual.is_(None), O.target_date_actual >= today)))
+            # Mirror effective_status exactly: an open-status row reads as "Overdue" only
+            # when it is past target AND not closed; otherwise it keeps its open status
+            # (incl. the edge case of an open status that already has a closure timestamp).
+            conds.append(and_(O.status == s, or_(O.target_date_actual.is_(None),
+                                                 O.target_date_actual >= today,
+                                                 O.closed_at.isnot(None))))
         elif s == "Closed":
             conds.append(and_(O.status == "Closed",
                               or_(O.target_date_actual.is_(None), func.date(O.closed_at) <= O.target_date_actual)))

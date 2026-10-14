@@ -122,6 +122,21 @@ def _run_migrations():
         except Exception:
             conn.rollback()
 
+        # De-duplicate OH&S form items (created by concurrent multi-worker seeding),
+        # keeping the earliest row per (section, item_key), then enforce uniqueness so
+        # it cannot recur. Values are keyed by item_key, so removing duplicate rows is safe.
+        for stmt in [
+            "DELETE FROM ohs_form_items WHERE id NOT IN "
+            "(SELECT MIN(id) FROM ohs_form_items GROUP BY section, item_key)",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_ohs_form_items_section_key "
+            "ON ohs_form_items (section, item_key)",
+        ]:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+
 
 def init_db():
     from models import Base as ModelBase
