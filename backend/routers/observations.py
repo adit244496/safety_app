@@ -370,31 +370,35 @@ def stats(
         .all()
     )
 
-    # Monthly trend broken down by status
+    # Monthly trend broken down by EFFECTIVE status, so a past-target open item shows
+    # as "Overdue" (not "Open") — matching the KPI cards and By-Status donut. Effective
+    # "Overdue & Closed" folds into "Closed" (the trend has no separate closed-late series).
     by_month_status_rows = (
         apply_all(
             db.query(
                 month_expr.label("month"),
                 models.Observation.status,
-                func.count().label("count"),
+                models.Observation.target_date_actual,
+                models.Observation.closed_at,
             )
         )
         .filter(models.Observation.status != 'Draft')
         .filter(models.Observation.obs_date.isnot(None))
         .filter(models.Observation.obs_date != "")
-        .group_by(month_expr, models.Observation.status)
         .order_by(month_expr)
         .all()
     )
-    # Pivot into { month, Open, Pending, Under Review, Partially Closed, Closed, Positive Approach }
     month_status_map: dict = {}
-    for m, s, c in by_month_status_rows:
+    for m, _st, _tgt, _cl in by_month_status_rows:
         if not m:
             continue
+        es = effective_status(_st, _tgt, _cl, _today_iso)
+        if es == "Overdue & Closed":
+            es = "Closed"
         if m not in month_status_map:
             month_status_map[m] = {"month": m, "Open": 0, "Overdue": 0, "Under Review": 0, "Partially Closed": 0, "Closed": 0, "Positive Approach": 0, "Unresolved & Closed": 0}
-        if s in month_status_map[m]:
-            month_status_map[m][s] = c
+        if es in month_status_map[m]:
+            month_status_map[m][es] = month_status_map[m].get(es, 0) + 1
 
     by_month_status = sorted(month_status_map.values(), key=lambda x: x["month"])
 
