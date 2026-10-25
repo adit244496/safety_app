@@ -6,6 +6,7 @@ import { Plus, ChevronRight, ChevronDown, SlidersHorizontal, X, MessageSquare, P
 import api from '../../lib/api'
 import { fmtDate, getStatusClass, getRiskClass, STATUSES } from '../../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
+import { useFacets } from '../../lib/facets'
 import { useAuth } from '../../store/authStore'
 
 const STABLE = { staleTime: 5 * 60 * 1000 } as const
@@ -202,16 +203,10 @@ export default function ObservationsList() {
   const buildingOptions: MSOption[] = useMemo(() =>
     (allBuildings || []).filter((b: any) => !projectIds.length || projectIds.includes(b.project_id)).map((b: any) => ({ value: b.id, label: b.name })),
     [allBuildings, projectIds])
-  const floorOptions: MSOption[] = useMemo(() =>
-    !buildingIds.length ? [] : (allFloors || []).filter((f: any) => buildingIds.includes(f.building_id)).map((f: any) => ({ value: f.id, label: f.name })),
-    [allFloors, buildingIds])
   const eicOptions: MSOption[] = useMemo(() => (eicUsers || []).map((u: any) => ({ value: u.id, label: u.name })), [eicUsers])
   const outcomeOptions: MSOption[] = useMemo(() => (possibleOutcomes || []).map((o: any) => ({ value: o.name, label: o.name })), [possibleOutcomes])
   const violationOptions: MSOption[] = useMemo(() => (violations || []).map((v: any) => ({ value: v.id, label: v.name })), [violations])
   const rcCategoryOptions: MSOption[] = useMemo(() => (rcCategories || []).map((c: any) => ({ value: c.id, label: c.name })), [rcCategories])
-  const rcSpecificOptions: MSOption[] = useMemo(() =>
-    !rcCatIds.length ? [] : (allRcSpecifics || []).filter((s: any) => rcCatIds.includes(s.root_cause_category_id)).map((s: any) => ({ value: s.id, label: s.name })),
-    [allRcSpecifics, rcCatIds])
 
   // Cascading: contractor options narrowed by selected projects
   const contractorOptions: MSOption[] = useMemo(() => {
@@ -257,6 +252,40 @@ export default function ObservationsList() {
     return all.filter((s: any) => coreConcernIds.includes(s.core_concern_id))
   }, [allSpecificConcerns, coreConcernIds])
   const specificConcernOptions: MSOption[] = filteredSpecificConcerns.map((s: any) => ({ value: s.id, label: s.name }))
+
+  // Cascading filters: every dropdown lists only values present in observations
+  // matching the other selected filters.
+  const facet = useFacets('/observations/facets', {
+    status: statuses, project_id: projectIds, contractor_user_id: expandedContractorIds,
+    risk_level: riskLevels, core_concern_id: coreConcernIds, specific_concern_id: specificConcernIds,
+    building_id: buildingIds, floor_id: floorIds, eic_user_id: eicIds, possible_outcome: outcomeFilter,
+    violation_id: violationIds, root_cause_category_id: rcCatIds, root_cause_specific_id: rcSpecIds,
+    aging: ageingFilter, date_from: dateFrom || undefined, date_to: dateTo || undefined,
+  })
+  // Floors no longer need a building first; label them with their building when ambiguous.
+  const buildingName = useMemo(() => new Map((allBuildings || []).map((b: any) => [b.id, b.name])), [allBuildings])
+  const allFloorOptions: MSOption[] = useMemo(() =>
+    (allFloors || [])
+      .filter((f: any) => buildingIds.length ? buildingIds.includes(f.building_id) : buildingName.has(f.building_id))
+      .filter((f: any) => !projectIds.length || (allBuildings || []).some((b: any) => b.id === f.building_id && projectIds.includes(b.project_id)))
+      .map((f: any) => ({ value: f.id, label: buildingIds.length === 1 ? f.name : `${f.name} · ${buildingName.get(f.building_id) ?? ''}` })),
+    [allFloors, allBuildings, buildingIds, projectIds, buildingName])
+  const allRcSpecificOptions: MSOption[] = useMemo(() =>
+    (allRcSpecifics || []).filter((s: any) => !rcCatIds.length || rcCatIds.includes(s.root_cause_category_id)).map((s: any) => ({ value: s.id, label: s.name })),
+    [allRcSpecifics, rcCatIds])
+  const fStatus      = facet.narrow('status', statusOptions)
+  const fProject     = facet.narrow('project_id', projectOptions)
+  const fBuilding    = facet.narrow('building_id', buildingOptions)
+  const fFloor       = facet.narrow('floor_id', allFloorOptions)
+  const fContractor  = facet.narrow('contractor_user_id', contractorOptions, o => companyToUserIds.get(String(o.value)) || [])
+  const fEic         = facet.narrow('eic_user_id', eicOptions)
+  const fRisk        = facet.narrow('risk_level', RISK_OPTIONS)
+  const fCore        = facet.narrow('core_concern_id', coreConcernOptions)
+  const fSpecific    = facet.narrow('specific_concern_id', specificConcernOptions)
+  const fOutcome     = facet.narrow('possible_outcome', outcomeOptions)
+  const fViolation   = facet.narrow('violation_id', violationOptions)
+  const fRcCategory  = facet.narrow('root_cause_category_id', rcCategoryOptions)
+  const fRcSpecific  = facet.narrow('root_cause_specific_id', allRcSpecificOptions)
 
   const obs        = data?.observations || []
   const total      = data?.total ?? 0
@@ -309,11 +338,11 @@ export default function ObservationsList() {
         <div className={showFilters ? 'flex flex-wrap items-center gap-2 mt-3' : 'hidden'}>
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
 
-          <MultiSelectFilter size="sm" options={statusOptions} value={statuses}
+          <MultiSelectFilter size="sm" options={fStatus} value={statuses} prune={facet.ready}
             onChange={v => updateFilter({ status: v as string[] })}
             placeholder="Status" className="w-full sm:w-auto sm:min-w-[110px]" />
 
-          <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
+          <MultiSelectFilter size="sm" options={fProject} value={projectIds} prune={facet.ready}
             onChange={v => {
               const ids = v as number[]
               const updates: Record<string, string[]> = { project_id: ids.map(String), building_id: [], floor_id: [], eic: [] }
@@ -325,20 +354,20 @@ export default function ObservationsList() {
             }}
             placeholder="Project" className="w-full sm:w-auto sm:min-w-[120px]" />
 
-          <MultiSelectFilter size="sm" options={buildingOptions} value={buildingIds}
+          <MultiSelectFilter size="sm" options={fBuilding} value={buildingIds} prune={facet.ready}
             onChange={v => updateFilter({ building_id: (v as number[]).map(String), floor_id: [] })}
             placeholder="Building" className="w-full sm:w-auto sm:min-w-[120px]" />
 
-          <MultiSelectFilter size="sm" options={floorOptions} value={floorIds}
+          <MultiSelectFilter size="sm" options={fFloor} value={floorIds} prune={facet.ready}
             onChange={v => updateFilter({ floor_id: (v as number[]).map(String) })}
-            placeholder={buildingIds.length ? 'Floor' : 'Floor (select building)'} className="w-full sm:w-auto sm:min-w-[120px]" />
+            placeholder="Floor" className="w-full sm:w-auto sm:min-w-[120px]" />
 
           {isContractor ? (
             <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1.5 rounded-lg cursor-default col-span-1">
               <span className="text-gray-400">Contractor:</span> {user?.name}
             </span>
           ) : (
-            <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
+            <MultiSelectFilter size="sm" options={fContractor} value={selectedContractors} prune={facet.ready}
               onChange={v => {
                 const names = v as string[]
                 const updates: Record<string, string[]> = { contractor: names }
@@ -352,37 +381,37 @@ export default function ObservationsList() {
               placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
           )}
 
-          <MultiSelectFilter size="sm" options={eicOptions} value={eicIds}
+          <MultiSelectFilter size="sm" options={fEic} value={eicIds} prune={facet.ready}
             onChange={v => updateFilter({ eic: (v as number[]).map(String) })}
             placeholder="Concerned EIC" className="w-full sm:w-auto sm:min-w-[130px]" />
 
-          <MultiSelectFilter size="sm" options={RISK_OPTIONS} value={riskLevels}
+          <MultiSelectFilter size="sm" options={fRisk} value={riskLevels} prune={facet.ready}
             onChange={v => updateFilter({ risk: v as string[] })}
             placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
 
-          <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}
+          <MultiSelectFilter size="sm" options={fCore} value={coreConcernIds} prune={facet.ready}
             onChange={v => updateFilter({ core_concern: (v as number[]).map(String), specific_concern: [] })}
             placeholder="Core Concern" className="w-full sm:w-auto sm:min-w-[130px]" />
 
-          <MultiSelectFilter size="sm" options={specificConcernOptions} value={specificConcernIds}
+          <MultiSelectFilter size="sm" options={fSpecific} value={specificConcernIds} prune={facet.ready}
             onChange={v => updateFilter({ specific_concern: (v as number[]).map(String) })}
             placeholder="Specific Concern" className="w-full sm:w-auto sm:min-w-[150px]" />
 
-          <MultiSelectFilter size="sm" options={outcomeOptions} value={outcomeFilter}
+          <MultiSelectFilter size="sm" options={fOutcome} value={outcomeFilter} prune={facet.ready}
             onChange={v => updateFilter({ outcome: v as string[] })}
             placeholder="Possible Outcome" className="w-full sm:w-auto sm:min-w-[150px]" />
 
-          <MultiSelectFilter size="sm" options={violationOptions} value={violationIds}
+          <MultiSelectFilter size="sm" options={fViolation} value={violationIds} prune={facet.ready}
             onChange={v => updateFilter({ violation: (v as number[]).map(String) })}
             placeholder="Violation" className="w-full sm:w-auto sm:min-w-[140px]" />
 
-          <MultiSelectFilter size="sm" options={rcCategoryOptions} value={rcCatIds}
+          <MultiSelectFilter size="sm" options={fRcCategory} value={rcCatIds} prune={facet.ready}
             onChange={v => updateFilter({ root_cause: (v as number[]).map(String), root_cause_specific: [] })}
             placeholder="Root Cause" className="w-full sm:w-auto sm:min-w-[130px]" />
 
-          <MultiSelectFilter size="sm" options={rcSpecificOptions} value={rcSpecIds}
+          <MultiSelectFilter size="sm" options={fRcSpecific} value={rcSpecIds} prune={facet.ready}
             onChange={v => updateFilter({ root_cause_specific: (v as number[]).map(String) })}
-            placeholder={rcCatIds.length ? 'Specific Root Cause' : 'Specific Root Cause (select root cause)'} className="w-full sm:w-auto sm:min-w-[160px]" />
+            placeholder="Specific Root Cause" className="w-full sm:w-auto sm:min-w-[160px]" />
 
           <div className="col-span-2 sm:col-auto flex items-center gap-1.5">
             <input

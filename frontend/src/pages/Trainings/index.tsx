@@ -15,6 +15,7 @@ import { useAuth } from '../../store/authStore'
 import api from '../../lib/api'
 import { fmtDate } from '../../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
+import { useFacets } from '../../lib/facets'
 
 const STALE = { staleTime: 5 * 60 * 1000 } as const
 const WRITE_ROLES = ['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer']
@@ -233,6 +234,8 @@ export default function Trainings() {
   })
 
   const trainings: any[] = listData?.trainings || []
+  // Cascading filters: dropdowns list only values present in trainings matching the other filters.
+  const facet = useFacets('/trainings/facets', filters)
   const projectOptions: MSOption[] = useMemo(() => (projects || []).map((p: any) => ({ value: p.id, label: p.name })), [projects])
   const deptOptions: MSOption[] = useMemo(() => (departments || []).map((d: string) => ({ value: d, label: d })), [departments])
 
@@ -305,15 +308,15 @@ export default function Trainings() {
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-[160px]">
                 <label className="label">Project</label>
-                <MultiSelectFilter size="sm" options={projectOptions} value={projectIds} onChange={setProjectIds} placeholder="All projects" />
+                <MultiSelectFilter size="sm" options={facet.narrow('project_id', projectOptions)} value={projectIds} prune={facet.ready} onChange={setProjectIds} placeholder="All projects" />
               </div>
               <div className="min-w-[150px]">
                 <label className="label">Type</label>
-                <MultiSelectFilter size="sm" options={TYPE_OPTIONS} value={typeFilter} onChange={setTypeFilter} placeholder="All types" />
+                <MultiSelectFilter size="sm" options={facet.narrow('training_type', TYPE_OPTIONS)} value={typeFilter} prune={facet.ready} onChange={setTypeFilter} placeholder="All types" />
               </div>
               <div className="min-w-[160px]">
                 <label className="label">Department</label>
-                <MultiSelectFilter size="sm" options={deptOptions} value={deptFilter} onChange={setDeptFilter} placeholder="All departments" />
+                <MultiSelectFilter size="sm" options={facet.narrow('department', deptOptions)} value={deptFilter} prune={facet.ready} onChange={setDeptFilter} placeholder="All departments" />
               </div>
               <div>
                 <label className="label">From</label>

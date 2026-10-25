@@ -164,6 +164,32 @@ export default function ObservationForm() {
   // staleTime prevents refetch-on-focus from causing layout shifts (scroll jumps)
   const STABLE = { staleTime: 5 * 60 * 1000 } as const
 
+  // Target date auto-fill: admin rules map a risk score range → days to rectify.
+  const { data: targetRules = [] as any[] } = useQuery<any[]>({
+    queryKey: ['target-day-rules'],
+    queryFn: () => api.get('/admin/target-day-rules').then(r => r.data),
+    ...STABLE,
+  })
+  const [targetAuto, setTargetAuto] = useState(false)   // current target date came from the rules
+  const ruleForScore = (score: number) =>
+    targetRules.find((r: any) => score >= r.min_score && score <= r.max_score) as { days: number } | undefined
+  const addDays = (iso: string, days: number) => {
+    const [y, m, d] = iso.split('-').map(Number)
+    return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
+  }
+  const autoTarget = (f: any): string | null => {
+    if (f.severity === '' || f.probability === '' || !f.obs_date || f.status === 'Positive Approach') return null
+    const rule = ruleForScore(Number(f.severity) * Number(f.probability))
+    return rule ? addDays(f.obs_date, rule.days) : null
+  }
+  // Severity / probability / observation date changes re-derive the target date.
+  const setRiskInput = (k: 'severity' | 'probability' | 'obs_date', v: string) => {
+    const next = { ...form, [k]: v }
+    const t = autoTarget(next)
+    if (t) { next.target_date_actual = t; setTargetAuto(true) }
+    setForm(next)
+  }
+
   const { data: projects }    = useQuery({ queryKey: ['projects'],             queryFn: () => api.get('/projects/').then(r => r.data), ...STABLE })
   const { data: buildings }   = useQuery({ queryKey: ['buildings', form.project_id],  queryFn: () => api.get('/admin/buildings', { params: { project_id: form.project_id } }).then(r => r.data), enabled: !!form.project_id, staleTime: 30_000 })
   const { data: floors }      = useQuery({ queryKey: ['floors', form.building_id],    queryFn: () => api.get('/admin/floors', { params: { building_id: form.building_id } }).then(r => r.data), enabled: !!form.building_id, staleTime: 30_000 })
@@ -195,12 +221,15 @@ export default function ObservationForm() {
     staleTime: 30_000,
   })
 
+  // Company names are matched loosely so spacing/case variants ("A S  ENTERPRISES"
+  // vs "A S ENTERPRISES") show as one company with all its workers.
+  const companyKey = (name: string) => (name || '').trim().replace(/\s+/g, ' ').toUpperCase()
   const contractorCompanies: any[] = useMemo(() => {
     const seen = new Set<string>()
-    return (contractors || []).filter((c: any) => { if (seen.has(c.name)) return false; seen.add(c.name); return true })
+    return (contractors || []).filter((c: any) => { const k = companyKey(c.name); if (seen.has(k)) return false; seen.add(k); return true })
   }, [contractors])
   const companyWorkers: any[] = useMemo(() =>
-    (contractors || []).filter((c: any) => c.name === form.contractor_company),
+    (contractors || []).filter((c: any) => companyKey(c.name) === companyKey(form.contractor_company)),
     [contractors, form.contractor_company]
   )
 
@@ -267,6 +296,7 @@ export default function ObservationForm() {
   const risk = form.severity && form.probability
     ? calcRisk(Number(form.severity), Number(form.probability))
     : null
+  const riskRule = risk ? ruleForScore(risk.factor) : undefined
 
   // "Praiseworthy observation" is a Core Concern (good practice) — no rectification needed,
   // so the target date is hidden for it. For "Positive Approach" status it stays optional.
@@ -375,7 +405,8 @@ export default function ObservationForm() {
         violation_id: form.violation_id ? Number(form.violation_id) : null,
         eic_user_ids: form.eic_user_ids,
         eic_user_id: form.eic_user_ids[0] ?? null,
-        target_date_actual: form.target_date_actual || null,
+        // Praiseworthy concerns hide the target date — never save a hidden (e.g. auto-filled) one.
+        target_date_actual: isPraiseworthyConcern ? null : (form.target_date_actual || null),
         severity: form.severity ? Number(form.severity) : null,
         probability: form.probability ? Number(form.probability) : null,
       }
@@ -622,7 +653,7 @@ export default function ObservationForm() {
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="label">Date</label>
-              <input type="date" className="input" value={form.obs_date} onChange={e => set('obs_date', e.target.value)} />
+              <input type="date" className="input" value={form.obs_date} onChange={e => setRiskInput('obs_date', e.target.value)} />
             </div>
             <div className="w-32">
               <label className="label">Time</label>
@@ -731,13 +762,13 @@ export default function ObservationForm() {
         </p>
         <div className={G3}>
           <Field label="Severity of Consequence" required hint="1 = First Aid only  →  5 = Fatality">
-            <select className="select" value={form.severity} onChange={e => set('severity', e.target.value)}>
+            <select className="select" value={form.severity} onChange={e => setRiskInput('severity', e.target.value)}>
               <option value="">Select severity…</option>
               {RISK_LEVELS.map(n => <option key={n} value={n}>{SEVERITY_LABELS[n]}</option>)}
             </select>
           </Field>
           <Field label="Probability of Occurrence" required hint="1 = Very Unlikely  →  5 = Almost Certain">
-            <select className="select" value={form.probability} onChange={e => set('probability', e.target.value)}>
+            <select className="select" value={form.probability} onChange={e => setRiskInput('probability', e.target.value)}>
               <option value="">Select probability…</option>
               {RISK_LEVELS.map(n => <option key={n} value={n}>{PROB_LABELS[n]}</option>)}
             </select>
@@ -755,7 +786,9 @@ export default function ObservationForm() {
                   {risk.level === 'High' && 'Immediate intervention required.'}
                 </p>
                 <p className={`text-xs font-semibold mt-1 leading-tight ${riskTextColor}`}>
-                  Recommended target: {risk.level === 'High' ? 'Same day or ≤ 2 days' : risk.level === 'Medium' ? '≤ 4 days' : '≤ 7 days'}
+                  {riskRule
+                    ? <>Target: {riskRule.days === 0 ? 'same day' : `${riskRule.days} day${riskRule.days === 1 ? '' : 's'}`} from observation date</>
+                    : 'No target rule for this score — set the date manually'}
                 </p>
               </div>
             </div>
@@ -767,13 +800,26 @@ export default function ObservationForm() {
           {!isPraiseworthyConcern && (
             <Field label="Target Date for Rectification" required={form.status !== 'Positive Approach'}>
               <div className="flex items-center gap-2">
-                <input type="date" className="input flex-1 min-w-0" value={form.target_date_actual} onChange={e => set('target_date_actual', e.target.value)} />
+                <input type="date" className="input flex-1 min-w-0" value={form.target_date_actual}
+                  onChange={e => { set('target_date_actual', e.target.value); setTargetAuto(false) }} />
                 {targetDayLabel && (
                   <span className={`flex-shrink-0 whitespace-nowrap text-xs font-semibold px-2.5 py-2 rounded-lg border ${targetDayTone}`}>
                     {targetDayLabel}
                   </span>
                 )}
               </div>
+              {riskRule && risk && (
+                targetAuto ? (
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    Auto-filled: score {risk.factor} → {riskRule.days} day{riskRule.days === 1 ? '' : 's'} (Admin → Risk &amp; Target Date). You can change it.
+                  </p>
+                ) : autoTarget(form) && autoTarget(form) !== form.target_date_actual ? (
+                  <button type="button" onClick={() => { set('target_date_actual', autoTarget(form)); setTargetAuto(true) }}
+                    className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800 mt-1">
+                    Use auto date ({riskRule.days} day{riskRule.days === 1 ? '' : 's'} for score {risk.factor})
+                  </button>
+                ) : null
+              )}
             </Field>
           )}
         </div>

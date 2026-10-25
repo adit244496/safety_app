@@ -9,6 +9,7 @@ import threading
 import logging
 import ai_service
 from difflib import get_close_matches
+from types import SimpleNamespace
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, case, nullslast, and_, or_
 from datetime import datetime, date
@@ -253,6 +254,37 @@ def _aging_bucket(days: Optional[int]) -> str:
     if days <= 30:
         return "overdue_8_30"
     return "overdue_30_plus"
+
+
+def _aging_hit(aging: List[str], days: Optional[int], status: str) -> bool:
+    """Ageing filter used by the observations list — supports the dashboard's granular
+    buckets, "positive_approach", and the coarse values."""
+    for f in aging:
+        if f == "positive_approach":
+            if status == "Positive Approach":
+                return True
+            continue
+        if status == "Positive Approach":
+            continue  # day-based buckets exclude praiseworthy (mirrors the donut)
+        if f == "no_target":
+            if days is None:
+                return True
+            continue
+        if days is None:
+            continue
+        if f == "on_time" and days <= 0:
+            return True
+        if f == "overdue_1_7" and 1 <= days <= 7:
+            return True
+        if f == "overdue_8_30" and 8 <= days <= 30:
+            return True
+        if f == "overdue_30_plus" and days > 30:
+            return True
+        if f == "overdue" and days > 0:
+            return True
+        if f == "due_soon" and -7 <= days <= 0:
+            return True
+    return False
 
 
 def _matches_aging_filter(days: Optional[int], aging_filter: List[str]) -> bool:
@@ -655,36 +687,7 @@ def list_observations(
             models.Observation.id, models.Observation.target_date_actual,
             models.Observation.closed_at, models.Observation.status,
         ).all()
-
-        def _aging_hit(days, status) -> bool:
-            for f in aging:
-                if f == "positive_approach":
-                    if status == "Positive Approach":
-                        return True
-                    continue
-                if status == "Positive Approach":
-                    continue  # day-based buckets exclude praiseworthy (mirrors the donut)
-                if f == "no_target":
-                    if days is None:
-                        return True
-                    continue
-                if days is None:
-                    continue
-                if f == "on_time" and days <= 0:
-                    return True
-                if f == "overdue_1_7" and 1 <= days <= 7:
-                    return True
-                if f == "overdue_8_30" and 8 <= days <= 30:
-                    return True
-                if f == "overdue_30_plus" and days > 30:
-                    return True
-                if f == "overdue" and days > 0:
-                    return True
-                if f == "due_soon" and -7 <= days <= 0:
-                    return True
-            return False
-
-        eligible = [r[0] for r in rows if _aging_hit(_days_aging(r[1], r[2], today), r[3])]
+        eligible = [r[0] for r in rows if _aging_hit(aging, _days_aging(r[1], r[2], today), r[3])]
         q = q.filter(models.Observation.id.in_(eligible))
 
     total = q.count()
@@ -698,6 +701,103 @@ def list_observations(
         "total": total,
         "pages": (total + limit - 1) // limit,
     }
+
+
+# Facet dimensions: query-param name → how to read that value from a row.
+# Contractor / EIC use the primary assignee, matching the list filter above.
+_FACET_FIELDS = {
+    "project_id":             lambda r: r.project_id,
+    "status":                 lambda r: r.eff_status,
+    "contractor_user_id":     lambda r: r.contractor_user_id,
+    "risk_level":             lambda r: r.risk_level,
+    "core_concern_id":        lambda r: r.core_concern_id,
+    "specific_concern_id":    lambda r: r.specific_concern_id,
+    "building_id":            lambda r: r.building_id,
+    "floor_id":               lambda r: r.floor_id,
+    "eic_user_id":            lambda r: r.eic_user_id,
+    "possible_outcome":       lambda r: r.possible_outcome,
+    "violation_id":           lambda r: r.violation_id,
+    "root_cause_category_id": lambda r: r.root_cause_category_id,
+    "root_cause_specific_id": lambda r: r.root_cause_specific_id,
+}
+
+
+@router.get("/facets")
+def observation_facets(
+    project_id: List[int] = Query(default=[]),
+    status: List[str] = Query(default=[]),
+    contractor_user_id: List[int] = Query(default=[]),
+    risk_level: List[str] = Query(default=[]),
+    core_concern_id: List[int] = Query(default=[]),
+    specific_concern_id: List[int] = Query(default=[]),
+    building_id: List[int] = Query(default=[]),
+    floor_id: List[int] = Query(default=[]),
+    eic_user_id: List[int] = Query(default=[]),
+    possible_outcome: List[str] = Query(default=[]),
+    violation_id: List[int] = Query(default=[]),
+    root_cause_category_id: List[int] = Query(default=[]),
+    root_cause_specific_id: List[int] = Query(default=[]),
+    aging: List[str] = Query(default=[]),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    exclude_drafts: bool = Query(False),   # report/dashboard never include drafts
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Cascading filters: for every filter dimension, the values that occur in observations
+    matching all the *other* selected filters (so a dimension never narrows itself and
+    multi-select within it still works). Same access/draft/date/ageing rules as the list."""
+    O = models.Observation
+    allowed = get_allowed_project_ids(user)
+    if allowed is not None and not allowed:
+        return {k: [] for k in _FACET_FIELDS}
+    q = db.query(
+        O.id, O.project_id, O.status, O.target_date_actual, O.closed_at, O.contractor_user_id,
+        O.risk_level, O.core_concern_id, O.specific_concern_id, O.building_id, O.floor_id,
+        O.eic_user_id, O.possible_outcome, O.violation_id, O.root_cause_category_id,
+        O.root_cause_specific_id,
+    )
+    if allowed is not None:
+        q = q.filter(O.project_id.in_(allowed))
+    if date_from:
+        q = q.filter(O.obs_date >= date_from)
+    if date_to:
+        q = q.filter(O.obs_date <= date_to)
+    if exclude_drafts:
+        q = q.filter(O.status != 'Draft')
+    elif user.role not in ("SuperAdmin", "Admin"):
+        q = q.filter((O.status != 'Draft') | (O.created_by == user.id))
+
+    today = date.today()
+    today_iso = today.isoformat()
+    rows = []
+    for r in q.all():
+        if aging and not _aging_hit(aging, _days_aging(r.target_date_actual, r.closed_at, today), r.status):
+            continue
+        rows.append(SimpleNamespace(
+            **r._asdict(),
+            eff_status=effective_status(r.status, r.target_date_actual, r.closed_at, today_iso),
+        ))
+
+    selected = {
+        "project_id": project_id, "status": status, "contractor_user_id": contractor_user_id,
+        "risk_level": risk_level, "core_concern_id": core_concern_id,
+        "specific_concern_id": specific_concern_id, "building_id": building_id, "floor_id": floor_id,
+        "eic_user_id": eic_user_id, "possible_outcome": possible_outcome, "violation_id": violation_id,
+        "root_cause_category_id": root_cause_category_id, "root_cause_specific_id": root_cause_specific_id,
+    }
+    active = {k: set(v) for k, v in selected.items() if v}
+
+    def matches(r, skip: str) -> bool:
+        return all(_FACET_FIELDS[k](r) in vals for k, vals in active.items() if k != skip)
+
+    out = {}
+    for key, get in _FACET_FIELDS.items():
+        vals = {get(r) for r in rows if matches(r, key)}
+        vals.discard(None)
+        vals.discard("")
+        out[key] = sorted(vals, key=str)
+    return out
 
 
 @router.get("/status-options")
@@ -1524,6 +1624,8 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
     obs.updated_at = datetime.now()
     if prev_status != 'Closed' and obs.status == 'Closed' and obs.closed_at is None:
         obs.closed_at = datetime.now()
+    elif prev_status == 'Closed' and obs.status != 'Closed':
+        obs.closed_at = None   # reopened via the edit form
     db.commit()
     db.refresh(obs)
 
@@ -1558,12 +1660,28 @@ def update_status(obs_id: int, body: StatusBody, db: Session = Depends(get_db), 
     obs = db.query(models.Observation).filter(models.Observation.id == obs_id).first()
     if not obs:
         raise HTTPException(404, "Observation not found")
-    _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'Observer', 'Contractor'])
+    _assert_obs_access(obs, user, write_roles=['SuperAdmin', 'Admin', 'HO', 'PSO', 'Observer', 'Contractor'])
     prev_status = obs.status
+    # Only staff may reopen — a contractor can't undo a closure.
+    reopening = prev_status == 'Closed' and body.status != 'Closed'
+    if reopening and user.role == 'Contractor':
+        raise HTTPException(403, "Only the SHE team can reopen a closed observation")
     obs.status = body.status
     obs.updated_at = datetime.now()
     if prev_status != 'Closed' and body.status == 'Closed' and obs.closed_at is None:
         obs.closed_at = datetime.now()
+    if reopening:
+        # Clear the closure so Overdue / KPIs treat it as open again.
+        obs.closed_at = None
+        cids = json.loads(obs.contractor_user_ids) if obs.contractor_user_ids else (
+            [obs.contractor_user_id] if obs.contractor_user_id else []
+        )
+        for cid in cids:
+            db.add(models.Notification(
+                user_id=cid, observation_id=obs.id, obs_ref=obs.observation_id,
+                message=f"Observation {obs.observation_id} was reopened by {user.name} — rectification is still required.",
+                is_read=False,
+            ))
     db.commit()
 
     if prev_status != body.status and body.status != 'Draft':

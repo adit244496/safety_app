@@ -296,6 +296,16 @@ class SeverityLabel(Base):
     label = Column(String, nullable=False)
 
 
+class TargetDayRule(Base):
+    """Admin-managed: risk-factor (score) range → days allowed for rectification.
+    The observation form auto-fills Target Date = observation date + days."""
+    __tablename__ = "target_day_rules"
+    id = Column(Integer, primary_key=True)
+    min_score = Column(Integer, nullable=False)   # inclusive
+    max_score = Column(Integer, nullable=False)   # inclusive
+    days = Column(Integer, nullable=False)
+
+
 class ProbabilityLabel(Base):
     """Admin-managed labels for each probability level (1–5)."""
     __tablename__ = "probability_labels"
@@ -344,14 +354,16 @@ class TrainingCategory(Base):
 
 
 class Guideline(Base):
-    """Safety guideline PDF uploaded by admins, visible to all users."""
+    """Library item (shown as "Library" in the UI): an uploaded PDF or a web link,
+    added by admins and visible to all users."""
     __tablename__ = "guidelines"
     id = Column(Integer, primary_key=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
     category = Column(String, nullable=True)
-    file_path = Column(String, nullable=False)     # stored filename in uploads dir
-    file_name = Column(String, nullable=False)     # original filename
+    file_path = Column(String, nullable=False)     # stored filename in uploads dir ('' for links)
+    file_name = Column(String, nullable=False)     # original filename ('' for links)
+    link_url = Column(String, nullable=True)       # external URL — set instead of a file
     uploaded_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime, default=datetime.now)
     uploader = relationship("User")
@@ -469,6 +481,7 @@ class EscalationLog(Base):
     reminder_number = Column(Integer, nullable=False, default=1)
     sent_at = Column(DateTime, default=datetime.now)
     recipients_json = Column(Text, nullable=True)  # JSON list of email addresses
+    kind = Column(String, nullable=True)           # NULL = daily reminder; "overdue_7d" = one-off 7+ day escalation
     observation = relationship("Observation")
 
 

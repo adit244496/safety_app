@@ -68,7 +68,14 @@ def _run_migrations():
         ("ai_settings", "openai_api_key", "VARCHAR", None),
         ("ai_settings", "openai_model",   "VARCHAR", None),
     ]
-    all_migrations = _obs_columns + _user_columns + _training_columns + _permit_columns + _ai_columns
+    _library_columns = [
+        ("guidelines", "link_url", "VARCHAR", None),
+    ]
+    _escalation_columns = [
+        ("escalation_logs", "kind", "VARCHAR", None),
+    ]
+    all_migrations = (_obs_columns + _user_columns + _training_columns + _permit_columns + _ai_columns
+                      + _library_columns + _escalation_columns)
 
     with engine.connect() as conn:
         if is_sqlite:

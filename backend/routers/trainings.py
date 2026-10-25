@@ -198,6 +198,44 @@ def list_departments(db: Session = Depends(get_db), user: models.User = Depends(
     return sorted({r[0].strip() for r in rows if r[0] and r[0].strip()})
 
 
+@router.get("/facets")
+def training_facets(
+    project_id: List[int] = Query(default=[]),
+    training_type: List[str] = Query(default=[]),
+    department: List[str] = Query(default=[]),
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Cascading filters for the trainings list: for each dropdown, the values that occur
+    in trainings matching the other selected filters (same scope/date/search as the list)."""
+    T = models.Training
+    q = _scoped_query(db, user).with_entities(T.project_id, T.training_type, T.department)
+    if date_from:
+        q = q.filter(T.training_date >= date_from)
+    if date_to:
+        q = q.filter(T.training_date <= date_to)
+    if search:
+        like = f"%{search}%"
+        q = q.filter(T.training_topic.ilike(like) | T.trainer_name.ilike(like) | T.department.ilike(like))
+    rows = q.all()
+    selected = {"project_id": project_id, "training_type": training_type, "department": department}
+    active = {k: set(v) for k, v in selected.items() if v}
+
+    def matches(r, skip: str) -> bool:
+        return all(getattr(r, k) in vals for k, vals in active.items() if k != skip)
+
+    out = {}
+    for key in selected:
+        vals = {getattr(r, key) for r in rows if matches(r, key)}
+        vals.discard(None)
+        vals.discard("")
+        out[key] = sorted(vals, key=str)
+    return out
+
+
 @router.get("/stats")
 def training_stats(
     project_id: List[int] = Query(default=[]),

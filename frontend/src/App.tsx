@@ -98,7 +98,8 @@ export default function App() {
           <Route path="work-permits/:id" element={<WorkPermitDetail />} />
           <Route path="work-permits/:id/edit" element={<PermitFormGuard><WorkPermitForm /></PermitFormGuard>} />
           <Route path="meeting-minutes" element={<MinutesGuard><MeetingMinutes /></MinutesGuard>} />
-          <Route path="guidelines" element={<Guidelines />} />
+          <Route path="library" element={<Guidelines />} />
+          <Route path="guidelines" element={<Navigate to="/library" replace />} />
           <Route path="admin/*" element={<AdminGuard><Admin /></AdminGuard>} />
         </Route>
         {/* Full-page printable CHWP document (no sidebar) */}

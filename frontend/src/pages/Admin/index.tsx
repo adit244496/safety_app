@@ -1,4 +1,4 @@
-import { Routes, Route, NavLink, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, useLocation, Navigate } from 'react-router-dom'
 import { usePageTitle } from '../../store/pageTitleContext'
 import { Users, Database, Shield, ClipboardList, Mail, TriangleAlert, FileUp, FileCheck2, GraduationCap, BookOpen, Sparkles, ListChecks } from 'lucide-react'
 import UsersTab from './UsersTab'
@@ -18,12 +18,12 @@ const TABS = [
   { to: '/admin', label: 'Users', icon: Users, exact: true },
   { to: '/admin/data', label: 'Data Input', icon: Database },
   { to: '/admin/safety', label: 'Safety Measures', icon: Shield },
-  { to: '/admin/risk-labels', label: 'Risk Labels', icon: TriangleAlert },
+  { to: '/admin/risk-labels', label: 'Risk & Target Date', icon: TriangleAlert },
   { to: '/admin/ease-criteria', label: 'SHE Criteria', icon: ClipboardList },
   { to: '/admin/ohs-form', label: 'OH&S Form', icon: ListChecks },
   { to: '/admin/training-categories', label: 'Training', icon: GraduationCap },
   { to: '/admin/permit-config', label: 'Work Permits', icon: FileCheck2 },
-  { to: '/admin/guidelines', label: 'Guidelines', icon: BookOpen },
+  { to: '/admin/library', label: 'Library', icon: BookOpen },
   { to: '/admin/import', label: 'Import', icon: FileUp },
   { to: '/admin/email', label: 'Email Settings', icon: Mail },
   { to: '/admin/ai', label: 'AI Summary', icon: Sparkles },
@@ -71,7 +71,8 @@ export default function Admin() {
         <Route path="ohs-form" element={<OhsFormTab />} />
         <Route path="permit-config" element={<PermitConfigTab />} />
         <Route path="training-categories" element={<TrainingCategoriesTab />} />
-        <Route path="guidelines" element={<GuidelinesTab />} />
+        <Route path="library" element={<GuidelinesTab />} />
+        <Route path="guidelines" element={<Navigate to="/admin/library" replace />} />
         <Route path="import" element={<ImportTab />} />
         <Route path="email" element={<EmailSettingsTab />} />
         <Route path="ai" element={<AiSettingsTab />} />

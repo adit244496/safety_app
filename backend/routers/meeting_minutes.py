@@ -1,5 +1,6 @@
 import os
 import uuid
+import base64
 from datetime import datetime
 from typing import Optional, List
 
@@ -22,7 +23,11 @@ WRITE_ROLES = ["SuperAdmin", "Admin", "PSO"]
 
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-MAX_PDF_BYTES = 25 * 1024 * 1024  # 25 MB
+MAX_FILE_BYTES = 25 * 1024 * 1024  # 25 MB
+# Uploadable minutes formats. Legacy .doc is not supported (no reliable pure-Python parser).
+ALLOWED_EXTS = {".pdf", ".docx", ".txt", ".csv", ".xlsx", ".xlsm", ".xls"}
+# Scanned PDFs are summarised from page images — cap the pages sent to the model.
+MAX_SCANNED_PAGES = 8
 
 
 class MinutesCreate(BaseModel):
@@ -94,6 +99,91 @@ def _extract_pdf_text(abs_path: str) -> str:
         return ""
 
 
+def _pdf_page_images(abs_path: str) -> list:
+    """Render PDF pages to JPEG for scanned (image-only) PDFs. Returns [(media_type, base64)]."""
+    try:
+        import pymupdf
+    except ImportError:
+        raise HTTPException(500, "Scanned-PDF support is not installed on the server (pymupdf missing).")
+    out = []
+    try:
+        with pymupdf.open(abs_path) as doc:
+            for page in list(doc)[:MAX_SCANNED_PAGES]:
+                # ~1600px on the long edge is plenty for the model to read the page.
+                zoom = 1600 / max(page.rect.width, page.rect.height)
+                pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
+                data = pix.tobytes("jpeg", jpg_quality=80)
+                out.append(("image/jpeg", base64.standard_b64encode(data).decode("utf-8")))
+    except Exception:
+        return []
+    return out
+
+
+def _extract_docx_text(abs_path: str) -> str:
+    import docx
+    doc = docx.Document(abs_path)
+    parts = [p.text for p in doc.paragraphs if p.text.strip()]
+    # Minutes are often laid out in tables (action-item grids etc.).
+    for table in doc.tables:
+        for row in table.rows:
+            cells = [c.text.strip() for c in row.cells]
+            if any(cells):
+                parts.append(" | ".join(cells))
+    return "\n".join(parts).strip()
+
+
+def _extract_excel_text(abs_path: str, ext: str) -> str:
+    parts = []
+    if ext == ".xls":
+        import xlrd
+        book = xlrd.open_workbook(abs_path)
+        for sheet in book.sheets():
+            parts.append(f"# Sheet: {sheet.name}")
+            for r in range(sheet.nrows):
+                cells = [str(v).strip() for v in sheet.row_values(r)]
+                if any(cells):
+                    parts.append(" | ".join(cells))
+    else:
+        from openpyxl import load_workbook
+        wb = load_workbook(abs_path, read_only=True, data_only=True)
+        for ws in wb.worksheets:
+            parts.append(f"# Sheet: {ws.title}")
+            for row in ws.iter_rows(values_only=True):
+                cells = ["" if v is None else str(v).strip() for v in row]
+                if any(cells):
+                    parts.append(" | ".join(cells))
+        wb.close()
+    return "\n".join(parts).strip()
+
+
+def _extract_text_file(abs_path: str) -> str:
+    with open(abs_path, "rb") as fp:
+        raw = fp.read()
+    for enc in ("utf-8-sig", "cp1252", "latin-1"):
+        try:
+            return raw.decode(enc).strip()
+        except UnicodeDecodeError:
+            continue
+    return ""
+
+
+def _extract_file_text(abs_path: str) -> str:
+    """Extract text from an uploaded minutes file. Returns '' if nothing could be read."""
+    ext = os.path.splitext(abs_path)[1].lower()
+    if ext == ".pdf":
+        return _extract_pdf_text(abs_path)
+    try:
+        if ext == ".docx":
+            return _extract_docx_text(abs_path)
+        if ext in (".xlsx", ".xlsm", ".xls"):
+            return _extract_excel_text(abs_path, ext)
+        if ext in (".txt", ".csv"):
+            return _extract_text_file(abs_path)
+    except Exception:
+        return ""
+    return ""
+
+
 def _scoped_query(db: Session, user: models.User):
     q = db.query(models.MeetingMinutes)
     allowed = get_allowed_project_ids(user)
@@ -161,7 +251,7 @@ def create_text_minutes(body: MinutesCreate, db: Session = Depends(get_db), user
 
 
 @router.post("/upload", status_code=201)
-async def upload_pdf_minutes(
+async def upload_file_minutes(
     title: str = Form(...),
     meeting_date: Optional[str] = Form(None),
     project_id: Optional[int] = Form(None),
@@ -174,13 +264,15 @@ async def upload_pdf_minutes(
     if not title or not title.strip():
         raise HTTPException(400, "Title is required")
     ext = os.path.splitext(file.filename or "")[1].lower()
-    if ext != ".pdf":
-        raise HTTPException(400, "Only PDF files are allowed")
+    if ext == ".doc":
+        raise HTTPException(400, "Legacy .doc files are not supported — please save it as .docx or PDF")
+    if ext not in ALLOWED_EXTS:
+        raise HTTPException(400, "Only PDF, Word (.docx), Excel (.xlsx/.xls), CSV or text files are allowed")
     content = await file.read()
-    if len(content) > MAX_PDF_BYTES:
-        raise HTTPException(400, "PDF is too large (max 25 MB)")
+    if len(content) > MAX_FILE_BYTES:
+        raise HTTPException(400, "File is too large (max 25 MB)")
 
-    fname = f"{uuid.uuid4().hex}.pdf"
+    fname = f"{uuid.uuid4().hex}{ext}"
     with open(os.path.join(UPLOAD_DIR, fname), "wb") as fp:
         fp.write(content)
 
@@ -189,7 +281,7 @@ async def upload_pdf_minutes(
         meeting_date=meeting_date,
         project_id=project_id,
         attendees=attendees,
-        entry_type="pdf",
+        entry_type="pdf" if ext == ".pdf" else "file",
         file_path=fname,
         file_name=file.filename or fname,
         created_by=user.id,
@@ -232,22 +324,25 @@ def generate_ai_summary(mom_id: int, db: Session = Depends(get_db), user: models
     if not ai_service.is_configured(db):
         raise HTTPException(503, "AI summary is not configured. Add an API key in Admin → AI Summary.")
 
-    # Gather the source text: extracted PDF text, or the typed content.
-    if m.entry_type == "pdf" and m.file_path:
-        source = _extract_pdf_text(os.path.join(UPLOAD_DIR, m.file_path))
-        if not source:
-            raise HTTPException(
-                422,
-                "Could not read any text from this PDF (it may be scanned images). "
-                "A text-based PDF is needed for an AI summary.",
-            )
+    # Gather the source: text extracted from the uploaded file, or the typed content.
+    # Scanned PDFs have no text layer, so their pages are sent to the model as images.
+    images = []
+    if m.entry_type in ("pdf", "file") and m.file_path:
+        abs_path = os.path.join(UPLOAD_DIR, m.file_path)
+        if not os.path.exists(abs_path):
+            raise HTTPException(404, "The uploaded file is missing on the server.")
+        source = _extract_file_text(abs_path)
+        if len(source) < 20 and abs_path.lower().endswith(".pdf"):
+            images = _pdf_page_images(abs_path)
+        if not source and not images:
+            raise HTTPException(422, "Could not read any content from this file.")
     else:
         source = m.content or ""
         if not source.strip():
             raise HTTPException(422, "There is no text to summarise.")
 
     try:
-        summary = ai_service.summarize_minutes(source, db)
+        summary = ai_service.summarize_minutes(source, db, images=images)
     except Exception:
         raise HTTPException(502, "Failed to generate the AI summary. Please try again.")
 

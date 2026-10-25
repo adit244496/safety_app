@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft, CheckCircle2, XCircle, Ban, DoorClosed, Pencil, Trash2, AlertTriangle, X,
-  FileText, ShieldAlert, UserCheck, History, Clock, Camera, MessageSquare, Send,
+  FileText, ShieldAlert, UserCheck, History, Clock, Camera, MessageSquare, Send, ImagePlus,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '../../lib/api'
@@ -400,9 +400,13 @@ export default function WorkPermitDetail() {
             </div>
           )}
           <div className="flex items-end gap-2 pt-1">
-            <label className="btn-secondary btn-sm flex-shrink-0 h-[38px] cursor-pointer" title="Attach photos">
-              <Camera className="w-3.5 h-3.5" />
+            <label className="btn-secondary btn-sm flex-shrink-0 h-[38px] cursor-pointer" title="Upload photos">
+              <ImagePlus className="w-3.5 h-3.5" />
               <input type="file" accept="image/*" multiple className="hidden" onChange={e => { const fs = Array.from(e.target.files || []).slice(0, 6 - commentPhotos.length); setCommentPhotos(ps => [...ps, ...fs]); e.currentTarget.value = '' }} />
+            </label>
+            <label className="btn-secondary btn-sm flex-shrink-0 h-[38px] cursor-pointer" title="Take a photo">
+              <Camera className="w-3.5 h-3.5" />
+              <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const fs = Array.from(e.target.files || []).slice(0, 6 - commentPhotos.length); setCommentPhotos(ps => [...ps, ...fs]); e.currentTarget.value = '' }} />
             </label>
             <textarea rows={1} className="input resize-none flex-1 min-h-[38px]" placeholder="Write a comment…" value={commentText}
               onChange={e => setCommentText(e.target.value)}
@@ -478,10 +482,16 @@ export default function WorkPermitDetail() {
               </div>
             ))}
             {closurePhotos.length < 2 && (
-              <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-300 text-gray-400">
-                <Camera className="w-4 h-4" /><span className="text-[9px] mt-0.5">{closurePhotos.length}/2</span>
-                <input type="file" accept="image/*" multiple className="hidden" onChange={e => { const fs = Array.from(e.target.files || []).slice(0, 2 - closurePhotos.length); setClosurePhotos(ps => [...ps, ...fs]); e.currentTarget.value = '' }} />
-              </label>
+              <>
+                <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-300 text-gray-400" title="Upload photos">
+                  <ImagePlus className="w-4 h-4" /><span className="text-[9px] mt-0.5">Upload {closurePhotos.length}/2</span>
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={e => { const fs = Array.from(e.target.files || []).slice(0, 2 - closurePhotos.length); setClosurePhotos(ps => [...ps, ...fs]); e.currentTarget.value = '' }} />
+                </label>
+                <label className="w-16 h-16 rounded-lg border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 text-indigo-400" title="Take a photo">
+                  <Camera className="w-4 h-4" /><span className="text-[9px] mt-0.5">Camera</span>
+                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { const fs = Array.from(e.target.files || []).slice(0, 2 - closurePhotos.length); setClosurePhotos(ps => [...ps, ...fs]); e.currentTarget.value = '' }} />
+                </label>
+              </>
             )}
           </div>
         </ActionModal>

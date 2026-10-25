@@ -161,15 +161,30 @@ async def bulk_upload_users(
     DEFAULT_PASSWORD = "123456"
     created, skipped, errors = [], [], []
 
-    for row in rows[header_idx + 1:]:
+    # Match project names leniently ("Usshar", "USSHAR ", "U.S.S.H.A.R" → same project).
+    def _norm(s: str) -> str:
+        return re.sub(r'[^A-Z0-9]', '', s.upper())
+    projects_by_norm = {_norm(p.name): p for p in db.query(models.Project).all()}
+
+    for row_no, row in enumerate(rows[header_idx + 1:], start=header_idx + 2):
         if not any(row):
             continue
         project_name = str(row[0]).strip() if row[0] else None
-        contractor_name = str(row[1]).strip() if row[1] else None
-        mobile_raw = row[2]
+        contractor_name = str(row[1]).strip() if len(row) > 1 and row[1] else None
+        mobile_raw = row[2] if len(row) > 2 else None
         email_raw = str(row[3]).strip() if len(row) > 3 and row[3] else None
 
-        if not email_raw or not contractor_name or not project_name:
+        # Report incomplete rows instead of silently dropping them.
+        if not project_name or not contractor_name or not email_raw:
+            missing = [f for f, v in (("project", project_name), ("contractor", contractor_name), ("email", email_raw)) if not v]
+            errors.append(f"Row {row_no}: {contractor_name or '?'} — missing {', '.join(missing)}, not imported")
+            continue
+
+        # Don't create contractors that belong to no project — they would never
+        # appear in any project's contractor dropdown.
+        project = projects_by_norm.get(_norm(project_name))
+        if not project:
+            errors.append(f"Row {row_no}: {contractor_name} — project '{project_name}' not found, not imported")
             continue
 
         # Multiple emails separated by comma — create one user per unique email
@@ -185,24 +200,18 @@ async def bulk_upload_users(
                 models.User.email == email,
             ).first()
 
-            project = db.query(models.Project).filter(
-                models.Project.name.ilike(project_name)
-            ).first()
-
             if existing:
                 # User already exists — just add the project assignment if missing
-                if project:
-                    already_assigned = db.query(models.UserProject).filter(
-                        models.UserProject.user_id == existing.id,
-                        models.UserProject.project_id == project.id,
-                    ).first()
-                    if not already_assigned:
-                        db.add(models.UserProject(user_id=existing.id, project_id=project.id))
-                        created.append(f"{contractor_name} ({email}) → {project.name} (added project)")
-                    else:
-                        skipped.append(f"{contractor_name} ({email}) already in {project.name}")
+                already_assigned = db.query(models.UserProject).filter(
+                    models.UserProject.user_id == existing.id,
+                    models.UserProject.project_id == project.id,
+                ).first()
+                if not already_assigned:
+                    db.add(models.UserProject(user_id=existing.id, project_id=project.id))
+                    db.flush()
+                    created.append(f"{contractor_name} ({email}) → {project.name} (added project)")
                 else:
-                    skipped.append(f"{contractor_name} ({email}) exists, project '{project_name}' not found")
+                    skipped.append(f"{contractor_name} ({email}) already in {project.name}")
                 continue
 
             mobile = _clean_mobile(mobile_raw)
@@ -216,11 +225,8 @@ async def bulk_upload_users(
             db.add(user)
             db.flush()
 
-            if project:
-                db.add(models.UserProject(user_id=user.id, project_id=project.id))
-                created.append(f"{contractor_name} ({email}) → {project.name}")
-            else:
-                created.append(f"{contractor_name} ({email}) [project '{project_name}' not found]")
+            db.add(models.UserProject(user_id=user.id, project_id=project.id))
+            created.append(f"{contractor_name} ({email}) → {project.name}")
 
     db.commit()
     return {

@@ -9,7 +9,7 @@ import {
 } from 'recharts'
 import {
   ClipboardList, AlertTriangle, CheckCircle,
-  TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, Clock, Download, ThumbsUp,
+  TrendingUp, ArrowUpRight, Hourglass, SlidersHorizontal, X, ChevronDown, ChevronRight, Clock, Download, ThumbsUp,
   Users, FileCheck2, HardHat, GraduationCap, ShieldCheck, Siren, HeartPulse, Stethoscope, Megaphone, ClipboardCheck, Activity,
 } from 'lucide-react'
 import ExcelJS from 'exceljs'
@@ -17,6 +17,7 @@ import { generateDashboardPdf } from '../lib/printPdf'
 import api from '../lib/api'
 import { fmtDate, getRiskClass, getStatusClass } from '../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
+import { useFacets } from '../lib/facets'
 
 const STATUS_COLORS: Record<string, string> = {
   Open: '#ef4444', Overdue: '#f97316', 'Under Review': '#eab308',
@@ -166,6 +167,14 @@ export default function Dashboard() {
     [selectedContractors, companyToUserIds]
   )
 
+  // Cascading filters: each dropdown lists only values present in (non-draft)
+  // observations matching the other selected filters.
+  const facet = useFacets('/observations/facets', {
+    project_id: projectIds, building_id: buildingId ? [buildingId] : [], contractor_user_id: expandedContractorIds,
+    core_concern_id: coreConcernIds, risk_level: riskLevels, status: statusFilter, aging: ageingFilter,
+    date_from: dateFrom || undefined, date_to: dateTo || undefined, exclude_drafts: true,
+  })
+
   // ── Stats query ─────────────────────────────────────────────────────────
   const { data, isLoading } = useQuery({
     queryKey: ['stats', projectIds, buildingId, selectedContractors, dateFrom, dateTo, coreConcernIds, riskLevels, statusFilter, ageingFilter],
@@ -275,9 +284,10 @@ export default function Dashboard() {
   const cards = [
     { label: 'Total Observations', status: null,                 value: data?.total ?? 0,                          icon: ClipboardList, bg: 'bg-indigo-50',  color: 'text-indigo-600',  border: 'border-indigo-100'  },
     { label: 'Open',               status: 'Open',               value: statusCounts['Open'] ?? 0,                 icon: AlertTriangle, bg: 'bg-rose-50',    color: 'text-rose-600',    border: 'border-rose-100'    },
-    { label: 'Overdue',            status: 'Overdue',            value: statusCounts['Overdue'] ?? 0,              icon: Hourglass,     bg: 'bg-amber-50',   color: 'text-amber-600',   border: 'border-amber-100'   },
+    { label: 'Open & Overdue',     status: 'Overdue',            value: statusCounts['Overdue'] ?? 0,              icon: Hourglass,     bg: 'bg-amber-50',   color: 'text-amber-600',   border: 'border-amber-100'   },
     { label: 'Partially Closed',   status: 'Partially Closed',   value: statusCounts['Partially Closed'] ?? 0,     icon: Clock,         bg: 'bg-lime-50',    color: 'text-lime-600',    border: 'border-lime-100'    },
     { label: 'Closed',             status: 'Closed',             value: statusCounts['Closed'] ?? 0,               icon: CheckCircle,   bg: 'bg-emerald-50', color: 'text-emerald-600', border: 'border-emerald-100' },
+    { label: 'Overdue & Closed',   status: 'Overdue & Closed',   value: statusCounts['Overdue & Closed'] ?? 0,     icon: CheckCircle,   bg: 'bg-orange-50',  color: 'text-orange-600',  border: 'border-orange-100'  },
     { label: 'Praiseworthy Observation', status: 'Positive Approach', value: statusCounts['Positive Approach'] ?? 0, icon: ThumbsUp,   bg: 'bg-amber-50',    color: 'text-[#B8860B]',   border: 'border-amber-100'    },
     { label: 'Unresolved & Closed', status: 'Unresolved & Closed', value: statusCounts['Unresolved & Closed'] ?? 0, icon: AlertTriangle, bg: 'bg-violet-50',  color: 'text-violet-600',  border: 'border-violet-100'  },
   ]
@@ -297,6 +307,18 @@ export default function Dashboard() {
     for (const [k, vals] of Object.entries(extra)) { sp.delete(k); add(k, vals) }
     const q = sp.toString()
     navigate(`/observations${q ? `?${q}` : ''}`)
+  }
+
+  // Same idea for the Work Permits card — carries the dashboard's project filter.
+  // "Issued" matches the /work-permits/stats KPI: Approved or Closed.
+  const ISSUED_STATUSES = ['Approved', 'Closed']
+  const localToday = () => new Date().toLocaleDateString('en-CA')   // YYYY-MM-DD in local time
+  const goToPermits = (extra: Record<string, string[]> = {}) => {
+    const sp = new URLSearchParams()
+    projectIds.forEach(id => sp.append('project_id', String(id)))
+    for (const [k, vals] of Object.entries(extra)) vals.forEach(v => sp.append(k, v))
+    const q = sp.toString()
+    navigate(`/work-permits${q ? `?${q}` : ''}`)
   }
 
   // Ageing buckets: "Praiseworthy" is a status; the rest map to the ageing filter.
@@ -733,7 +755,7 @@ export default function Dashboard() {
         {/* Filter controls: hidden on mobile until toggled, always visible on sm+ */}
         <div className={`gap-2 mt-3 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${showFilters ? 'grid grid-cols-2' : 'hidden'}`}>
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
-          <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
+          <MultiSelectFilter size="sm" options={facet.narrow('project_id', projectOptions)} value={projectIds} prune={facet.ready}
             onChange={v => {
               const ids = v as number[]
               setProjectIds(ids); setBuildingId('')
@@ -750,7 +772,7 @@ export default function Dashboard() {
               className="w-full sm:w-auto text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
             >
               <option value="">Tower / Block</option>
-              {buildingOptions.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+              {facet.narrow('building_id', buildingOptions).map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
             </select>
           )}
           {isContractor ? (
@@ -758,7 +780,7 @@ export default function Dashboard() {
               <span className="text-gray-400">Contractor:</span> {user?.name}
             </span>
           ) : (
-            <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
+            <MultiSelectFilter size="sm" options={facet.narrow('contractor_user_id', contractorOptions, o => companyToUserIds.get(String(o.value)) || [])} value={selectedContractors} prune={facet.ready}
               onChange={v => {
                 const names = v as string[]
                 setSelectedContractors(names)
@@ -770,11 +792,11 @@ export default function Dashboard() {
               }}
               placeholder="Contractor" className="w-full sm:w-auto sm:min-w-[120px]" />
           )}
-          <MultiSelectFilter size="sm" options={PRIORITY_OPTIONS} value={riskLevels}
+          <MultiSelectFilter size="sm" options={facet.narrow('risk_level', PRIORITY_OPTIONS)} value={riskLevels} prune={facet.ready}
             onChange={v => setRiskLevels(v as string[])} placeholder="Risk Level" className="w-full sm:w-auto sm:min-w-[110px]" />
-          <MultiSelectFilter size="sm" options={coreConcernOptions} value={coreConcernIds}
+          <MultiSelectFilter size="sm" options={facet.narrow('core_concern_id', coreConcernOptions)} value={coreConcernIds} prune={facet.ready}
             onChange={v => setCoreConcernIds(v as number[])} placeholder="Core Concern" className="w-full sm:w-auto sm:min-w-[130px]" />
-          <MultiSelectFilter size="sm" options={STATUS_OPTIONS} value={statusFilter}
+          <MultiSelectFilter size="sm" options={facet.narrow('status', STATUS_OPTIONS)} value={statusFilter} prune={facet.ready}
             onChange={v => setStatusFilter(v as string[])} placeholder="Status" className="w-full sm:w-auto sm:min-w-[120px]" />
           <MultiSelectFilter size="sm" options={AGEING_FILTER_OPTIONS} value={ageingFilter}
             onChange={v => setAgeingFilter(v as string[])} placeholder="Ageing" className="w-full sm:w-auto sm:min-w-[130px]" />
@@ -801,7 +823,7 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
             {cards.map(({ label, status, value, icon: Icon, bg, color, border }) => (
               <button
                 key={label}
@@ -1113,25 +1135,28 @@ export default function Dashboard() {
 
           {/* Work Permits KPI + Top Observers */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-            <button type="button" onClick={() => navigate('/work-permits')}
-              className="card text-left hover:shadow-md hover:-translate-y-0.5 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="card">
+              <button type="button" onClick={() => goToPermits()}
+                className="flex items-center gap-2 mb-3 text-left group focus:outline-none">
                 <div className="w-7 h-7 bg-teal-50 rounded-lg flex items-center justify-center flex-shrink-0">
                   <FileCheck2 className="w-4 h-4 text-teal-600" />
                 </div>
-                <h2 className="font-semibold text-gray-900">Work Permits</h2>
-              </div>
+                <h2 className="font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors">Work Permits</h2>
+                <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-500 transition-colors" />
+              </button>
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-teal-50/60 p-3">
+                <button type="button" onClick={() => goToPermits({ status: ISSUED_STATUSES, issued_on: [localToday()] })}
+                  className="rounded-xl bg-teal-50/60 p-3 text-left hover:shadow-md hover:-translate-y-0.5 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400">
                   <p className="text-2xl font-bold text-teal-700">{permitStats?.issued_today ?? 0}</p>
                   <p className="text-[11px] text-gray-500 mt-0.5 leading-tight">Issued today</p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-3">
+                </button>
+                <button type="button" onClick={() => goToPermits({ status: ISSUED_STATUSES })}
+                  className="rounded-xl bg-slate-50 p-3 text-left hover:shadow-md hover:-translate-y-0.5 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-400">
                   <p className="text-2xl font-bold text-gray-900">{permitStats?.total_issued ?? 0}</p>
                   <p className="text-[11px] text-gray-500 mt-0.5 leading-tight">Total issued to date</p>
-                </div>
+                </button>
               </div>
-            </button>
+            </div>
 
             <div className="card lg:col-span-2">
               <div className="flex items-center gap-2 mb-4">

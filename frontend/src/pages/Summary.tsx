@@ -11,6 +11,7 @@ import OhsStatistics from './OhsStatistics'
 import api from '../lib/api'
 import { useAuth } from '../store/authStore'
 import { MultiSelectFilter, type MSOption } from '../components/MultiSelectFilter'
+import { useFacets } from '../lib/facets'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -43,10 +44,9 @@ const GRADATION_BG: Record<string, string> = {
 // ─── EASE Score Tab ──────────────────────────────────────────────────────────
 
 function EaseScoreView() {
-  const last90 = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const today  = new Date().toISOString().slice(0, 10)
   const [projectFilter, setProjectFilter] = useState<string[]>([])
-  const [dateFrom, setDateFrom] = useState(last90)
+  const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo]     = useState(today)
   const [showFilters, setShowFilters] = useState(false)
 
@@ -60,7 +60,7 @@ function EaseScoreView() {
     queryFn: () => api.get('/ease-score/', {
       params: {
         project_name: projectFilter.length ? projectFilter : undefined,
-        date_from: dateFrom,
+        date_from: dateFrom || undefined,
         date_to: dateTo,
       },
     }).then(r => r.data),
@@ -168,7 +168,7 @@ function EaseScoreView() {
     )
   }
 
-  const easeActiveCount = (projectFilter.length > 0 ? 1 : 0) + (dateFrom !== last90 ? 1 : 0) + (dateTo !== today ? 1 : 0)
+  const easeActiveCount = (projectFilter.length > 0 ? 1 : 0) + (dateFrom !== '' ? 1 : 0) + (dateTo !== today ? 1 : 0)
 
   const [showEaseDlMenu, setShowEaseDlMenu] = useState(false)
   const easeDlRef = useRef<HTMLDivElement>(null)
@@ -177,7 +177,7 @@ function EaseScoreView() {
     await generateEasePdf({
       overallScore: aggregatedOverall,
       overallGrade: aggregatedGrad,
-      filterDesc: `${projectFilter.length ? projectFilter.join(', ') : 'All projects'}  |  ${dateFrom} to ${dateTo}`,
+      filterDesc: `${projectFilter.length ? projectFilter.join(', ') : 'All projects'}  |  ${dateFrom ? `${dateFrom} to ${dateTo}` : `Up to ${dateTo}`}`,
       projectCount: projectChartData.length,
       periodCount: periods.length,
     })
@@ -231,7 +231,7 @@ function EaseScoreView() {
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date to" />
           </div>
           {easeActiveCount > 0 && (
-            <button onClick={() => { setProjectFilter([]); setDateFrom(last90); setDateTo(today) }}
+            <button onClick={() => { setProjectFilter([]); setDateFrom(''); setDateTo(today) }}
               className="col-span-2 sm:col-auto flex items-center justify-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors border border-red-100 sm:border-0">
               <X className="w-3 h-3" /> Clear filters
             </button>
@@ -427,9 +427,8 @@ function ComplianceAnalysis() {
   const [selectedContractors, setSelectedContractors] = useState<string[]>(
     () => isContractor && user?.name ? [user.name] : []
   )
-  const _last30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   const _today  = new Date().toISOString().slice(0, 10)
-  const [dateFrom,      setDateFrom]      = useState(_last30)
+  const [dateFrom,      setDateFrom]      = useState('')
   const [dateTo,        setDateTo]        = useState(_today)
   const [showFilters,   setShowFilters]   = useState(false)
   const [projectSort,   setProjectSort]   = useState({ key: 'priority', asc: true })
@@ -480,6 +479,13 @@ function ComplianceAnalysis() {
     selectedContractors.flatMap(name => companyToUserIds.get(name) || []),
     [selectedContractors, companyToUserIds]
   )
+
+  // Cascading filters: dropdowns list only values present in (non-draft) observations
+  // matching the other selected filters.
+  const facet = useFacets('/observations/facets', {
+    project_id: projectIds, contractor_user_id: expandedContractorIds,
+    date_from: dateFrom || undefined, date_to: dateTo || undefined, exclude_drafts: true,
+  })
 
   async function downloadExcel() {
     const wb = new ExcelJS.Workbook()
@@ -534,8 +540,8 @@ function ComplianceAnalysis() {
       isContractor
         ? `Contractor: ${user?.name}`
         : selectedContractors.length ? `Contractors: ${selectedContractors.join(', ')}` : null,
-      (dateFrom !== _last30 || dateTo !== _today)
-        ? `${dateFrom} → ${dateTo}`
+      (dateFrom !== '' || dateTo !== _today)
+        ? `${dateFrom || '…'} → ${dateTo}`
         : null,
     ].filter(Boolean)
     const filterDesc = filterParts.length ? filterParts.join(' | ') : 'All projects & contractors'
@@ -544,7 +550,7 @@ function ComplianceAnalysis() {
       projectRows: sortedProjects,
       contractorRows: sortedContractors,
       filterDesc,
-      dateRange: `${dateFrom} to ${dateTo}`,
+      dateRange: `${dateFrom ? `${dateFrom} to ${dateTo}` : `Up to ${dateTo}`}`,
     })
   }
 
@@ -557,7 +563,7 @@ function ComplianceAnalysis() {
       params: {
         project_id:         projectIds.length            ? projectIds            : undefined,
         contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
-        date_from: dateFrom,
+        date_from: dateFrom || undefined,
         date_to:   dateTo,
       },
     }).then(r => r.data),
@@ -620,7 +626,7 @@ function ComplianceAnalysis() {
 
   const compActiveCount =
     (projectIds.length > 0 ? 1 : 0) + (!isContractor && selectedContractors.length > 0 ? 1 : 0) +
-    (dateFrom !== _last30 ? 1 : 0) + (dateTo !== _today ? 1 : 0)
+    (dateFrom !== '' ? 1 : 0) + (dateTo !== _today ? 1 : 0)
 
   return (
     <div id="summary-pdf-content" className="space-y-5">
@@ -657,7 +663,7 @@ function ComplianceAnalysis() {
         </div>
         <div className={`gap-2 mt-3 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${showFilters ? 'grid grid-cols-2' : 'hidden'}`}>
           <div className="hidden sm:block w-px h-4 bg-gray-200 flex-shrink-0" />
-          <MultiSelectFilter size="sm" options={projectOptions} value={projectIds}
+          <MultiSelectFilter size="sm" options={facet.narrow('project_id', projectOptions)} value={projectIds} prune={facet.ready}
             onChange={v => {
               const ids = v as number[]
               setProjectIds(ids)
@@ -672,7 +678,7 @@ function ComplianceAnalysis() {
               <span className="text-gray-400">Contractor:</span> {user?.name}
             </span>
           ) : (
-            <MultiSelectFilter size="sm" options={contractorOptions} value={selectedContractors}
+            <MultiSelectFilter size="sm" options={facet.narrow('contractor_user_id', contractorOptions, o => companyToUserIds.get(String(o.value)) || [])} value={selectedContractors} prune={facet.ready}
               onChange={v => {
                 const names = v as string[]
                 setSelectedContractors(names)
@@ -692,7 +698,7 @@ function ComplianceAnalysis() {
               className="flex-1 sm:flex-none sm:w-[130px] text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400" title="Date to" />
           </div>
           {compActiveCount > 0 && (
-            <button onClick={() => { setProjectIds([]); if (!isContractor) setSelectedContractors([]); setDateFrom(_last30); setDateTo(_today) }}
+            <button onClick={() => { setProjectIds([]); if (!isContractor) setSelectedContractors([]); setDateFrom(''); setDateTo(_today) }}
               className="col-span-2 sm:col-auto flex items-center justify-center gap-1 text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1.5 rounded-lg hover:bg-red-50 transition-colors border border-red-100 sm:border-0">
               <X className="w-3 h-3" /> Clear filters
             </button>

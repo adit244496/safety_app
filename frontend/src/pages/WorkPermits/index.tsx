@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { FileCheck2, Plus, Search, X, ChevronRight, Inbox } from 'lucide-react'
 import { usePageTitle } from '../../store/pageTitleContext'
@@ -7,6 +7,7 @@ import { useAuth } from '../../store/authStore'
 import api from '../../lib/api'
 import { fmtDate } from '../../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
+import { useFacets } from '../../lib/facets'
 import { PERMIT_STATUS_META } from '../../lib/permitConfig'
 
 const STATUS_OPTIONS: MSOption[] = [
@@ -30,8 +31,11 @@ export default function WorkPermits() {
   const canCreate = ['Contractor', 'SuperAdmin'].includes(user?.role || '')
   const isApprover = ['PIC', 'PSO', 'EIC'].includes(user?.role || '')
 
-  const [statusFilter, setStatusFilter] = useState<(string | number)[]>([])
-  const [projectIds, setProjectIds] = useState<(string | number)[]>([])
+  // Initial filters can come from the URL (e.g. clicking a Work Permits card on the dashboard).
+  const [searchParams] = useSearchParams()
+  const [statusFilter, setStatusFilter] = useState<(string | number)[]>(() => searchParams.getAll('status'))
+  const [projectIds, setProjectIds] = useState<(string | number)[]>(() => searchParams.getAll('project_id').map(Number))
+  const [issuedOn, setIssuedOn] = useState(() => searchParams.get('issued_on') || '')
   const [eicIds, setEicIds] = useState<(string | number)[]>([])
   const [psoIds, setPsoIds] = useState<(string | number)[]>([])
   const [picIds, setPicIds] = useState<(string | number)[]>([])
@@ -82,16 +86,20 @@ export default function WorkPermits() {
     status: statusFilter, project_id: projectIds, scope: scope || undefined, search: search || undefined,
     eic_user_id: eicIds, pso_user_id: psoIds, pic_user_id: picIds, contractor_user_id: contractorIds,
     receiver_user_id: receiverIds, hazard_category: hazardCats, area: areas, floor: floors,
+    issued_on: issuedOn || undefined,
   }
+  // Cascading filters: each dropdown lists only values present in permits matching
+  // the other selected filters.
+  const facet = useFacets('/work-permits/facets', params)
   const { data: permits, isLoading } = useQuery({
     queryKey: ['work-permits', params],
     queryFn: () => api.get('/work-permits/', { params }).then(r => r.data),
   })
   const list: any[] = permits || []
 
-  const hasFilters = statusFilter.length || projectIds.length || scope || search || eicIds.length || psoIds.length || picIds.length || contractorIds.length || receiverIds.length || hazardCats.length || areas.length || floors.length
+  const hasFilters = statusFilter.length || projectIds.length || scope || search || issuedOn || eicIds.length || psoIds.length || picIds.length || contractorIds.length || receiverIds.length || hazardCats.length || areas.length || floors.length
   const clearFilters = () => {
-    setStatusFilter([]); setProjectIds([]); setScope(''); setSearch('')
+    setStatusFilter([]); setProjectIds([]); setScope(''); setSearch(''); setIssuedOn('')
     setEicIds([]); setPsoIds([]); setPicIds([]); setContractorIds([]); setReceiverIds([]); setHazardCats([]); setAreas([]); setFloors([])
   }
 
@@ -125,43 +133,43 @@ export default function WorkPermits() {
         <div className="flex flex-wrap items-end gap-2">
           <div className="min-w-[180px]">
             <label className="label">Status</label>
-            <MultiSelectFilter size="sm" options={STATUS_OPTIONS} value={statusFilter} onChange={setStatusFilter} placeholder="All statuses" />
+            <MultiSelectFilter size="sm" options={facet.narrow('status', STATUS_OPTIONS)} value={statusFilter} prune={facet.ready} onChange={setStatusFilter} placeholder="All statuses" />
           </div>
           <div className="min-w-[150px]">
             <label className="label">Project</label>
-            <MultiSelectFilter size="sm" options={projectOptions} value={projectIds} onChange={v => { setProjectIds(v); setAreas([]); setFloors([]) }} placeholder="All projects" />
+            <MultiSelectFilter size="sm" options={facet.narrow('project_id', projectOptions)} value={projectIds} prune={facet.ready} onChange={v => { setProjectIds(v); setAreas([]); setFloors([]) }} placeholder="All projects" />
           </div>
           <div className="min-w-[130px]">
             <label className="label">Area</label>
-            <MultiSelectFilter size="sm" options={areaOptions} value={areas} onChange={setAreas} placeholder="All areas" />
+            <MultiSelectFilter size="sm" options={facet.narrow('area', areaOptions)} value={areas} prune={facet.ready} onChange={setAreas} placeholder="All areas" />
           </div>
           <div className="min-w-[130px]">
             <label className="label">Floor</label>
-            <MultiSelectFilter size="sm" options={floorOptions} value={floors} onChange={setFloors} placeholder="All floors" />
+            <MultiSelectFilter size="sm" options={facet.narrow('floor', floorOptions)} value={floors} prune={facet.ready} onChange={setFloors} placeholder="All floors" />
           </div>
           <div className="min-w-[140px]">
             <label className="label">Contractor</label>
-            <MultiSelectFilter size="sm" options={contractorOptions} value={contractorIds} onChange={setContractorIds} placeholder="All contractors" />
+            <MultiSelectFilter size="sm" options={facet.narrow('contractor_user_id', contractorOptions)} value={contractorIds} prune={facet.ready} onChange={setContractorIds} placeholder="All contractors" />
           </div>
           <div className="min-w-[140px]">
             <label className="label">Receiver</label>
-            <MultiSelectFilter size="sm" options={receiverOptions} value={receiverIds} onChange={setReceiverIds} placeholder="All receivers" />
+            <MultiSelectFilter size="sm" options={facet.narrow('receiver_user_id', receiverOptions)} value={receiverIds} prune={facet.ready} onChange={setReceiverIds} placeholder="All receivers" />
           </div>
           <div className="min-w-[130px]">
             <label className="label">EIC</label>
-            <MultiSelectFilter size="sm" options={eicOptions} value={eicIds} onChange={setEicIds} placeholder="All EIC" />
+            <MultiSelectFilter size="sm" options={facet.narrow('eic_user_id', eicOptions)} value={eicIds} prune={facet.ready} onChange={setEicIds} placeholder="All EIC" />
           </div>
           <div className="min-w-[130px]">
             <label className="label">PSO</label>
-            <MultiSelectFilter size="sm" options={psoOptions} value={psoIds} onChange={setPsoIds} placeholder="All PSO" />
+            <MultiSelectFilter size="sm" options={facet.narrow('pso_user_id', psoOptions)} value={psoIds} prune={facet.ready} onChange={setPsoIds} placeholder="All PSO" />
           </div>
           <div className="min-w-[130px]">
             <label className="label">PIC</label>
-            <MultiSelectFilter size="sm" options={picOptions} value={picIds} onChange={setPicIds} placeholder="All PIC" />
+            <MultiSelectFilter size="sm" options={facet.narrow('pic_user_id', picOptions)} value={picIds} prune={facet.ready} onChange={setPicIds} placeholder="All PIC" />
           </div>
           <div className="min-w-[160px]">
             <label className="label">Hazardous Work Type</label>
-            <MultiSelectFilter size="sm" options={hazardOptions} value={hazardCats} onChange={setHazardCats} placeholder="All work types" />
+            <MultiSelectFilter size="sm" options={facet.narrow('hazard_category', hazardOptions)} value={hazardCats} prune={facet.ready} onChange={setHazardCats} placeholder="All work types" />
           </div>
           <div className="flex-1 min-w-[180px]">
             <label className="label">Search</label>
@@ -170,6 +178,12 @@ export default function WorkPermits() {
               <input className="input !py-1.5 text-sm pl-8" placeholder="Permit no, location, receiver…" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
           </div>
+          {issuedOn && (
+            <span className="inline-flex items-center gap-1.5 self-end mb-1 px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 text-xs font-medium">
+              Issued on {fmtDate(issuedOn)}
+              <button onClick={() => setIssuedOn('')} className="text-teal-500 hover:text-teal-700" title="Remove"><X className="w-3 h-3" /></button>
+            </span>
+          )}
           {hasFilters ? <button onClick={clearFilters} className="btn-ghost btn-sm text-gray-500"><X className="w-3.5 h-3.5" /> Clear</button> : null}
         </div>
       </div>

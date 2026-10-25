@@ -75,6 +75,11 @@ def _seed_risk_labels(db):
     for lvl, lbl in _DEFAULT_PROBABILITY.items():
         if not db.query(m.ProbabilityLabel).filter(m.ProbabilityLabel.level == lvl).first():
             db.add(m.ProbabilityLabel(level=lvl, label=lbl))
+    # Target-date rules: seed once (only when none exist), matching the form's old
+    # recommendation — High ≤ 2 days, Medium ≤ 4 days, Low ≤ 7 days.
+    if not db.query(m.TargetDayRule).first():
+        for lo, hi, days in ((0, 4, 7), (5, 12, 4), (13, 25, 2)):
+            db.add(m.TargetDayRule(min_score=lo, max_score=hi, days=days))
     db.commit()
 
 

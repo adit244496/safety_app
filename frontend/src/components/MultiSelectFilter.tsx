@@ -15,6 +15,10 @@ interface Props {
   size?: 'sm' | 'md'
   className?: string
   disabled?: boolean
+  /** Cascading filters: when true, selected values that are no longer among
+   *  `options` (e.g. after the parent filter changed) are dropped automatically.
+   *  Pass true only once the options' source data has loaded. */
+  prune?: boolean
 }
 
 export function MultiSelectFilter({
@@ -23,10 +27,20 @@ export function MultiSelectFilter({
   size = 'md',
   className = '',
   disabled = false,
+  prune = false,
 }: Props) {
   const [open, setOpen]     = useState(false)
   const [search, setSearch] = useState('')
   const ref = useRef<HTMLDivElement>(null)
+
+  const optionKey = options.map(o => String(o.value)).join('\u0001')
+  useEffect(() => {
+    if (!prune || value.length === 0) return
+    const valid = new Set(options.map(o => String(o.value)))
+    const kept = value.filter(v => valid.has(String(v)))
+    if (kept.length !== value.length) onChange(kept)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prune, optionKey, value.join('\u0001')])
 
   // Close on outside click
   useEffect(() => {

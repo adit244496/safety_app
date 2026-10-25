@@ -514,23 +514,10 @@ def permit_config(
 
 
 # ── List / Get ───────────────────────────────────────────────────────────────
-@router.get("/")
-def list_permits(
-    status: List[str] = Query(default=[]),
-    project_id: List[int] = Query(default=[]),
-    scope: Optional[str] = Query(None),   # 'mine' | 'to_approve'
-    search: Optional[str] = Query(None),
-    eic_user_id: List[int] = Query(default=[]),
-    pso_user_id: List[int] = Query(default=[]),
-    pic_user_id: List[int] = Query(default=[]),
-    contractor_user_id: List[int] = Query(default=[]),
-    receiver_user_id: List[int] = Query(default=[]),
-    hazard_category: List[str] = Query(default=[]),
-    area: List[str] = Query(default=[]),
-    floor: List[str] = Query(default=[]),
-    db: Session = Depends(get_db),
-    user: models.User = Depends(get_current_user),
-):
+def _permit_base_query(db: Session, user: models.User, scope: Optional[str],
+                       search: Optional[str], issued_on: Optional[str]):
+    """Permits the user may see, narrowed by the non-dropdown filters (scope tab,
+    free-text search, issued-on date). Shared by the list and its facets."""
     q = db.query(models.WorkPermit)
     allowed = get_allowed_project_ids(user)
 
@@ -556,10 +543,11 @@ def list_permits(
             models.WorkPermit.pso_user_id == user.id,
             models.WorkPermit.eic_user_id == user.id,
         ))
-    if status:
-        q = q.filter(models.WorkPermit.status.in_(status))
-    if project_id:
-        q = q.filter(models.WorkPermit.project_id.in_(project_id))
+    if issued_on:
+        q = q.filter(or_(
+            models.WorkPermit.issued_date == issued_on,
+            func.date(models.WorkPermit.approved_at) == issued_on,
+        ))
     if search:
         like = f"%{search}%"
         q = q.filter(or_(
@@ -568,6 +556,88 @@ def list_permits(
             models.WorkPermit.work_description.ilike(like),
             models.WorkPermit.receiver_name.ilike(like),
         ))
+    return q
+
+
+# Facet dimensions: query-param name → the row's value(s) for it (list = multi-valued).
+_PERMIT_FACETS = {
+    "status":             lambda p: [p.status],
+    "project_id":         lambda p: [p.project_id],
+    "area":               lambda p: [p.area],
+    "floor":              lambda p: [p.floor],
+    "contractor_user_id": lambda p: [p.created_by],
+    "receiver_user_id":   lambda p: _load(p.receiver_user_ids, []),
+    "eic_user_id":        lambda p: [p.eic_user_id],
+    "pso_user_id":        lambda p: [p.pso_user_id],
+    "pic_user_id":        lambda p: [p.pic_user_id],
+    "hazard_category":    lambda p: _load(p.hazard_categories, []),
+}
+
+
+@router.get("/facets")
+def permit_facets(
+    status: List[str] = Query(default=[]),
+    project_id: List[int] = Query(default=[]),
+    scope: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    eic_user_id: List[int] = Query(default=[]),
+    pso_user_id: List[int] = Query(default=[]),
+    pic_user_id: List[int] = Query(default=[]),
+    contractor_user_id: List[int] = Query(default=[]),
+    receiver_user_id: List[int] = Query(default=[]),
+    hazard_category: List[str] = Query(default=[]),
+    area: List[str] = Query(default=[]),
+    floor: List[str] = Query(default=[]),
+    issued_on: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Cascading filters for the permit list: for each dropdown, the values that occur in
+    permits matching all the *other* selected filters."""
+    rows = _permit_base_query(db, user, scope, search, issued_on).all()
+    selected = {
+        "status": status, "project_id": project_id, "area": area, "floor": floor,
+        "contractor_user_id": contractor_user_id, "receiver_user_id": receiver_user_id,
+        "eic_user_id": eic_user_id, "pso_user_id": pso_user_id, "pic_user_id": pic_user_id,
+        "hazard_category": hazard_category,
+    }
+    active = {k: set(v) for k, v in selected.items() if v}
+
+    def matches(p, skip: str) -> bool:
+        return all(vals & set(_PERMIT_FACETS[k](p)) for k, vals in active.items() if k != skip)
+
+    out = {}
+    for key, get in _PERMIT_FACETS.items():
+        vals = {v for p in rows if matches(p, key) for v in get(p)}
+        vals.discard(None)
+        vals.discard("")
+        out[key] = sorted(vals, key=str)
+    return out
+
+
+@router.get("/")
+def list_permits(
+    status: List[str] = Query(default=[]),
+    project_id: List[int] = Query(default=[]),
+    scope: Optional[str] = Query(None),   # 'mine' | 'to_approve'
+    search: Optional[str] = Query(None),
+    eic_user_id: List[int] = Query(default=[]),
+    pso_user_id: List[int] = Query(default=[]),
+    pic_user_id: List[int] = Query(default=[]),
+    contractor_user_id: List[int] = Query(default=[]),
+    receiver_user_id: List[int] = Query(default=[]),
+    hazard_category: List[str] = Query(default=[]),
+    area: List[str] = Query(default=[]),
+    floor: List[str] = Query(default=[]),
+    issued_on: Optional[str] = Query(None),   # YYYY-MM-DD — same rule as the dashboard "Issued today" KPI
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    q = _permit_base_query(db, user, scope, search, issued_on)
+    if status:
+        q = q.filter(models.WorkPermit.status.in_(status))
+    if project_id:
+        q = q.filter(models.WorkPermit.project_id.in_(project_id))
     if eic_user_id:
         q = q.filter(models.WorkPermit.eic_user_id.in_(eic_user_id))
     if pso_user_id:

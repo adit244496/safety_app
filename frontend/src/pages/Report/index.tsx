@@ -8,6 +8,7 @@ import ExcelJS from 'exceljs'
 import { generateHtmlReportPdf } from '../../lib/printPdf'
 import api from '../../lib/api'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
+import { useFacets } from '../../lib/facets'
 import MisReport from './MisReport'
 
 const STALE = { staleTime: 5 * 60 * 1000 } as const
@@ -131,7 +132,7 @@ async function exportTrackerExcel(
   })
 
   // Column widths matching the tracker table columns
-  const colWidths = [3, 7, 5, 6, 4, 13, 9, 22, 10, 10, 10, 7, 7, 7, 8, 14, 13, 13, 9, 22, 9, 7, 8]
+  const colWidths = [3, 14, 7, 5, 6, 4, 13, 9, 22, 10, 10, 10, 7, 7, 7, 8, 14, 13, 13, 9, 22, 9, 7, 8]
   ws.columns = colWidths.map(w => ({ width: w }))
 
   const fill  = (argb: string): ExcelJS.Fill => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } })
@@ -145,7 +146,7 @@ async function exportTrackerExcel(
   }
   const aCenter: Partial<ExcelJS.Alignment> = { horizontal: 'center', vertical: 'middle', wrapText: true }
 
-  const NCOLS = 23
+  const NCOLS = 24
 
   const mergedCell = (
     r: number, c1: number, c2: number,
@@ -183,14 +184,16 @@ async function exportTrackerExcel(
 
   // ── Column headers ──
   const headers = [
-    '#', 'Status', 'F', 'Quarter', 'Mo.', 'Report No.', 'Report Date',
-    'Detailed Observations', 'Violation Category', 'Root Cause', 'Hazard Type',
-    'Severity', 'Probability', 'Risk Rating', 'Risk Grade', 'Potential Consequence',
+    '#', 'Project', 'Status', 'F', 'Quarter', 'Mo.', 'Report No.', 'Report Date',
+    'Detailed Observations', 'Violation Category', 'Root Cause', 'Possible Outcome',
+    'Severity', 'Probability', 'Risk Rating', 'Risk Grade', 'Violation Caused Due To',
     'Concerned Contractor', 'Concerned EIC / PIC', 'Target Date',
     'Corrective Action Plan', 'Closure Date', 'Delay (Days)', 'Remarks',
   ]
   const hdrRow = ws.addRow(headers)
   hdrRow.height = 30
+  // Excel filter dropdowns on every column (e.g. filter by Project)
+  ws.autoFilter = { from: { row: hdrRow.number, column: 1 }, to: { row: hdrRow.number, column: NCOLS } }
   hdrRow.eachCell(cell => {
     cell.fill = fill('FF2E75B6')
     cell.font = fnt('FFFFFFFF', true, 7)
@@ -218,7 +221,7 @@ async function exportTrackerExcel(
     const rowBg       = i % 2 === 0 ? 'FFFFFFFF' : 'FFF4F8FF'
 
     const values: ExcelJS.CellValue[] = [
-      i + 1, status, fRef.get(obs.id) || '', fy.quarter, fy.monthInQ,
+      i + 1, obs.project_name || '', status, fRef.get(obs.id) || '', fy.quarter, fy.monthInQ,
       obs.observation_id || '', fmtD(obs.obs_date), detailedObs,
       obs.core_concern_name || '', obs.root_cause_category_name || '', obs.possible_outcome || '',
       sevText(obs.severity), sevText(obs.probability),
@@ -239,23 +242,23 @@ async function exportTrackerExcel(
       cell.alignment = { horizontal: 'center', vertical: 'top', wrapText: true }
       cell.border = brd
 
-      // Status column (2)
-      if (colNum === 2) {
+      // Status column (3)
+      if (colNum === 3) {
         cell.fill = fill(statusArgb)
         cell.font = fnt(statusFontA, true, 8)
       }
-      // Risk Rating (14) and Risk Grade (15)
-      if (colNum === 14 || colNum === 15) {
+      // Risk Rating (15) and Risk Grade (16)
+      if (colNum === 15 || colNum === 16) {
         cell.fill = fill(riskArgb)
         cell.font = fnt(riskFontA, true, 8)
       }
-      // Delay (22) colour
-      if (colNum === 22 && typeof delay === 'number' && delay > 0) {
+      // Delay (23) colour
+      if (colNum === 23 && typeof delay === 'number' && delay > 0) {
         cell.fill = fill('FFFF0000')
         cell.font = fnt('FFFFFFFF', true, 8)
       }
       // Left-align text-heavy columns
-      if ([6, 8, 9, 10, 11, 17, 18, 20].includes(colNum)) {
+      if ([2, 7, 9, 10, 11, 12, 18, 19, 21].includes(colNum)) {
         cell.alignment = { horizontal: 'left', vertical: 'top', wrapText: true }
       }
     })
@@ -401,6 +404,12 @@ async function exportInspectionExcel(
     const initB64  = initImg ? await imgToBase64(initImg.file_path) : ''
     const compB64  = compImg ? await imgToBase64(compImg.file_path) : ''
 
+    // ── Project band (she-prow) ──
+    const loc = [obs.building_name, obs.floor_name].filter(Boolean).join(' · ')
+    styled(rn, 1, 14, `Project: ${obs.project_name || '—'}   |   ${obs.observation_id || ''}   |   ${fmtD(obs.obs_date)}${loc ? `   |   ${loc}` : ''}`,
+      'FF1F3864', 'FFFFFFFF', true, 8, aLeft)
+    ws.getRow(rn).height = 16; rn++
+
     // ── Row A: Violation meta (she-vrow) ──
     styled(rn, 1, 2,  'Violation Category',              'FFE2EFDA', 'FF375623', true,  7, aLeft)
     styled(rn, 3, 5,  obs.core_concern_name || '—',      'FFE2EFDA', 'FF1A3A0A', false, 7, aLeft)
@@ -419,11 +428,11 @@ async function exportInspectionExcel(
 
     // ── Row C: Sub-column headers ──
     styled(rn, 1, 1,  '#',                          'FFBDD7EE', 'FF1E3F60', true, 7)
-    styled(rn, 2, 2,  'Hazard Type',                'FFBDD7EE', 'FF1E3F60', true, 7)
+    styled(rn, 2, 2,  'Possible Outcome',           'FFBDD7EE', 'FF1E3F60', true, 7)
     styled(rn, 3, 3,  'Severity',                   'FFBDD7EE', 'FF1E3F60', true, 7)
     styled(rn, 4, 4,  'Probability',                'FFBDD7EE', 'FF1E3F60', true, 7)
     styled(rn, 5, 5,  'Risk Rating',                'FFBDD7EE', 'FF1E3F60', true, 7)
-    styled(rn, 6, 8,  'Risk Grade | Potential Consequence', 'FFBDD7EE', 'FF1E3F60', true, 7)
+    styled(rn, 6, 8,  'Risk Grade | Violation Caused Due To', 'FFBDD7EE', 'FF1E3F60', true, 7)
     styled(rn, 9, 9,  'Concerned Contractor',       'FFC6EFCE', 'FF375623', true, 7)
     styled(rn, 10, 10,'Concerned EIC/PIC',          'FFC6EFCE', 'FF375623', true, 7)
     styled(rn, 11, 12,'Recommended Target Date',    'FFC6EFCE', 'FF375623', true, 7)
@@ -674,6 +683,9 @@ const STYLE = `
 .she-meta .v { color: #000; }
 
 /* ── Violation row ── */
+.she-prow td { background: #1f3864; color: #fff; font-size: 8pt; font-weight: 700; padding: 4px 6px; border-top: 3px solid #0f1f3a; }
+.she-prow .lbl { color: #bdd7ee; font-weight: 800; margin-right: 4px; }
+.she-prow .sep { color: #8ea9c1; margin: 0 8px; font-weight: 400; }
 .she-vrow td { background: #e2efda; font-size: 7.5pt; padding: 3px 5px; border-top: 2.5px solid #548235; }
 .she-vrow .lbl { font-weight: 800; color: #375623; font-size: 7pt; }
 .she-vrow .val { color: #1a3a0a; }
@@ -882,6 +894,18 @@ function ObsBlock({ obs, idx }: { obs: any; idx: number }) {
         <LightboxZoom src={lightbox.src} label={lightbox.label} onClose={() => setLightbox(null)} />
       )}
 
+      {/* Project band — which project this observation belongs to */}
+      <tr className="she-prow">
+        <td colSpan={14}>
+          <span className="lbl">Project:</span> {obs.project_name || '—'}
+          <span className="sep">|</span>{obs.observation_id}
+          <span className="sep">|</span>{fmtD(obs.obs_date)}
+          {[obs.building_name, obs.floor_name].filter(Boolean).length > 0 && (
+            <><span className="sep">|</span>{[obs.building_name, obs.floor_name].filter(Boolean).join(' · ')}</>
+          )}
+        </td>
+      </tr>
+
       {/* Violation meta row */}
       <tr className="she-vrow">
         <td colSpan={2}><span className="lbl">Violation Category</span></td>
@@ -903,11 +927,11 @@ function ObsBlock({ obs, idx }: { obs: any; idx: number }) {
       {/* Sub-column headers */}
       <tr>
         <td className="she-chdr she-chdr-f">#</td>
-        <td className="she-chdr she-chdr-f">Hazard Type</td>
+        <td className="she-chdr she-chdr-f">Possible Outcome</td>
         <td className="she-chdr she-chdr-f">Severity</td>
         <td className="she-chdr she-chdr-f">Probability</td>
         <td className="she-chdr she-chdr-f">Risk Rating</td>
-        <td className="she-chdr she-chdr-f" colSpan={3}>Risk Grade | Potential Consequence</td>
+        <td className="she-chdr she-chdr-f" colSpan={3}>Risk Grade | Violation Caused Due To</td>
         <td className="she-chdr she-chdr-a">Concerned Contractor</td>
         <td className="she-chdr she-chdr-a">Concerned EIC/PIC</td>
         <td className="she-chdr she-chdr-a" colSpan={2}>Recommended Target Date</td>
@@ -1091,6 +1115,7 @@ function SHETrackerTab({
 
   const cols = [
     { label: '#',                     w: '1.5%' },
+    { label: 'Project',               w: '6%'   },
     { label: 'Status',                w: '4.5%' },
     { label: 'F',                     w: '3%'   },
     { label: 'Quarter',               w: '3.5%' },
@@ -1100,12 +1125,12 @@ function SHETrackerTab({
     { label: 'Detailed Observations', w: '11%'  },
     { label: 'Violation Category',    w: '4.5%' },
     { label: 'Root Cause',            w: '4.5%' },
-    { label: 'Hazard Type',           w: '4%'   },
+    { label: 'Possible Outcome',      w: '4%'   },
     { label: 'Severity',              w: '2.5%' },
     { label: 'Probability',           w: '2.5%' },
     { label: 'Risk Rating',           w: '2.5%' },
     { label: 'Risk Grade',            w: '3.5%' },
-    { label: 'Potential Consequence', w: '5.5%' },
+    { label: 'Violation Caused Due To', w: '5.5%' },
     { label: 'Concerned Contractor',  w: '5%'   },
     { label: 'Concerned EIC / PIC',   w: '5%'   },
     { label: 'Target Date',           w: '4%'   },
@@ -1162,7 +1187,7 @@ function SHETrackerTab({
           <thead>
             {/* Title row */}
             <tr>
-              <td colSpan={7} className="trk-hdr-top">
+              <td colSpan={8} className="trk-hdr-top">
                 Project: {projectLabel} &nbsp;|&nbsp; Date: {fmtD(reportDate)} &nbsp;|&nbsp; Period: {dateRange}
               </td>
               <td colSpan={9} className="trk-hdr-top" style={{ textAlign: 'center', letterSpacing: 2, fontSize: '13pt' }}>
@@ -1177,7 +1202,7 @@ function SHETrackerTab({
               <td colSpan={7} style={{ background: '#e9ecef', fontSize: '7pt', padding: '3px 6px', borderTop: '2px solid #1f3864' }}>
                 Contractor: {contractorLabel} &nbsp;|&nbsp; Priority: {priorityLabel}
               </td>
-              <td colSpan={16} style={{ background: '#e9ecef', fontSize: '7pt', padding: '3px 6px', borderTop: '2px solid #1f3864' }} />
+              <td colSpan={17} style={{ background: '#e9ecef', fontSize: '7pt', padding: '3px 6px', borderTop: '2px solid #1f3864' }} />
             </tr>
             {/* Column headers */}
             <tr>
@@ -1202,6 +1227,7 @@ function SHETrackerTab({
               return (
                 <tr key={obs.id} className={rowCls}>
                   <td className="trk-num">{idx + 1}</td>
+                  <td>{obs.project_name || '—'}</td>
                   <td className={statusCls}>{status}</td>
                   <td className="trk-center">{fRef.get(obs.id) || '—'}</td>
                   <td className="trk-center">{fy.quarter}</td>
@@ -1302,12 +1328,10 @@ export default function ReportPage() {
   const { data: allRcSpecifics } = useQuery({ queryKey: ['all-rc-specifics'], queryFn: () => api.get('/admin/root-cause-specifics').then(r => r.data), ...STALE })
 
   const buildingOptions: MSOption[] = useMemo(() => (allBuildings || []).filter((b: any) => !projectIds.length || projectIds.includes(b.project_id)).map((b: any) => ({ value: b.id, label: b.name })), [allBuildings, projectIds])
-  const floorOptions: MSOption[] = useMemo(() => !buildingIds.length ? [] : (allFloors || []).filter((f: any) => buildingIds.includes(f.building_id)).map((f: any) => ({ value: f.id, label: f.name })), [allFloors, buildingIds])
   const eicOptions: MSOption[] = useMemo(() => (eicUsers || []).map((u: any) => ({ value: u.id, label: u.name })), [eicUsers])
   const outcomeOptions: MSOption[] = useMemo(() => (possibleOutcomes || []).map((o: any) => ({ value: o.name, label: o.name })), [possibleOutcomes])
   const violationOptions: MSOption[] = useMemo(() => (violations || []).map((v: any) => ({ value: v.id, label: v.name })), [violations])
   const rcCategoryOptions: MSOption[] = useMemo(() => (rcCategories || []).map((c: any) => ({ value: c.id, label: c.name })), [rcCategories])
-  const rcSpecificOptions: MSOption[] = useMemo(() => !rcCatIds.length ? [] : (allRcSpecifics || []).filter((s: any) => rcCatIds.includes(s.root_cause_category_id)).map((s: any) => ({ value: s.id, label: s.name })), [allRcSpecifics, rcCatIds])
 
   const projectOptions:    MSOption[] = (projects || []).map((p: any) => ({ value: p.id, label: p.name }))
   const contractorOptions: MSOption[] = useMemo(() => {
@@ -1328,6 +1352,25 @@ export default function ReportPage() {
   const priorityOptions:   MSOption[] = [
     { value: 'High', label: 'High' }, { value: 'Medium', label: 'Medium' }, { value: 'Low', label: 'Low' },
   ]
+
+  // Cascading filters: each dropdown lists only values present in (non-draft)
+  // observations matching the other selected filters.
+  const facet = useFacets('/observations/facets', {
+    project_id: projectIds, contractor_user_id: expandedContractorIds, risk_level: riskLevels,
+    building_id: buildingIds, floor_id: floorIds, eic_user_id: eicIds, possible_outcome: outcomeFilter,
+    violation_id: violationIds, root_cause_category_id: rcCatIds, root_cause_specific_id: rcSpecIds,
+    date_from: dateFrom || undefined, date_to: dateTo || undefined, exclude_drafts: true,
+  })
+  const buildingName = useMemo(() => new Map((allBuildings || []).map((b: any) => [b.id, b.name])), [allBuildings])
+  const allFloorOptions: MSOption[] = useMemo(() =>
+    (allFloors || [])
+      .filter((f: any) => buildingIds.length ? buildingIds.includes(f.building_id) : buildingName.has(f.building_id))
+      .filter((f: any) => !projectIds.length || (allBuildings || []).some((b: any) => b.id === f.building_id && projectIds.includes(b.project_id)))
+      .map((f: any) => ({ value: f.id, label: buildingIds.length === 1 ? f.name : `${f.name} · ${buildingName.get(f.building_id) ?? ''}` })),
+    [allFloors, allBuildings, buildingIds, projectIds, buildingName])
+  const allRcSpecificOptions: MSOption[] = useMemo(() =>
+    (allRcSpecifics || []).filter((s: any) => !rcCatIds.length || rcCatIds.includes(s.root_cause_category_id)).map((s: any) => ({ value: s.id, label: s.name })),
+    [allRcSpecifics, rcCatIds])
 
   const { data: reportData, isFetching } = useQuery({
     queryKey: ['report', projectIds, dateFrom, dateTo, selectedContractors, riskLevels, buildingIds, floorIds, eicIds, outcomeFilter, violationIds, rcCatIds, rcSpecIds],
@@ -1473,8 +1516,9 @@ export default function ReportPage() {
             <div>
               <label className="label">Project</label>
               <MultiSelectFilter
-                options={projectOptions}
+                options={facet.narrow('project_id', projectOptions)}
                 value={projectIds}
+                prune={facet.ready}
                 onChange={v => { setProjectIds(v as number[]); setBuildingIds([]); setFloorIds([]); setEicIds([]); setGenerated(false) }}
                 placeholder="All Projects"
                 className="w-full"
@@ -1482,15 +1526,15 @@ export default function ReportPage() {
             </div>
             <div>
               <label className="label">Building</label>
-              <MultiSelectFilter options={buildingOptions} value={buildingIds}
+              <MultiSelectFilter options={facet.narrow('building_id', buildingOptions)} value={buildingIds} prune={facet.ready}
                 onChange={v => { setBuildingIds(v as number[]); setFloorIds([]); setGenerated(false) }}
                 placeholder="All Buildings" className="w-full" />
             </div>
             <div>
               <label className="label">Floor</label>
-              <MultiSelectFilter options={floorOptions} value={floorIds}
+              <MultiSelectFilter options={facet.narrow('floor_id', allFloorOptions)} value={floorIds} prune={facet.ready}
                 onChange={v => { setFloorIds(v as number[]); setGenerated(false) }}
-                placeholder={buildingIds.length ? 'All Floors' : 'Select building'} className="w-full" />
+                placeholder="All Floors" className="w-full" />
             </div>
             <div>
               <label className="label">Contractor</label>
@@ -1500,8 +1544,9 @@ export default function ReportPage() {
                 </span>
               ) : (
                 <MultiSelectFilter
-                  options={contractorOptions}
+                  options={facet.narrow('contractor_user_id', contractorOptions, o => companyToUserIds.get(String(o.value)) || [])}
                   value={selectedContractors}
+                  prune={facet.ready}
                   onChange={v => { setSelectedContractors(v as string[]); setGenerated(false) }}
                   placeholder="All Contractors"
                   className="w-full"
@@ -1510,15 +1555,16 @@ export default function ReportPage() {
             </div>
             <div>
               <label className="label">Concerned EIC</label>
-              <MultiSelectFilter options={eicOptions} value={eicIds}
+              <MultiSelectFilter options={facet.narrow('eic_user_id', eicOptions)} value={eicIds} prune={facet.ready}
                 onChange={v => { setEicIds(v as number[]); setGenerated(false) }}
                 placeholder="All EICs" className="w-full" />
             </div>
             <div>
               <label className="label">Issue Priority</label>
               <MultiSelectFilter
-                options={priorityOptions}
+                options={facet.narrow('risk_level', priorityOptions)}
                 value={riskLevels}
+                prune={facet.ready}
                 onChange={v => { setRiskLevels(v as string[]); setGenerated(false) }}
                 placeholder="All Priorities"
                 className="w-full"
@@ -1526,27 +1572,27 @@ export default function ReportPage() {
             </div>
             <div>
               <label className="label">Possible Outcome</label>
-              <MultiSelectFilter options={outcomeOptions} value={outcomeFilter}
+              <MultiSelectFilter options={facet.narrow('possible_outcome', outcomeOptions)} value={outcomeFilter} prune={facet.ready}
                 onChange={v => { setOutcomeFilter(v as string[]); setGenerated(false) }}
                 placeholder="All Outcomes" className="w-full" />
             </div>
             <div>
               <label className="label">Violation Caused Due To</label>
-              <MultiSelectFilter options={violationOptions} value={violationIds}
+              <MultiSelectFilter options={facet.narrow('violation_id', violationOptions)} value={violationIds} prune={facet.ready}
                 onChange={v => { setViolationIds(v as number[]); setGenerated(false) }}
                 placeholder="All Violations" className="w-full" />
             </div>
             <div>
               <label className="label">Root Cause</label>
-              <MultiSelectFilter options={rcCategoryOptions} value={rcCatIds}
+              <MultiSelectFilter options={facet.narrow('root_cause_category_id', rcCategoryOptions)} value={rcCatIds} prune={facet.ready}
                 onChange={v => { setRcCatIds(v as number[]); setRcSpecIds([]); setGenerated(false) }}
                 placeholder="All Root Causes" className="w-full" />
             </div>
             <div>
               <label className="label">Specific Root Cause</label>
-              <MultiSelectFilter options={rcSpecificOptions} value={rcSpecIds}
+              <MultiSelectFilter options={facet.narrow('root_cause_specific_id', allRcSpecificOptions)} value={rcSpecIds} prune={facet.ready}
                 onChange={v => { setRcSpecIds(v as number[]); setGenerated(false) }}
-                placeholder={rcCatIds.length ? 'All Specifics' : 'Select root cause'} className="w-full" />
+                placeholder="All Specifics" className="w-full" />
             </div>
             <div>
               <label className="label">Date From</label>

@@ -23,7 +23,7 @@ const NAV = [
   { to: '/trainings', icon: GraduationCap, label: 'Training', exact: false, roles: null },
   { to: '/work-permits', icon: FileCheck2, label: 'Work Permits', exact: false, roles: null },
   { to: '/meeting-minutes', icon: NotebookPen, label: 'Meeting Minutes', exact: false, roles: ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Observer'] },
-  { to: '/guidelines', icon: BookOpen, label: 'Guidelines', exact: true, roles: null },
+  { to: '/library', icon: BookOpen, label: 'Library', exact: true, roles: null },
   { to: '/legacy-data', icon: Database, label: 'Legacy Data', exact: true, roles: ['SuperAdmin', 'Admin', 'HO'] },
 ]
 

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, ArrowLeft, AlertTriangle, Send, FileText, ShieldAlert, ChevronDown, ChevronRight, Camera, X } from 'lucide-react'
+import { Save, ArrowLeft, AlertTriangle, Send, FileText, ShieldAlert, ChevronDown, ChevronRight, Camera, X, ImagePlus } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '../../lib/api'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
@@ -401,11 +401,18 @@ function PhotoSlots({ max, existing, staged, onPick, onRemoveStaged, onDeleteExi
         </div>
       ))}
       {count < max && (
-        <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/40 text-gray-400 transition-colors">
-          <Camera className="w-4 h-4" />
-          <span className="text-[9px] mt-0.5">{count}/{max}</span>
-          <input type="file" accept="image/*" multiple className="hidden" onChange={e => { onPick(e.target.files); e.currentTarget.value = '' }} />
-        </label>
+        <>
+          <label className="w-16 h-16 rounded-lg border-2 border-dashed border-gray-200 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/40 text-gray-400 transition-colors" title="Upload photos">
+            <ImagePlus className="w-4 h-4" />
+            <span className="text-[9px] mt-0.5">Upload {count}/{max}</span>
+            <input type="file" accept="image/*" multiple className="hidden" onChange={e => { onPick(e.target.files); e.currentTarget.value = '' }} />
+          </label>
+          <label className="w-16 h-16 rounded-lg border-2 border-dashed border-indigo-200 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/40 text-indigo-400 transition-colors" title="Take a photo">
+            <Camera className="w-4 h-4" />
+            <span className="text-[9px] mt-0.5">Camera</span>
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={e => { onPick(e.target.files); e.currentTarget.value = '' }} />
+          </label>
+        </>
       )}
     </div>
   )

@@ -6,7 +6,7 @@ import {
   ImageIcon, MessageSquare, ClipboardCheck,
   ChevronDown, ChevronUp, Maximize2, Minimize2,
   AlertTriangle, CheckCircle2, ShieldAlert,
-  MapPin, Target, RefreshCw, Trash2, Sparkles,
+  MapPin, Target, RefreshCw, Trash2, Sparkles, RotateCcw,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '../../lib/api'
@@ -335,6 +335,12 @@ function ReplyForm({ onSubmit, isPending, isContractor, defaultImageType = 'foll
           <Paperclip className="w-3.5 h-3.5" />
           <span className="text-xs">Photo</span>
         </button>
+        <label className="btn-ghost btn-sm !px-2 text-gray-500 hover:text-indigo-600 gap-1.5 flex-shrink-0 cursor-pointer" title="Take a photo">
+          <Camera className="w-3.5 h-3.5" />
+          <span className="text-xs">Camera</span>
+          <input type="file" accept="image/*" capture="environment" className="hidden"
+            onChange={e => { addFiles(e.target.files); e.currentTarget.value = '' }} />
+        </label>
         {files.length > 0 && (
           <select
             className="text-xs border border-gray-200 rounded-md px-2 py-1 text-gray-600 bg-white focus:outline-none focus:ring-1 focus:ring-indigo-400"
@@ -359,8 +365,18 @@ function ReplyForm({ onSubmit, isPending, isContractor, defaultImageType = 'foll
 }
 
 // ── AI summary ────────────────────────────────────────────────────────────
+const AI_COLLAPSED_KEY = 'obs-ai-summary-collapsed'
+
 function AiSummaryCard({ obs, queryId }: { obs: any; queryId?: string }) {
   const qc = useQueryClient()
+  // Collapse preference is remembered across observations.
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem(AI_COLLAPSED_KEY) === '1' } catch { return false }
+  })
+  const toggle = (next = !collapsed) => {
+    setCollapsed(next)
+    try { localStorage.setItem(AI_COLLAPSED_KEY, next ? '1' : '0') } catch { /* ignore */ }
+  }
   const gen = useMutation({
     mutationFn: () =>
       api.post(`/observations/${obs.id}/ai-summary`).then(r => r.data),
@@ -380,11 +396,21 @@ function AiSummaryCard({ obs, queryId }: { obs: any; queryId?: string }) {
 
   return (
     <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-indigo-50/40 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-violet-100">
-        <Sparkles className="w-3.5 h-3.5 text-violet-600" />
-        <span className="text-xs font-semibold tracking-wide text-violet-800 uppercase">AI Summary</span>
+      <div className={`flex items-center gap-2 px-4 py-2.5 ${collapsed ? '' : 'border-b border-violet-100'}`}>
         <button
-          onClick={() => gen.mutate()}
+          type="button"
+          onClick={() => toggle()}
+          aria-expanded={!collapsed}
+          className="flex items-center gap-2 min-w-0 flex-1 text-left"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-violet-600 flex-shrink-0" />
+          <span className="text-xs font-semibold tracking-wide text-violet-800 uppercase">AI Summary</span>
+          {collapsed
+            ? <ChevronDown className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />
+            : <ChevronUp className="w-3.5 h-3.5 text-violet-500 flex-shrink-0" />}
+        </button>
+        <button
+          onClick={() => { toggle(false); gen.mutate() }}
           disabled={busy}
           className="btn-sm ml-auto gap-1.5 flex-shrink-0 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed"
         >
@@ -394,7 +420,7 @@ function AiSummaryCard({ obs, queryId }: { obs: any; queryId?: string }) {
           <span className="text-xs">{busy ? 'Generating…' : hasSummary ? 'Regenerate' : 'Generate'}</span>
         </button>
       </div>
-      <div className="px-4 py-3">
+      {!collapsed && <div className="px-4 py-3">
         {hasSummary ? (
           <>
             <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{obs.ai_summary}</p>
@@ -410,7 +436,7 @@ function AiSummaryCard({ obs, queryId }: { obs: any; queryId?: string }) {
               : 'No AI summary yet. Generate one from this observation’s details and photos.'}
           </p>
         )}
-      </div>
+      </div>}
     </div>
   )
 }
@@ -435,6 +461,8 @@ export default function ObservationDetail() {
   const [statusOpen, setStatusOpen] = useState(false)
   const [newStatus, setNewStatus] = useState('')
   const [statusComment, setStatusComment] = useState('')
+  const [reopenOpen, setReopenOpen] = useState(false)
+  const [reopenReason, setReopenReason] = useState('')
   const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   const { data: obs, isLoading } = useQuery({
@@ -496,10 +524,13 @@ export default function ObservationDetail() {
       })
       return { previous }
     },
-    onError: (_err, _vars, context: any) => {
+    onError: (err: any, _vars, context: any) => {
       if (context?.previous !== undefined) {
         qc.setQueryData(['observation', id], context.previous)
       }
+      toast.error(err?.response?.data?.detail || 'Failed to post update')
+      // The comment may have saved before the photo upload failed — resync.
+      qc.invalidateQueries({ queryKey: ['observation', id] })
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['observation', id] }),
   })
@@ -509,7 +540,11 @@ export default function ObservationDetail() {
     const fd = new FormData()
     Array.from(files).forEach(f => fd.append('files', f))
     fd.append('image_type', imageType)
-    await api.post(`/observations/${obs.id}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    try {
+      await api.post(`/observations/${obs.id}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Failed to upload photos')
+    }
     qc.invalidateQueries({ queryKey: ['observation', id] })
   }
 
@@ -531,6 +566,22 @@ export default function ObservationDetail() {
       qc.invalidateQueries({ queryKey: ['observations'] })
       setStatusOpen(false); setStatusComment(''); setNewStatus('')
     },
+    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Failed to change status'),
+  })
+
+  // PSO / admins reopen an observation that was closed (e.g. wrongly by the contractor).
+  const reopen = useMutation({
+    mutationFn: async (reason: string) => {
+      await api.patch(`/observations/${obs?.id}/status`, { status: 'Open' })
+      await api.post(`/observations/${obs?.id}/comments`, { comment: `Reopened — ${reason}` })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['observation', id] })
+      qc.invalidateQueries({ queryKey: ['observations'] })
+      setReopenOpen(false); setReopenReason('')
+      toast.success('Observation reopened — contractor notified')
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Failed to reopen'),
   })
 
   const discardDraft = useMutation({
@@ -559,6 +610,8 @@ export default function ObservationDetail() {
   const canUpload    = user?.role !== undefined && user.role !== ''
   const canComment   = !!user?.role
   const isContractor = user?.role === 'Contractor'
+  const canReopen    = ['SuperAdmin', 'Admin', 'HO', 'PSO'].includes(user?.role || '')
+    && (obs.stored_status || obs.status) === 'Closed'
   const canDiscard   = user?.role === 'SuperAdmin' || (obs.status === 'Draft' && obs.created_by === user?.id)
 
   const riskBg = obs.risk_level === 'High'   ? 'bg-rose-100 text-rose-800 border-rose-200'
@@ -757,11 +810,17 @@ export default function ObservationDetail() {
                     <option value="followup">Follow-up</option>
                     <option value="closure">Closure</option>
                   </select>
-                  <button onClick={() => fileRef.current?.click()} className="btn-secondary btn-sm flex-shrink-0">
-                    <Camera className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Add Photo</span>
+                  <button onClick={() => fileRef.current?.click()} className="btn-secondary btn-sm flex-shrink-0" title="Upload photos">
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Upload</span>
                   </button>
-                  <input ref={fileRef} type="file" multiple accept="image/*" className="hidden" onChange={e => uploadImages(e.target.files)} />
+                  <input ref={fileRef} type="file" multiple accept="image/*" className="hidden" onChange={e => { uploadImages(e.target.files); e.currentTarget.value = '' }} />
+                  <label className="btn-secondary btn-sm flex-shrink-0 cursor-pointer" title="Take a photo">
+                    <Camera className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Camera</span>
+                    <input type="file" accept="image/*" capture="environment" className="hidden"
+                      onChange={e => { uploadImages(e.target.files); e.currentTarget.value = '' }} />
+                  </label>
                 </>
               ) : undefined
             }
@@ -770,7 +829,7 @@ export default function ObservationDetail() {
               <div className="flex flex-col items-center justify-center py-10 text-gray-400">
                 <Camera className="w-10 h-10 mb-3 opacity-20" />
                 <p className="text-sm font-medium">No photos uploaded yet</p>
-                {canUpload && <p className="text-xs mt-1 opacity-70">Use the Add Photo button above</p>}
+                {canUpload && <p className="text-xs mt-1 opacity-70">Use the Upload or Camera button above</p>}
               </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -907,6 +966,48 @@ export default function ObservationDetail() {
               </div>
             )}
           </div>
+
+          {/* Reopen a closed observation (PSO / admins) */}
+          {canReopen && (
+            <div className="mx-3 mt-3 px-3 py-2.5 bg-rose-50 border border-rose-200 rounded-xl flex-shrink-0 space-y-2">
+              <div className="flex items-center gap-2">
+                <p className="text-xs text-rose-700 leading-relaxed flex-1">
+                  <span className="font-semibold">Closed.</span> Not properly rectified? Reopen it for the contractor.
+                </p>
+                {!reopenOpen && (
+                  <button onClick={() => setReopenOpen(true)}
+                    className="btn-sm flex-shrink-0 gap-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700">
+                    <RotateCcw className="w-3 h-3" /> <span className="text-xs">Reopen</span>
+                  </button>
+                )}
+              </div>
+              {reopenOpen && (
+                <>
+                  <textarea
+                    className="w-full text-xs border border-rose-200 rounded-lg px-2.5 py-2 bg-white resize-none focus:outline-none focus:ring-1 focus:ring-rose-400"
+                    rows={2}
+                    autoFocus
+                    placeholder="Reason for reopening (required) — e.g. barricading still incomplete at east edge"
+                    value={reopenReason}
+                    onChange={e => setReopenReason(e.target.value)}
+                  />
+                  <div className="flex items-center gap-2 justify-end">
+                    <button onClick={() => { setReopenOpen(false); setReopenReason('') }} className="btn-ghost btn-sm text-xs">Cancel</button>
+                    <button
+                      disabled={!reopenReason.trim() || reopen.isPending}
+                      onClick={() => reopen.mutate(reopenReason.trim())}
+                      className="btn-sm gap-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {reopen.isPending
+                        ? <span className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
+                        : <RotateCcw className="w-3 h-3" />}
+                      <span className="text-xs">Reopen observation</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Contractor compliance hint + status change */}
           {isContractor && !['Closed', 'Partially Closed'].includes(obs.status) && (

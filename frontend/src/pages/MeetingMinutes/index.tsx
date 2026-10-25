@@ -19,7 +19,7 @@ interface Mom {
   project_id: number | null
   project_name: string | null
   attendees: string | null
-  entry_type: 'text' | 'pdf'
+  entry_type: 'text' | 'pdf' | 'file'
   content: string | null
   file_path: string | null
   file_name: string | null
@@ -31,14 +31,28 @@ interface Mom {
   created_at: string | null
 }
 
-function TypeBadge({ type }: { type: string }) {
-  const pdf = type === 'pdf'
+// Accepted upload formats (legacy .doc is rejected by the server).
+const UPLOAD_ACCEPT = '.pdf,.docx,.txt,.csv,.xlsx,.xlsm,.xls'
+
+// Short label for an uploaded file, from its extension.
+function fileKind(name: string | null): string {
+  const ext = (name || '').split('.').pop()?.toLowerCase() || ''
+  if (ext === 'pdf') return 'PDF'
+  if (ext === 'docx') return 'Word'
+  if (['xlsx', 'xlsm', 'xls'].includes(ext)) return 'Excel'
+  if (ext === 'csv') return 'CSV'
+  if (ext === 'txt') return 'Text'
+  return 'File'
+}
+
+function TypeBadge({ mom }: { mom: Mom }) {
+  const uploaded = mom.entry_type !== 'text'
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-      pdf ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'
+      uploaded ? 'bg-rose-50 text-rose-600' : 'bg-indigo-50 text-indigo-600'
     }`}>
-      {pdf ? <FileText className="w-3 h-3" /> : <NotebookPen className="w-3 h-3" />}
-      {pdf ? 'PDF' : 'Written'}
+      {uploaded ? <FileText className="w-3 h-3" /> : <NotebookPen className="w-3 h-3" />}
+      {uploaded ? fileKind(mom.file_name || mom.file_path) : 'Written'}
     </span>
   )
 }
@@ -58,7 +72,7 @@ function CreateModal({ projects, onClose }: { projects: any[]; onClose: () => vo
   async function submit() {
     if (!title.trim()) { toast.error('Title is required'); return }
     if (mode === 'text' && !content.trim()) { toast.error('Please type the minutes'); return }
-    if (mode === 'pdf' && !file) { toast.error('Please choose a PDF file'); return }
+    if (mode === 'pdf' && !file) { toast.error('Please choose a file'); return }
     setSaving(true)
     try {
       if (mode === 'text') {
@@ -103,7 +117,7 @@ function CreateModal({ projects, onClose }: { projects: any[]; onClose: () => vo
             </button>
             <button onClick={() => setMode('pdf')}
               className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${mode === 'pdf' ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>
-              <Upload className="w-4 h-4" /> Upload PDF
+              <Upload className="w-4 h-4" /> Upload file
             </button>
           </div>
 
@@ -138,19 +152,19 @@ function CreateModal({ projects, onClose }: { projects: any[]; onClose: () => vo
             </div>
           ) : (
             <div>
-              <label className="label">PDF file <span className="text-red-500">*</span></label>
+              <label className="label">File <span className="text-red-500">*</span></label>
               <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-xl py-8 cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors">
                 <FileUp className="w-7 h-7 text-gray-400" />
                 {file ? (
                   <span className="text-sm font-medium text-indigo-600">{file.name}</span>
                 ) : (
-                  <span className="text-sm text-gray-500">Click to choose a PDF (max 25&nbsp;MB)</span>
+                  <span className="text-sm text-gray-500">Click to choose a PDF, Word, Excel or text file (max 25&nbsp;MB)</span>
                 )}
-                <input type="file" accept="application/pdf" className="hidden"
+                <input type="file" accept={UPLOAD_ACCEPT} className="hidden"
                   onChange={e => setFile(e.target.files?.[0] || null)} />
               </label>
               <p className="text-xs text-gray-400 mt-2">
-                After saving, you can generate a crisp AI summary from the PDF.
+                After saving, you can generate a crisp AI summary from the file — scanned PDFs work too.
               </p>
             </div>
           )}
@@ -198,7 +212,7 @@ function DetailModal({ mom, canDelete, onClose }: { mom: Mom; canDelete: boolean
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-base font-semibold text-gray-900 truncate">{mom.title}</h2>
-              <TypeBadge type={mom.entry_type} />
+              <TypeBadge mom={mom} />
             </div>
             <div className="flex items-center gap-3 text-xs text-gray-400 mt-1 flex-wrap">
               {mom.meeting_date && <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{fmtDate(mom.meeting_date)}</span>}
@@ -217,16 +231,16 @@ function DetailModal({ mom, canDelete, onClose }: { mom: Mom; canDelete: boolean
             </div>
           )}
 
-          {/* Body: PDF link or typed content */}
-          {mom.entry_type === 'pdf' ? (
+          {/* Body: uploaded file link or typed content */}
+          {mom.entry_type !== 'text' ? (
             <a href={`/uploads/${mom.file_path}`} target="_blank" rel="noreferrer"
               className="flex items-center gap-3 p-3 rounded-xl border border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/40 transition-colors">
               <div className="w-10 h-10 rounded-lg bg-rose-50 flex items-center justify-center flex-shrink-0">
                 <FileText className="w-5 h-5 text-rose-500" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-gray-800 truncate">{mom.file_name || 'Minutes.pdf'}</p>
-                <p className="text-xs text-gray-400">Open the uploaded PDF</p>
+                <p className="text-sm font-medium text-gray-800 truncate">{mom.file_name || 'Minutes'}</p>
+                <p className="text-xs text-gray-400">Open the uploaded {fileKind(mom.file_name || mom.file_path)} file</p>
               </div>
               <ExternalLink className="w-4 h-4 text-gray-400 flex-shrink-0" />
             </a>
@@ -318,7 +332,7 @@ export default function MeetingMinutes() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">Meeting Minutes</h1>
-            <p className="text-xs text-gray-400">Record MoM in the app or upload a PDF, then generate an AI summary</p>
+            <p className="text-xs text-gray-400">Record MoM in the app or upload a file, then generate an AI summary</p>
           </div>
         </div>
         {canWrite && (
@@ -361,7 +375,7 @@ export default function MeetingMinutes() {
           </div>
           <p className="text-sm font-medium text-gray-600">No meeting minutes yet</p>
           <p className="text-xs text-gray-400 mt-1">
-            {canWrite ? 'Add minutes directly or upload a PDF to get started.' : 'Minutes added by PSO / Admin will appear here.'}
+            {canWrite ? 'Add minutes directly or upload a file to get started.' : 'Minutes added by PSO / Admin will appear here.'}
           </p>
         </div>
       ) : (
@@ -371,7 +385,7 @@ export default function MeetingMinutes() {
               className="card p-4 text-left hover:shadow-md hover:border-indigo-200 transition-all flex flex-col gap-2">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="text-sm font-semibold text-gray-900 line-clamp-2">{m.title}</h3>
-                <TypeBadge type={m.entry_type} />
+                <TypeBadge mom={m} />
               </div>
               <div className="flex items-center gap-2 text-xs text-gray-400 flex-wrap">
                 {m.meeting_date && <span className="inline-flex items-center gap-1"><Calendar className="w-3 h-3" />{fmtDate(m.meeting_date)}</span>}

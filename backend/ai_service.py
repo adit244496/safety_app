@@ -201,18 +201,27 @@ MINUTES_SYSTEM_PROMPT = (
 MINUTES_MAX_CHARS = 24000
 
 
-def summarize_minutes(source_text: str, db) -> str:
-    """Generate a crisp, concise summary of meeting-minutes text. Raises on failure."""
+def summarize_minutes(source_text: str, db, images: list = None) -> str:
+    """Generate a crisp, concise summary of meeting minutes. `images` (list of
+    (media_type, base64)) carries scanned pages when there is no text. Raises on failure."""
     provider, api_key, model = _resolve_config(db)
     if not api_key:
         raise RuntimeError("No AI API key configured")
+    images = images or []
     text = (source_text or "").strip()
-    if not text:
+    if not text and not images:
         raise RuntimeError("No text to summarise")
     if len(text) > MINUTES_MAX_CHARS:
         text = text[:MINUTES_MAX_CHARS] + "\n\n[...truncated...]"
+    if images:
+        prompt = ("The meeting minutes are provided as scanned page images (in order). "
+                  "Read them carefully, including any handwriting or tables.")
+        if text:
+            prompt += "\n\nText extracted from the document:\n\n" + text
+    else:
+        prompt = "Meeting minutes:\n\n" + text
     out = _complete(provider, api_key, model, MINUTES_SYSTEM_PROMPT,
-                    "Meeting minutes:\n\n" + text + "\n\nWrite the crisp summary now.", [], 800)
+                    prompt + "\n\nWrite the crisp summary now.", images, 800)
     if not out:
         raise RuntimeError("Empty AI summary response")
     return out

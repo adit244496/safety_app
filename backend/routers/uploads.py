@@ -29,10 +29,20 @@ async def upload_images(
     if not obs:
         raise HTTPException(404, "Observation not found")
 
-    MAX_IMAGES = 5
-    existing_count = db.query(models.ObservationImage).filter(models.ObservationImage.observation_id == obs_id).count()
+    # The limit applies per stage (initial / followup / closure …), so a full set of
+    # initial photos never blocks the rectification (after) photos. Follow-up photos
+    # are added by several people over time, so they get a larger allowance.
+    image_type = image_type or "initial"
+    MAX_IMAGES = 10 if image_type == "followup" else 5
+    existing_count = db.query(models.ObservationImage).filter(
+        models.ObservationImage.observation_id == obs_id,
+        models.ObservationImage.image_type == image_type,
+    ).count()
     if existing_count + len(files) > MAX_IMAGES:
-        raise HTTPException(400, f"Maximum {MAX_IMAGES} photos allowed per observation (already has {existing_count})")
+        raise HTTPException(
+            400,
+            f"Maximum {MAX_IMAGES} {image_type} photos allowed per observation (already has {existing_count})",
+        )
 
     saved = []
     for f in files:
