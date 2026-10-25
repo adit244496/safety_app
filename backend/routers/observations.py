@@ -12,7 +12,7 @@ from difflib import get_close_matches
 from types import SimpleNamespace
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract, case, nullslast, and_, or_
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from database import get_db, SessionLocal
 import models
 from auth import get_current_user, require_admin
@@ -223,6 +223,31 @@ class ObsCreate(BaseModel):
 
 class ObsUpdate(ObsCreate):
     status: Optional[str] = None
+
+
+def _check_target_limit(db: Session, severity, probability, obs_date, target, status) -> None:
+    """The target date may be earlier than, but never later than, observation date +
+    the days allowed for the risk score (Admin → Risk & Target Date)."""
+    if not target or not obs_date or severity is None or probability is None or status == "Positive Approach":
+        return
+    score = severity * probability
+    rule = (
+        db.query(models.TargetDayRule)
+        .filter(models.TargetDayRule.min_score <= score, models.TargetDayRule.max_score >= score)
+        .first()
+    )
+    if not rule:
+        return
+    try:
+        latest = (date.fromisoformat(obs_date[:10]) + timedelta(days=rule.days)).isoformat()
+    except ValueError:
+        return
+    if target[:10] > latest:
+        raise HTTPException(
+            400,
+            f"Target date can't be later than {latest} — risk score {score} allows at most "
+            f"{rule.days} day{'s' if rule.days != 1 else ''} from the observation date.",
+        )
 
 
 class CommentBody(BaseModel):
@@ -1419,6 +1444,7 @@ def generate_ai_summary(obs_id: str, db: Session = Depends(get_db), user: models
 def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     if user.role == "Contractor":
         raise HTTPException(status_code=403, detail="Your role cannot create observations")
+    _check_target_limit(db, body.severity, body.probability, body.obs_date, body.target_date_actual, body.status)
     factor, level = calc_risk(body.severity or 1, body.probability or 1)
     obs_id = generate_obs_id(db, body.project_id)
 
@@ -1608,6 +1634,13 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
     factor, level = calc_risk(body.severity or obs.severity or 1, body.probability or obs.probability or 1)
 
     body_dict = body.model_dump(exclude_unset=True)
+    # Enforce the target-date limit only when the date or its inputs change, so older
+    # records with a longer target can still be edited for other fields.
+    merged = {k: body_dict.get(k, getattr(obs, k))
+              for k in ("severity", "probability", "obs_date", "target_date_actual", "status")}
+    if any(merged[k] != getattr(obs, k) for k in ("severity", "probability", "obs_date", "target_date_actual")):
+        _check_target_limit(db, merged["severity"], merged["probability"], merged["obs_date"],
+                            merged["target_date_actual"], merged["status"])
     # Serialize list fields → JSON string before setting on model
     if 'contractor_user_ids' in body_dict:
         ids = body_dict.pop('contractor_user_ids')

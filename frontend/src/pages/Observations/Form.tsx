@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import { Save, ArrowLeft, X, Camera, AlertTriangle, CheckCircle2, MapPin, ClipboardList, ShieldAlert, GitBranch, ImagePlus, FileEdit } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '../../lib/api'
-import { calcRisk, STATUSES } from '../../lib/utils'
+import { calcRisk, STATUSES, fmtDate } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
 import { MultiSelectFilter } from '../../components/MultiSelectFilter'
 
@@ -297,6 +297,8 @@ export default function ObservationForm() {
     ? calcRisk(Number(form.severity), Number(form.probability))
     : null
   const riskRule = risk ? ruleForScore(risk.factor) : undefined
+  // Latest allowed target date (observation date + rule days); null when no rule applies.
+  const maxTarget = autoTarget(form)
 
   // "Praiseworthy observation" is a Core Concern (good practice) — no rectification needed,
   // so the target date is hidden for it. For "Positive Approach" status it stays optional.
@@ -801,7 +803,16 @@ export default function ObservationForm() {
             <Field label="Target Date for Rectification" required={form.status !== 'Positive Approach'}>
               <div className="flex items-center gap-2">
                 <input type="date" className="input flex-1 min-w-0" value={form.target_date_actual}
-                  onChange={e => { set('target_date_actual', e.target.value); setTargetAuto(false) }} />
+                  max={maxTarget || undefined}
+                  onChange={e => {
+                    const v = e.target.value
+                    // Earlier is fine; later than the rule allows is not.
+                    if (maxTarget && v > maxTarget) {
+                      toast.error(`Target date can't be later than ${fmtDate(maxTarget)} for risk score ${risk?.factor}`)
+                      set('target_date_actual', maxTarget); setTargetAuto(true); return
+                    }
+                    set('target_date_actual', v); setTargetAuto(v === maxTarget)
+                  }} />
                 {targetDayLabel && (
                   <span className={`flex-shrink-0 whitespace-nowrap text-xs font-semibold px-2.5 py-2 rounded-lg border ${targetDayTone}`}>
                     {targetDayLabel}
@@ -811,7 +822,7 @@ export default function ObservationForm() {
               {riskRule && risk && (
                 targetAuto ? (
                   <p className="text-[11px] text-gray-400 mt-1">
-                    Auto-filled: score {risk.factor} → {riskRule.days} day{riskRule.days === 1 ? '' : 's'} (Admin → Risk &amp; Target Date). You can change it.
+                    Auto-filled: score {risk.factor} → {riskRule.days} day{riskRule.days === 1 ? '' : 's'} (Admin → Risk &amp; Target Date). You can choose an earlier date, not a later one.
                   </p>
                 ) : autoTarget(form) && autoTarget(form) !== form.target_date_actual ? (
                   <button type="button" onClick={() => { set('target_date_actual', autoTarget(form)); setTargetAuto(true) }}

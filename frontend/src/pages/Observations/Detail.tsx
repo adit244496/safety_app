@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '../../lib/api'
-import { fmtDateTime, getStatusClass } from '../../lib/utils'
+import { fmtDate, fmtDateTime, getStatusClass } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
 
 // ── Role colour tokens ────────────────────────────────────────────────────
@@ -610,6 +610,19 @@ export default function ObservationDetail() {
   const canUpload    = user?.role !== undefined && user.role !== ''
   const canComment   = !!user?.role
   const isContractor = user?.role === 'Contractor'
+
+  // Target date: the actual calendar date (older records may only have a named target).
+  const targetText: string | null = obs.target_date_actual ? fmtDate(obs.target_date_actual) : (obs.target_date_name || null)
+  const targetBadge = (() => {
+    if (!obs.target_date_actual) return null
+    const [y, m, d] = obs.target_date_actual.split('-').map(Number)
+    const now = new Date()
+    const days = Math.round((Date.UTC(y, m - 1, d) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000)
+    if (obs.closed_at || ['Closed', 'Positive Approach', 'Unresolved & Closed'].includes(obs.stored_status || obs.status)) return null
+    if (days < 0) return { text: `${-days} day${days === -1 ? '' : 's'} overdue`, cls: 'bg-rose-100 text-rose-700' }
+    if (days === 0) return { text: 'Due today', cls: 'bg-amber-100 text-amber-700' }
+    return { text: `${days} day${days === 1 ? '' : 's'} left`, cls: 'bg-emerald-100 text-emerald-700' }
+  })()
   const canReopen    = ['SuperAdmin', 'Admin', 'HO', 'PSO'].includes(user?.role || '')
     && (obs.stored_status || obs.status) === 'Closed'
   const canDiscard   = user?.role === 'SuperAdmin' || (obs.status === 'Draft' && obs.created_by === user?.id)
@@ -691,8 +704,12 @@ export default function ObservationDetail() {
             </div>
             <p className="text-xs text-gray-500 mt-1">
               {obs.created_by_name} &nbsp;·&nbsp; {fmtDateTime(obs.created_at)}
-              {obs.target_date_name && (
-                <> &nbsp;·&nbsp; <span className="text-gray-400">Target:</span> <span className="font-medium text-gray-600">{obs.target_date_name}</span></>
+              {targetText && (
+                <> &nbsp;·&nbsp; <span className="text-gray-400">Target:</span> <span className="font-medium text-gray-600">{targetText}</span>
+                  {targetBadge && (
+                    <span className={`ml-1.5 inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded ${targetBadge.cls}`}>{targetBadge.text}</span>
+                  )}
+                </>
               )}
             </p>
           </div>
@@ -771,7 +788,7 @@ export default function ObservationDetail() {
                 <InfoField label="Core Concern" value={obs.core_concern_name} />
                 <InfoField label="Specific Concern" value={obs.specific_concern_name} />
                 <InfoField label="Possible Outcome" value={obs.possible_outcome} />
-                <InfoField label="Target Date" value={obs.target_date_name} />
+                <InfoField label="Target Date" value={targetText} />
               </div>
               {obs.specific_concern_text && (
                 <div className="mt-1 p-3.5 bg-amber-50 rounded-xl border border-amber-100">
@@ -894,9 +911,9 @@ export default function ObservationDetail() {
                     obs.obs_date ? `raised on ${obs.obs_date}` : null,
                   ].filter(Boolean).join(' — ')}
                 </p>
-                {obs.target_date_name && (
+                {targetText && (
                   <p className="text-[10px] text-indigo-300 flex-shrink-0 font-medium">
-                    Target: {obs.target_date_name}
+                    Target: {targetText}
                   </p>
                 )}
               </div>
