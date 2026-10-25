@@ -412,7 +412,7 @@ function AiSummaryCard({ obs, queryId }: { obs: any; queryId?: string }) {
         <button
           onClick={() => { toggle(false); gen.mutate() }}
           disabled={busy}
-          className="btn-sm ml-auto gap-1.5 flex-shrink-0 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="btn-sm inline-flex items-center whitespace-nowrap ml-auto gap-1.5 flex-shrink-0 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {busy
             ? <span className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" />
@@ -993,7 +993,7 @@ export default function ObservationDetail() {
                 </p>
                 {!reopenOpen && (
                   <button onClick={() => setReopenOpen(true)}
-                    className="btn-sm flex-shrink-0 gap-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700">
+                    className="btn-sm inline-flex items-center whitespace-nowrap flex-shrink-0 gap-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700">
                     <RotateCcw className="w-3 h-3" /> <span className="text-xs">Reopen</span>
                   </button>
                 )}
@@ -1013,7 +1013,7 @@ export default function ObservationDetail() {
                     <button
                       disabled={!reopenReason.trim() || reopen.isPending}
                       onClick={() => reopen.mutate(reopenReason.trim())}
-                      className="btn-sm gap-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60 disabled:cursor-not-allowed"
+                      className="btn-sm inline-flex items-center whitespace-nowrap gap-1.5 rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {reopen.isPending
                         ? <span className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" />

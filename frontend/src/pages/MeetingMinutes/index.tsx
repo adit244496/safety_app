@@ -259,7 +259,7 @@ function DetailModal({ mom, canDelete, onClose }: { mom: Mom; canDelete: boolean
               <Sparkles className="w-3.5 h-3.5 text-violet-600" />
               <span className="text-xs font-semibold tracking-wide text-violet-800 uppercase">AI Summary</span>
               <button onClick={() => genSummary.mutate()} disabled={busy}
-                className="btn-sm ml-auto gap-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed">
+                className="btn-sm inline-flex items-center whitespace-nowrap ml-auto gap-1.5 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 disabled:cursor-not-allowed">
                 {busy ? <Loader2 className="w-3 h-3 animate-spin" /> : hasSummary ? <RefreshCw className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
                 <span className="text-xs">{busy ? 'Generating…' : hasSummary ? 'Regenerate' : 'Generate'}</span>
               </button>
@@ -287,7 +287,7 @@ function DetailModal({ mom, canDelete, onClose }: { mom: Mom; canDelete: boolean
           <div className="flex items-center justify-end px-5 py-4 border-t border-gray-100">
             <button onClick={() => { if (confirm('Delete these meeting minutes? This cannot be undone.')) del.mutate() }}
               disabled={del.isPending}
-              className="btn-sm gap-1.5 rounded-lg text-red-600 hover:bg-red-50">
+              className="btn-sm inline-flex items-center whitespace-nowrap gap-1.5 rounded-lg text-red-600 hover:bg-red-50">
               <Trash2 className="w-3.5 h-3.5" /> Delete
             </button>
           </div>
