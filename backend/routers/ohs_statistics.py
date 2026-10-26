@@ -199,11 +199,14 @@ def _accumulate_for_month(raw, bucket: dict):
 def get_totals(
     project_id: List[int] = Query(default=[]),
     year: Optional[int] = Query(None),
+    date_from: Optional[str] = Query(None),   # YYYY-MM-DD — months overlapping the range count
+    date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
     """Sum of every 'For the month' value across all saved OH&S records (project-to-date),
-    for the dashboard activity cards. Optionally scoped to projects / a year."""
+    for the dashboard activity cards. Optionally scoped to projects / a year / a date range
+    (a month is included when it overlaps the range)."""
     allowed = get_allowed_project_ids(user)
     q = db.query(models.OhsStatistics)
     if allowed is not None:
@@ -215,6 +218,10 @@ def get_totals(
     if year:
         q = q.filter(models.OhsStatistics.year == year)
     rows = q.all()
+    if date_from or date_to:
+        lo = date_from[:7] if date_from else "0000-00"
+        hi = date_to[:7] if date_to else "9999-99"
+        rows = [r for r in rows if lo <= f"{r.year:04d}-{r.month:02d}" <= hi]
 
     gen: dict = {}
     act: dict = {}

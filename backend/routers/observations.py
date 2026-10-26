@@ -330,21 +330,6 @@ def _aging_hit(aging: List[str], days: Optional[int], status: str) -> bool:
     return False
 
 
-def _matches_aging_filter(days: Optional[int], aging_filter: List[str]) -> bool:
-    if not aging_filter:
-        return True
-    for f in aging_filter:
-        if f == "no_target" and days is None:
-            return True
-        if f == "overdue" and days is not None and days > 0:
-            return True
-        if f == "due_soon" and days is not None and -7 <= days <= 0:
-            return True
-        if f == "on_time" and days is not None and days <= -7:
-            return True
-    return False
-
-
 @router.get("/stats/summary")
 def stats(
     project_id: List[int] = Query(default=[]),
@@ -384,14 +369,16 @@ def stats(
         return q
 
     # Resolve aging filter → set of eligible observation IDs
+    # Same ageing rules as the observation list, so a card's count matches the list it opens.
     aging_ids: Optional[set] = None
     if aging:
         rows = (
-            apply_filters(db.query(models.Observation.id, models.Observation.target_date_actual, models.Observation.closed_at))
+            apply_filters(db.query(models.Observation.id, models.Observation.target_date_actual,
+                                   models.Observation.closed_at, models.Observation.status))
             .filter(models.Observation.status != 'Draft')
             .all()
         )
-        aging_ids = {r[0] for r in rows if _matches_aging_filter(_days_aging(r[1], r[2], today), aging)}
+        aging_ids = {r[0] for r in rows if _aging_hit(aging, _days_aging(r[1], r[2], today), r[3])}
 
     def apply_all(q):
         q = apply_filters(q)
@@ -402,9 +389,9 @@ def stats(
     q = apply_all(db.query(models.Observation)).filter(models.Observation.status != 'Draft')
     total = q.count()
 
-    # Aging breakdown (always computed from base filters, ignoring aging filter for the donut itself)
+    # Aging breakdown — respects every filter, including the ageing filter itself
     aging_rows = (
-        apply_filters(db.query(models.Observation.target_date_actual, models.Observation.closed_at, models.Observation.status))
+        apply_all(db.query(models.Observation.target_date_actual, models.Observation.closed_at, models.Observation.status))
         .filter(models.Observation.status != 'Draft')
         .all()
     )
@@ -526,11 +513,16 @@ def stats_details(
     contractor_user_id: List[int] = Query(default=[]),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
+    core_concern_id: List[int] = Query(default=[]),
+    risk_level: List[str] = Query(default=[]),
+    status: List[str] = Query(default=[]),
+    aging: List[str] = Query(default=[]),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
     allowed = get_allowed_project_ids(user)
-    conditions = []
+    # Drafts are unsubmitted — excluded, matching the dashboard summary.
+    conditions = [models.Observation.status != 'Draft']
     if allowed is not None:
         conditions.append(models.Observation.project_id.in_(allowed))
     if project_id:
@@ -543,6 +535,19 @@ def stats_details(
         conditions.append(models.Observation.obs_date >= date_from)
     if date_to:
         conditions.append(models.Observation.obs_date <= date_to)
+    if core_concern_id:
+        conditions.append(models.Observation.core_concern_id.in_(core_concern_id))
+    if risk_level:
+        conditions.append(models.Observation.risk_level.in_(risk_level))
+    if status:
+        conditions.append(_status_filter_condition(status))
+    if aging:
+        today = date.today()
+        rows = (db.query(models.Observation.id, models.Observation.target_date_actual,
+                         models.Observation.closed_at, models.Observation.status)
+                .filter(*conditions).all())
+        conditions.append(models.Observation.id.in_(
+            [r[0] for r in rows if _aging_hit(aging, _days_aging(r[1], r[2], today), r[3])]))
 
     project_summary_rows = db.query(
         models.Project.id.label("project_id"),

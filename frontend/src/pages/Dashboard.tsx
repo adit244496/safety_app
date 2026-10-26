@@ -195,7 +195,7 @@ export default function Dashboard() {
 
   // Top observers (same source as Summary → Compliance Analysis)
   const { data: details } = useQuery({
-    queryKey: ['dash-details', projectIds, buildingId, selectedContractors, dateFrom, dateTo],
+    queryKey: ['dash-details', projectIds, buildingId, selectedContractors, dateFrom, dateTo, coreConcernIds, riskLevels, statusFilter, ageingFilter],
     queryFn: () => api.get('/observations/stats/summary-details', {
       params: {
         project_id:         projectIds.length          ? projectIds          : undefined,
@@ -203,23 +203,40 @@ export default function Dashboard() {
         contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
         date_from:          dateFrom             || undefined,
         date_to:            dateTo               || undefined,
+        core_concern_id:    coreConcernIds.length ? coreConcernIds : undefined,
+        risk_level:         riskLevels.length    ? riskLevels    : undefined,
+        status:             statusFilter.length  ? statusFilter  : undefined,
+        aging:              ageingFilter.length  ? ageingFilter  : undefined,
       },
     }).then(r => r.data),
   })
 
-  // Work-permit KPIs (issued today / total issued)
+  // Work-permit KPIs (issued today / total issued). Permits have no risk / status /
+  // core-concern of their own, so those observation filters don't apply here.
+  const selectedBuildingName = buildingId ? (buildings || []).find((b: any) => b.id === buildingId)?.name : undefined
   const { data: permitStats } = useQuery({
-    queryKey: ['permit-stats', projectIds],
+    queryKey: ['permit-stats', projectIds, selectedContractors, selectedBuildingName, dateFrom, dateTo],
     queryFn: () => api.get('/work-permits/stats', {
-      params: { project_id: projectIds.length ? projectIds : undefined },
+      params: {
+        project_id:         projectIds.length ? projectIds : undefined,
+        contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
+        area:               selectedBuildingName,
+        date_from:          dateFrom || undefined,
+        date_to:            dateTo || undefined,
+      },
     }).then(r => r.data),
   })
 
-  // OH&S activity totals (project-to-date rollup of the Monthly OH&S Statistics)
+  // OH&S activity totals (rollup of the Monthly OH&S Statistics). That form is per project
+  // and month, so only the project and date filters apply.
   const { data: ohsTotals } = useQuery({
-    queryKey: ['ohs-totals', projectIds],
+    queryKey: ['ohs-totals', projectIds, dateFrom, dateTo],
     queryFn: () => api.get('/ohs-statistics/totals', {
-      params: { project_id: projectIds.length ? projectIds : undefined },
+      params: {
+        project_id: projectIds.length ? projectIds : undefined,
+        date_from:  dateFrom || undefined,
+        date_to:    dateTo || undefined,
+      },
     }).then(r => r.data),
   })
 
@@ -316,6 +333,10 @@ export default function Dashboard() {
   const goToPermits = (extra: Record<string, string[]> = {}) => {
     const sp = new URLSearchParams()
     projectIds.forEach(id => sp.append('project_id', String(id)))
+    expandedContractorIds.forEach(id => sp.append('contractor_user_id', String(id)))
+    if (selectedBuildingName) sp.append('area', selectedBuildingName)
+    if (dateFrom) sp.set('issued_from', dateFrom)
+    if (dateTo) sp.set('issued_to', dateTo)
     for (const [k, vals] of Object.entries(extra)) vals.forEach(v => sp.append(k, v))
     const q = sp.toString()
     navigate(`/work-permits${q ? `?${q}` : ''}`)

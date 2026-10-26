@@ -412,14 +412,24 @@ def _inapp(db: Session, user_ids: list, permit: models.WorkPermit, message: str)
 
 
 # ── Lookups ──────────────────────────────────────────────────────────────────
+def _issue_date_expr():
+    """A permit's issue date: its issued date, else the date it was approved."""
+    return func.coalesce(func.nullif(models.WorkPermit.issued_date, ""), func.date(models.WorkPermit.approved_at))
+
+
 @router.get("/stats")
 def permit_stats(
     project_id: List[int] = Query(default=[]),
+    contractor_user_id: List[int] = Query(default=[]),
+    area: Optional[str] = Query(None),            # building / tower name (dashboard Tower/Block filter)
+    date_from: Optional[str] = Query(None),       # issue-date range (dashboard date filter)
+    date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    """Work-permit KPIs for the dashboard: permits issued today and total issued to date.
-    A permit is considered 'issued' once it has been Approved (status Approved or Closed)."""
+    """Work-permit KPIs for the dashboard: permits issued today and total issued.
+    A permit is considered 'issued' once it has been Approved (status Approved or Closed);
+    its issue date is the permit's issued date, else the approval date."""
     allowed = get_allowed_project_ids(user)
     q = db.query(models.WorkPermit)
     if allowed is not None:
@@ -428,16 +438,20 @@ def permit_stats(
         q = q.filter(models.WorkPermit.project_id.in_(allowed))
     if project_id:
         q = q.filter(models.WorkPermit.project_id.in_(project_id))
+    if contractor_user_id:
+        q = q.filter(models.WorkPermit.created_by.in_(contractor_user_id))
+    if area:
+        q = q.filter(models.WorkPermit.area == area)
 
     issued = q.filter(models.WorkPermit.status.in_(["Approved", "Closed"]))
+    issue_date = _issue_date_expr()
+    if date_from:
+        issued = issued.filter(issue_date >= date_from)
+    if date_to:
+        issued = issued.filter(issue_date <= date_to)
     total_issued = issued.count()
     today = date.today().isoformat()
-    issued_today = issued.filter(
-        or_(
-            models.WorkPermit.issued_date == today,
-            func.date(models.WorkPermit.approved_at) == today,
-        )
-    ).count()
+    issued_today = issued.filter(issue_date == today).count()
     return {"issued_today": issued_today, "total_issued": total_issued}
 
 
@@ -515,7 +529,8 @@ def permit_config(
 
 # ── List / Get ───────────────────────────────────────────────────────────────
 def _permit_base_query(db: Session, user: models.User, scope: Optional[str],
-                       search: Optional[str], issued_on: Optional[str]):
+                       search: Optional[str], issued_on: Optional[str],
+                       issued_from: Optional[str] = None, issued_to: Optional[str] = None):
     """Permits the user may see, narrowed by the non-dropdown filters (scope tab,
     free-text search, issued-on date). Shared by the list and its facets."""
     q = db.query(models.WorkPermit)
@@ -544,10 +559,11 @@ def _permit_base_query(db: Session, user: models.User, scope: Optional[str],
             models.WorkPermit.eic_user_id == user.id,
         ))
     if issued_on:
-        q = q.filter(or_(
-            models.WorkPermit.issued_date == issued_on,
-            func.date(models.WorkPermit.approved_at) == issued_on,
-        ))
+        q = q.filter(_issue_date_expr() == issued_on)   # same rule as the dashboard KPI
+    if issued_from:
+        q = q.filter(_issue_date_expr() >= issued_from)
+    if issued_to:
+        q = q.filter(_issue_date_expr() <= issued_to)
     if search:
         like = f"%{search}%"
         q = q.filter(or_(
@@ -589,12 +605,14 @@ def permit_facets(
     area: List[str] = Query(default=[]),
     floor: List[str] = Query(default=[]),
     issued_on: Optional[str] = Query(None),
+    issued_from: Optional[str] = Query(None),
+    issued_to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
     """Cascading filters for the permit list: for each dropdown, the values that occur in
     permits matching all the *other* selected filters."""
-    rows = _permit_base_query(db, user, scope, search, issued_on).all()
+    rows = _permit_base_query(db, user, scope, search, issued_on, issued_from, issued_to).all()
     selected = {
         "status": status, "project_id": project_id, "area": area, "floor": floor,
         "contractor_user_id": contractor_user_id, "receiver_user_id": receiver_user_id,
@@ -630,10 +648,12 @@ def list_permits(
     area: List[str] = Query(default=[]),
     floor: List[str] = Query(default=[]),
     issued_on: Optional[str] = Query(None),   # YYYY-MM-DD — same rule as the dashboard "Issued today" KPI
+    issued_from: Optional[str] = Query(None), # issue-date range (dashboard date filter)
+    issued_to: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     user: models.User = Depends(get_current_user),
 ):
-    q = _permit_base_query(db, user, scope, search, issued_on)
+    q = _permit_base_query(db, user, scope, search, issued_on, issued_from, issued_to)
     if status:
         q = q.filter(models.WorkPermit.status.in_(status))
     if project_id:

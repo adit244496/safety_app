@@ -36,13 +36,15 @@ export default function WorkPermits() {
   const [statusFilter, setStatusFilter] = useState<(string | number)[]>(() => searchParams.getAll('status'))
   const [projectIds, setProjectIds] = useState<(string | number)[]>(() => searchParams.getAll('project_id').map(Number))
   const [issuedOn, setIssuedOn] = useState(() => searchParams.get('issued_on') || '')
+  const [issuedFrom, setIssuedFrom] = useState(() => searchParams.get('issued_from') || '')
+  const [issuedTo, setIssuedTo] = useState(() => searchParams.get('issued_to') || '')
   const [eicIds, setEicIds] = useState<(string | number)[]>([])
   const [psoIds, setPsoIds] = useState<(string | number)[]>([])
   const [picIds, setPicIds] = useState<(string | number)[]>([])
-  const [contractorIds, setContractorIds] = useState<(string | number)[]>([])
+  const [contractorIds, setContractorIds] = useState<(string | number)[]>(() => searchParams.getAll('contractor_user_id').map(Number))
   const [receiverIds, setReceiverIds] = useState<(string | number)[]>([])
   const [hazardCats, setHazardCats] = useState<(string | number)[]>([])
-  const [areas, setAreas] = useState<(string | number)[]>([])
+  const [areas, setAreas] = useState<(string | number)[]>(() => searchParams.getAll('area'))
   const [floors, setFloors] = useState<(string | number)[]>([])
   const [scope, setScope] = useState<'' | 'mine' | 'to_approve'>('')
   const [search, setSearch] = useState('')
@@ -87,6 +89,7 @@ export default function WorkPermits() {
     eic_user_id: eicIds, pso_user_id: psoIds, pic_user_id: picIds, contractor_user_id: contractorIds,
     receiver_user_id: receiverIds, hazard_category: hazardCats, area: areas, floor: floors,
     issued_on: issuedOn || undefined,
+    issued_from: issuedFrom || undefined, issued_to: issuedTo || undefined,
   }
   // Cascading filters: each dropdown lists only values present in permits matching
   // the other selected filters.
@@ -97,9 +100,9 @@ export default function WorkPermits() {
   })
   const list: any[] = permits || []
 
-  const hasFilters = statusFilter.length || projectIds.length || scope || search || issuedOn || eicIds.length || psoIds.length || picIds.length || contractorIds.length || receiverIds.length || hazardCats.length || areas.length || floors.length
+  const hasFilters = statusFilter.length || projectIds.length || scope || search || issuedOn || issuedFrom || issuedTo || eicIds.length || psoIds.length || picIds.length || contractorIds.length || receiverIds.length || hazardCats.length || areas.length || floors.length
   const clearFilters = () => {
-    setStatusFilter([]); setProjectIds([]); setScope(''); setSearch(''); setIssuedOn('')
+    setStatusFilter([]); setProjectIds([]); setScope(''); setSearch(''); setIssuedOn(''); setIssuedFrom(''); setIssuedTo('')
     setEicIds([]); setPsoIds([]); setPicIds([]); setContractorIds([]); setReceiverIds([]); setHazardCats([]); setAreas([]); setFloors([])
   }
 
@@ -178,6 +181,12 @@ export default function WorkPermits() {
               <input className="input !py-1.5 text-sm pl-8" placeholder="Permit no, location, receiver…" value={search} onChange={e => setSearch(e.target.value)} />
             </div>
           </div>
+          {(issuedFrom || issuedTo) && (
+            <span className="inline-flex items-center gap-1.5 self-end mb-1 px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 text-xs font-medium">
+              Issued {issuedFrom ? `from ${fmtDate(issuedFrom)}` : ''}{issuedFrom && issuedTo ? ' ' : ''}{issuedTo ? `to ${fmtDate(issuedTo)}` : ''}
+              <button onClick={() => { setIssuedFrom(''); setIssuedTo('') }} className="text-teal-500 hover:text-teal-700" title="Remove"><X className="w-3 h-3" /></button>
+            </span>
+          )}
           {issuedOn && (
             <span className="inline-flex items-center gap-1.5 self-end mb-1 px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 text-xs font-medium">
               Issued on {fmtDate(issuedOn)}
