@@ -164,26 +164,30 @@ export default function ObservationForm() {
   // staleTime prevents refetch-on-focus from causing layout shifts (scroll jumps)
   const STABLE = { staleTime: 5 * 60 * 1000 } as const
 
-  // Target date auto-fill: admin rules map a risk score range → days to rectify.
-  const { data: targetRules = [] as any[] } = useQuery<any[]>({
-    queryKey: ['target-day-rules'],
-    queryFn: () => api.get('/admin/target-day-rules').then(r => r.data),
+  // Target date auto-fill: the admin risk matrix gives the time to rectify (hours) for each
+  // Severity × Probability; target = observation date & time + that time.
+  const { data: targetMatrix = [] as any[] } = useQuery<any[]>({
+    queryKey: ['target-matrix'],
+    queryFn: () => api.get('/admin/target-matrix').then(r => r.data),
     ...STABLE,
   })
-  const [targetAuto, setTargetAuto] = useState(false)   // current target date came from the rules
-  const ruleForScore = (score: number) =>
-    targetRules.find((r: any) => score >= r.min_score && score <= r.max_score) as { days: number } | undefined
-  const addDays = (iso: string, days: number) => {
-    const [y, m, d] = iso.split('-').map(Number)
-    return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
-  }
+  const [targetAuto, setTargetAuto] = useState(false)   // current target date came from the matrix
+  const matrixHours = (sev: any, prob: any): number | undefined =>
+    targetMatrix.find((c: any) => c.severity === Number(sev) && c.probability === Number(prob))?.hours
+  const fmtDuration = (h: number) => h % 24 === 0
+    ? `${h / 24} day${h === 24 ? '' : 's'}`
+    : `${h} hour${h === 1 ? '' : 's'}`
   const autoTarget = (f: any): string | null => {
     if (f.severity === '' || f.probability === '' || !f.obs_date || f.status === 'Positive Approach') return null
-    const rule = ruleForScore(Number(f.severity) * Number(f.probability))
-    return rule ? addDays(f.obs_date, rule.days) : null
+    const hours = matrixHours(f.severity, f.probability)
+    if (hours === undefined) return null
+    const [y, m, d] = f.obs_date.split('-').map(Number)
+    const [hh, mm] = (f.obs_time || '00:00').split(':').map(Number)
+    // Calendar arithmetic in UTC so local DST can't shift the date.
+    return new Date(Date.UTC(y, m - 1, d, hh || 0, mm || 0) + hours * 3600_000).toISOString().slice(0, 10)
   }
-  // Severity / probability / observation date changes re-derive the target date.
-  const setRiskInput = (k: 'severity' | 'probability' | 'obs_date', v: string) => {
+  // Severity / probability / observation date & time changes re-derive the target date.
+  const setRiskInput = (k: 'severity' | 'probability' | 'obs_date' | 'obs_time', v: string) => {
     const next = { ...form, [k]: v }
     const t = autoTarget(next)
     if (t) { next.target_date_actual = t; setTargetAuto(true) }
@@ -296,7 +300,7 @@ export default function ObservationForm() {
   const risk = form.severity && form.probability
     ? calcRisk(Number(form.severity), Number(form.probability))
     : null
-  const riskRule = risk ? ruleForScore(risk.factor) : undefined
+  const riskHours = risk ? matrixHours(form.severity, form.probability) : undefined
   // Latest allowed target date (observation date + rule days); null when no rule applies.
   const maxTarget = autoTarget(form)
 
@@ -659,7 +663,7 @@ export default function ObservationForm() {
             </div>
             <div className="w-32">
               <label className="label">Time</label>
-              <input type="time" className="input" value={form.obs_time} onChange={e => set('obs_time', e.target.value)} />
+              <input type="time" className="input" value={form.obs_time} onChange={e => setRiskInput('obs_time', e.target.value)} />
             </div>
           </div>
           <Field label="To Be Rectified By" required={form.status !== 'Positive Approach'}>
@@ -788,9 +792,9 @@ export default function ObservationForm() {
                   {risk.level === 'High' && 'Immediate intervention required.'}
                 </p>
                 <p className={`text-xs font-semibold mt-1 leading-tight ${riskTextColor}`}>
-                  {riskRule
-                    ? <>Target: {riskRule.days === 0 ? 'same day' : `${riskRule.days} day${riskRule.days === 1 ? '' : 's'}`} from observation date</>
-                    : 'No target rule for this score — set the date manually'}
+                  {riskHours !== undefined
+                    ? <>Target: within {fmtDuration(riskHours)} of the observation</>
+                    : 'No matrix entry for this combination — set the date manually'}
                 </p>
               </div>
             </div>
@@ -808,7 +812,7 @@ export default function ObservationForm() {
                     const v = e.target.value
                     // Earlier is fine; later than the rule allows is not.
                     if (maxTarget && v > maxTarget) {
-                      toast.error(`Target date can't be later than ${fmtDate(maxTarget)} for risk score ${risk?.factor}`)
+                      toast.error(`Target date can't be later than ${fmtDate(maxTarget)} (Severity ${form.severity} × Probability ${form.probability})`)
                       set('target_date_actual', maxTarget); setTargetAuto(true); return
                     }
                     set('target_date_actual', v); setTargetAuto(v === maxTarget)
@@ -819,15 +823,15 @@ export default function ObservationForm() {
                   </span>
                 )}
               </div>
-              {riskRule && risk && (
+              {riskHours !== undefined && risk && (
                 targetAuto ? (
                   <p className="text-[11px] text-gray-400 mt-1">
-                    Auto-filled: score {risk.factor} → {riskRule.days} day{riskRule.days === 1 ? '' : 's'} (Admin → Risk &amp; Target Date). You can choose an earlier date, not a later one.
+                    Auto-filled: Severity {form.severity} × Probability {form.probability} → {fmtDuration(riskHours)} (risk matrix). You can choose an earlier date, not a later one.
                   </p>
                 ) : autoTarget(form) && autoTarget(form) !== form.target_date_actual ? (
                   <button type="button" onClick={() => { set('target_date_actual', autoTarget(form)); setTargetAuto(true) }}
                     className="text-[11px] font-medium text-indigo-600 hover:text-indigo-800 mt-1">
-                    Use auto date ({riskRule.days} day{riskRule.days === 1 ? '' : 's'} for score {risk.factor})
+                    Use auto date ({fmtDuration(riskHours)} for {form.severity} × {form.probability})
                   </button>
                 ) : null
               )}

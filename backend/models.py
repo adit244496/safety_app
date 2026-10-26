@@ -296,14 +296,16 @@ class SeverityLabel(Base):
     label = Column(String, nullable=False)
 
 
-class TargetDayRule(Base):
-    """Admin-managed: risk-factor (score) range → days allowed for rectification.
-    The observation form auto-fills Target Date = observation date + days."""
-    __tablename__ = "target_day_rules"
+class TargetMatrixCell(Base):
+    """Admin-managed risk matrix: (severity, probability) → time allowed for rectification,
+    in hours (24 = 1 day). Target date = observation date/time + hours; the form
+    auto-fills it and later dates are rejected."""
+    __tablename__ = "target_matrix"
     id = Column(Integer, primary_key=True)
-    min_score = Column(Integer, nullable=False)   # inclusive
-    max_score = Column(Integer, nullable=False)   # inclusive
-    days = Column(Integer, nullable=False)
+    severity = Column(Integer, nullable=False)      # consequence 1–5
+    probability = Column(Integer, nullable=False)   # 1–5
+    hours = Column(Integer, nullable=False)
+    __table_args__ = (UniqueConstraint("severity", "probability", name="uq_target_matrix_cell"),)
 
 
 class ProbabilityLabel(Base):

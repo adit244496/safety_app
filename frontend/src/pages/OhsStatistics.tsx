@@ -9,6 +9,7 @@ import {
   emptyOhsData, normalizeOhsData, SummaryRow, LtiRow, ViolationRow,
 } from '../lib/ohsConfig'
 import { generateOhsStatisticsPdf } from '../lib/ohsReport'
+import OhsDashboard from './OhsDashboard'
 
 const WRITE_ROLES = ['SuperAdmin', 'Admin', 'HO', 'PSO']
 const MANPOWER_STORAGE_KEY = 'she_manpower_data'
@@ -53,6 +54,7 @@ export default function OhsStatistics() {
   const [form, setForm] = useState<OhsData>(emptyOhsData(0, month, year))
   const [saving, setSaving] = useState(false)
   const [savedMsg, setSavedMsg] = useState(false)
+  const [mode, setMode] = useState<'form' | 'dashboard'>('form')
 
   const { data: projects } = useQuery({ queryKey: ['projects'], queryFn: () => api.get('/projects/').then(r => r.data) })
 
@@ -180,6 +182,15 @@ export default function OhsStatistics() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+            <div className="inline-flex rounded-xl bg-gray-100 p-1">
+              {(['form', 'dashboard'] as const).map(m => (
+                <button key={m} onClick={() => setMode(m)}
+                  className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${mode === m ? 'bg-white shadow-sm text-indigo-600' : 'text-gray-500 hover:text-gray-700'}`}>
+                  {m === 'form' ? 'Form' : 'Dashboard'}
+                </button>
+              ))}
+            </div>
+            {mode === 'form' && <>
             {savedMsg && <span className="flex items-center gap-1.5 text-sm text-emerald-600 font-medium"><CheckCircle className="w-4 h-4" /> Saved</span>}
             <button onClick={report} className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 text-white text-sm font-semibold hover:bg-slate-800 transition">
               <FileDown className="w-4 h-4" /> Generate Report
@@ -189,6 +200,7 @@ export default function OhsStatistics() {
                 {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
               </button>
             )}
+            </>}
           </div>
         </div>
 
@@ -215,7 +227,9 @@ export default function OhsStatistics() {
         </div>
       </div>
 
-      {isFetching ? (
+      {mode === 'dashboard' ? (
+        <OhsDashboard projects={projects || []} projectId={projectId} month={month} year={year} config={config} />
+      ) : isFetching ? (
         <div className="card h-40 flex items-center justify-center"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
       ) : (
         <>

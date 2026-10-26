@@ -75,11 +75,20 @@ def _seed_risk_labels(db):
     for lvl, lbl in _DEFAULT_PROBABILITY.items():
         if not db.query(m.ProbabilityLabel).filter(m.ProbabilityLabel.level == lvl).first():
             db.add(m.ProbabilityLabel(level=lvl, label=lbl))
-    # Target-date rules: seed once (only when none exist), matching the form's old
-    # recommendation — High ≤ 2 days, Medium ≤ 4 days, Low ≤ 7 days.
-    if not db.query(m.TargetDayRule).first():
-        for lo, hi, days in ((0, 4, 7), (5, 12, 4), (13, 25, 2)):
-            db.add(m.TargetDayRule(min_score=lo, max_score=hi, days=days))
+    # Target-date risk matrix: seed once (only when empty) from the SHE matrix —
+    # rows = probability 1–5, columns = consequence (severity) 1–5, values in hours.
+    if not db.query(m.TargetMatrixCell).first():
+        D = 24
+        matrix = [
+            [7*D, 7*D, 6*D, 6*D, 5*D],
+            [7*D, 6*D, 4*D, 4*D, 3*D],
+            [6*D, 4*D, 3*D, 3*D, 2*D],
+            [6*D, 4*D, 3*D, 2*D, 1*D],
+            [5*D, 3*D, 2*D, 1*D, 1],      # 5×5 → 1 hour
+        ]
+        for p, row in enumerate(matrix, start=1):
+            for s, hours in enumerate(row, start=1):
+                db.add(m.TargetMatrixCell(severity=s, probability=p, hours=hours))
     db.commit()
 
 

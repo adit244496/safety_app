@@ -225,28 +225,46 @@ class ObsUpdate(ObsCreate):
     status: Optional[str] = None
 
 
-def _check_target_limit(db: Session, severity, probability, obs_date, target, status) -> None:
-    """The target date may be earlier than, but never later than, observation date +
-    the days allowed for the risk score (Admin → Risk & Target Date)."""
-    if not target or not obs_date or severity is None or probability is None or status == "Positive Approach":
-        return
-    score = severity * probability
-    rule = (
-        db.query(models.TargetDayRule)
-        .filter(models.TargetDayRule.min_score <= score, models.TargetDayRule.max_score >= score)
-        .first()
-    )
-    if not rule:
-        return
+def _fmt_duration(hours: int) -> str:
+    if hours % 24 == 0:
+        d = hours // 24
+        return f"{d} day{'s' if d != 1 else ''}"
+    return f"{hours} hour{'s' if hours != 1 else ''}"
+
+
+def _latest_target(db: Session, severity, probability, obs_date, obs_time):
+    """(latest allowed target date ISO, hours) from the risk matrix, or None when no
+    cell applies. Measured from the observation's date and time (00:00 if no time)."""
+    if not obs_date or severity is None or probability is None:
+        return None
+    cell = db.query(models.TargetMatrixCell).filter(
+        models.TargetMatrixCell.severity == severity,
+        models.TargetMatrixCell.probability == probability,
+    ).first()
+    if not cell:
+        return None
     try:
-        latest = (date.fromisoformat(obs_date[:10]) + timedelta(days=rule.days)).isoformat()
+        hh, mm = (int(x) for x in (obs_time or "00:00")[:5].split(":"))
+        start = datetime.fromisoformat(obs_date[:10]).replace(hour=hh, minute=mm)
     except ValueError:
+        return None
+    return (start + timedelta(hours=cell.hours)).date().isoformat(), cell.hours
+
+
+def _check_target_limit(db: Session, severity, probability, obs_date, obs_time, target, status) -> None:
+    """The target date may be earlier than, but never later than, the observation date/time
+    + the time allowed by the risk matrix (Admin → Risk & Target Date)."""
+    if not target or status == "Positive Approach":
         return
+    limit = _latest_target(db, severity, probability, obs_date, obs_time)
+    if not limit:
+        return
+    latest, hours = limit
     if target[:10] > latest:
         raise HTTPException(
             400,
-            f"Target date can't be later than {latest} — risk score {score} allows at most "
-            f"{rule.days} day{'s' if rule.days != 1 else ''} from the observation date.",
+            f"Target date can't be later than {latest} — Severity {severity} × Probability {probability} "
+            f"allows at most {_fmt_duration(hours)} from the observation.",
         )
 
 
@@ -1444,7 +1462,8 @@ def generate_ai_summary(obs_id: str, db: Session = Depends(get_db), user: models
 def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     if user.role == "Contractor":
         raise HTTPException(status_code=403, detail="Your role cannot create observations")
-    _check_target_limit(db, body.severity, body.probability, body.obs_date, body.target_date_actual, body.status)
+    _check_target_limit(db, body.severity, body.probability, body.obs_date, body.obs_time,
+                        body.target_date_actual, body.status)
     factor, level = calc_risk(body.severity or 1, body.probability or 1)
     obs_id = generate_obs_id(db, body.project_id)
 
@@ -1637,9 +1656,9 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
     # Enforce the target-date limit only when the date or its inputs change, so older
     # records with a longer target can still be edited for other fields.
     merged = {k: body_dict.get(k, getattr(obs, k))
-              for k in ("severity", "probability", "obs_date", "target_date_actual", "status")}
-    if any(merged[k] != getattr(obs, k) for k in ("severity", "probability", "obs_date", "target_date_actual")):
-        _check_target_limit(db, merged["severity"], merged["probability"], merged["obs_date"],
+              for k in ("severity", "probability", "obs_date", "obs_time", "target_date_actual", "status")}
+    if any(merged[k] != getattr(obs, k) for k in ("severity", "probability", "obs_date", "obs_time", "target_date_actual")):
+        _check_target_limit(db, merged["severity"], merged["probability"], merged["obs_date"], merged["obs_time"],
                             merged["target_date_actual"], merged["status"])
     # Serialize list fields → JSON string before setting on model
     if 'contractor_user_ids' in body_dict:

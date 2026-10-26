@@ -230,6 +230,51 @@ def get_totals(
     }
 
 
+def _for_month_map(raw) -> dict:
+    out: dict = {}
+    _accumulate_for_month(raw, out)
+    return out
+
+
+@router.get("/series")
+def get_series(
+    project_id: List[int] = Query(default=[]),
+    db: Session = Depends(get_db),
+    user: models.User = Depends(get_current_user),
+):
+    """Month-by-month figures for the OH&S dashboard (compare month / quarter / year,
+    current month vs cumulative). One entry per saved month, summed across the selected
+    projects (all accessible projects when none are given)."""
+    allowed = get_allowed_project_ids(user)
+    q = db.query(models.OhsStatistics)
+    if allowed is not None:
+        if not allowed:
+            return []
+        q = q.filter(models.OhsStatistics.project_id.in_(allowed))
+    if project_id:
+        q = q.filter(models.OhsStatistics.project_id.in_(project_id))
+
+    months: dict = {}
+    for r in q.all():
+        m = months.setdefault((r.year, r.month), {
+            "year": r.year, "month": r.month, "general_summary": {}, "activities": {},
+            "man_hours": 0.0, "avg_persons": 0.0, "lti": 0, "man_days_lost": 0.0, "violations": 0,
+        })
+        for section in ("general_summary", "activities"):
+            for k, v in _for_month_map(getattr(r, section)).items():
+                m[section][k] = m[section].get(k, 0.0) + v
+        sec_a = _loads(r.section_a, {})
+        for row in (sec_a.values() if isinstance(sec_a, dict) else sec_a):
+            if isinstance(row, dict):
+                m["man_hours"] += _num(row.get("man_hours"))
+                m["avg_persons"] += _num(row.get("avg_persons"))   # manpower across projects adds up
+        lti = [x for x in _loads(r.lti, []) if isinstance(x, dict) and any(str(v).strip() for v in x.values())]
+        m["lti"] += len(lti)
+        m["man_days_lost"] += sum(_num(x.get("man_days_lost")) for x in lti)
+        m["violations"] += len([x for x in _loads(r.violations, []) if isinstance(x, dict) and any(str(v).strip() for v in x.values())])
+    return [months[k] for k in sorted(months)]
+
+
 @router.get("/cumulative")
 def get_cumulative(
     project_id: int = Query(...),

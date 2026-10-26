@@ -661,10 +661,56 @@ let IS_ADMIN = false;
 function authHeaders(){ var t=null; try { t=localStorage.getItem('token'); } catch(e){} return t ? { 'Authorization':'Bearer '+t } : {}; }
 function apiGet(path){ return fetch('/api'+path, { headers: authHeaders() }).then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); }); }
 function apiPut(path, body){ return fetch('/api'+path, { method:'PUT', headers: Object.assign({ 'Content-Type':'application/json' }, authHeaders()), body: JSON.stringify(body) }).then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); }); }
-function persistRows(){
-  if (!IS_ADMIN) return;
-  apiPut('/legacy-data/', { header: HEADER, rows: ROWS }).catch(function(err){
-    showToast(err===403 ? 'You are not authorized to change legacy data.' : 'Could not save data to the server. Changes may not be visible to others.', 'error');
+/* Saving: the whole dataset is several MB, larger than a reverse proxy usually accepts
+   in one request (nginx: 1 MB), which made uploads silently stay in the uploader's
+   browser only. So it is gzipped and sent in small chunks; the server swaps it in
+   once the last chunk arrives. */
+var CHUNK_BYTES = 512 * 1024;
+function gzipText(text){
+  var stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Response(stream).arrayBuffer().then(function(buf){ return new Uint8Array(buf); });
+}
+function uploadId(){
+  var a = new Uint8Array(16); crypto.getRandomValues(a);
+  return Array.from(a, function(b){ return ('0' + b.toString(16)).slice(-2); }).join('');
+}
+function postChunk(id, index, total, bytes){
+  var q = '?upload_id=' + id + '&index=' + index + '&total=' + total;
+  return fetch('/api/legacy-data/chunk' + q, {
+    method: 'POST',
+    headers: Object.assign({ 'Content-Type': 'application/octet-stream' }, authHeaders()),
+    body: bytes
+  }).then(function(r){ return r.ok ? r.json() : Promise.reject(r.status); });
+}
+function persistRows(prefix){
+  if (!IS_ADMIN) return Promise.resolve();
+  prefix = prefix ? prefix + ' ' : '';
+  var count = ROWS.length;
+  var body = JSON.stringify({ header: HEADER, rows: ROWS });
+  var send;
+  if (window.CompressionStream){
+    send = gzipText(body).then(function(bytes){
+      var id = uploadId(), total = Math.max(1, Math.ceil(bytes.length / CHUNK_BYTES));
+      var chain = Promise.resolve();
+      for (var i = 0; i < total; i++){
+        (function(i){
+          chain = chain.then(function(){ return postChunk(id, i, total, bytes.subarray(i * CHUNK_BYTES, (i + 1) * CHUNK_BYTES)); });
+        })(i);
+      }
+      return chain;
+    });
+  } else {
+    send = apiPut('/legacy-data/', { header: HEADER, rows: ROWS });   // very old browsers
+  }
+  showToast(prefix + 'Saving ' + count.toLocaleString() + ' rows to the server…', 'info');
+  return send.then(function(){
+    showToast(prefix + 'Saved to the server — everyone now sees these ' + count.toLocaleString() + ' rows.', 'success');
+  }).catch(function(err){
+    showToast(prefix +
+      (err === 403 ? 'You are not authorized to change legacy data.'
+      : err === 413 ? 'The server rejected the upload as too large. Ask the administrator to raise the upload size limit.'
+      : 'Could not save to the server' + (typeof err === 'number' ? ' (error ' + err + ')' : '') + ' — other users will NOT see this data. Please try again.'),
+      'error');
   });
 }
 
@@ -1533,7 +1579,8 @@ function showToast(msg, kind){
   el.className = 'toast show toast-' + (kind||'info');
   el.textContent = msg;
   if (toastTimeout) clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(function(){ el.classList.remove('show'); }, 6000);
+  // Errors stay up longer so a failed save to the server isn't missed.
+  toastTimeout = setTimeout(function(){ el.classList.remove('show'); }, kind === 'error' ? 20000 : 6000);
 }
 
 /* ============================================================
@@ -1711,13 +1758,6 @@ function handleFiles(fileList){
 }
 
 function finishUpload(totalAdded, filesOk, filesTotal, problems){
-  if (totalAdded>0){
-    refreshDerivedData();
-    resetFilters();
-    initMeta();
-    update();
-    persistRows();
-  }
   let msg = '';
   if (filesOk>0){
     msg = 'Added ' + totalAdded.toLocaleString() + ' observation' + (totalAdded!==1?'s':'') +
@@ -1726,7 +1766,15 @@ function finishUpload(totalAdded, filesOk, filesTotal, problems){
   if (problems.length){
     msg += (msg ? ' ' : '') + problems.length + ' file' + (problems.length!==1?'s':'') + ' skipped \u2014 ' + problems.join('; ');
   }
-  showToast(msg || 'No data found in the selected file(s).', (filesOk>0 && !problems.length) ? 'success' : (filesOk===0 ? 'error' : 'info'));
+  if (totalAdded>0){
+    refreshDerivedData();
+    resetFilters();
+    initMeta();
+    update();
+    persistRows(msg);   // reports "Saving…" then "Saved…" / the error, after the summary
+    return;
+  }
+  showToast(msg || 'No data found in the selected file(s).', filesOk===0 ? 'error' : 'info');
 }
 
 function clearAllData(){
@@ -1744,8 +1792,7 @@ function clearAllData(){
   resetFilters();
   initMeta();
   update();
-  persistRows();
-  showToast('All data cleared. Upload .xlsx files to begin again.', 'success');
+  persistRows('All data cleared. Upload .xlsx files to begin again.');
 }
 
 function initDataControls(){
@@ -1821,16 +1868,34 @@ function init(){
     update();
   }
   // Load the shared server dataset (and the viewer's role) before first render.
+  // The server copy is the single source of truth: the bundled default is used only
+  // when nothing has been uploaded yet — never as a silent fallback when loading fails.
   Promise.all([
     apiGet('/auth/me').catch(function(){ return null; }),
-    apiGet('/legacy-data/').catch(function(){ return null; })
+    apiGet('/legacy-data/').then(function(d){ return { ok: true, data: d }; },
+                                 function(err){ return { ok: false, err: err }; })
   ]).then(function(res){
     var me = res[0], server = res[1];
+    if ((me && me.role === 'Contractor') || (!server.ok && server.err === 403)){
+      document.body.innerHTML = '<div style="font-family:system-ui,sans-serif;padding:48px;text-align:center;color:#475569">' +
+        '<h2 style="margin:0 0 8px;color:#0f172a">Legacy Data is not available for your role</h2>' +
+        '<p style="margin:0">Please contact your SHE administrator if you need access.</p></div>';
+      return;
+    }
     IS_ADMIN = !!(me && (me.role === 'SuperAdmin' || me.role === 'Admin'));
-    if (server && server.header && Array.isArray(server.rows)){
+    if (!server.ok){
+      ROWS = [];
+      refreshDerivedData();
+      boot();
+      showToast('Could not load legacy data from the server' + (typeof server.err === 'number' ? ' (error ' + server.err + ')' : '') +
+        '. Please reload the page — if it persists, sign out and sign in again.', 'error');
+      return;
+    }
+    var d = server.data;
+    if (d && d.header && Array.isArray(d.rows)){
       // Server has an uploaded dataset — it replaces the bundled default for everyone.
-      setHeader(server.header);
-      ROWS = server.rows;
+      setHeader(d.header);
+      ROWS = d.rows;
       refreshDerivedData();
     }
     boot();

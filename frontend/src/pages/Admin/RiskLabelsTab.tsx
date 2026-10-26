@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save, Plus, Trash2, CalendarClock } from 'lucide-react'
+import { Save, CalendarClock } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '../../lib/api'
 
@@ -92,48 +92,49 @@ function LabelEditor({
   )
 }
 
-type Rule = { min_score: number | ''; max_score: number | ''; days: number | '' }
+type Unit = 'days' | 'hours'
+type Cell = { value: number | ''; unit: Unit }
+const MATRIX = [1, 2, 3, 4, 5]
+const key = (s: number, p: number) => `${s}x${p}`
 
-const ruleTone = (max: number) =>
-  max >= 13 ? 'bg-red-50 text-red-700' : max >= 5 ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'
+// Same bands as the risk level (Low ≤ 4, Medium ≤ 12, High) — matches the SHE matrix colours.
+const cellTone = (score: number) =>
+  score > 12 ? 'bg-red-500 text-white' : score > 4 ? 'bg-sky-400 text-slate-900' : 'bg-green-600 text-white'
 
-/** Risk score range → days to rectify. Drives the auto-filled Target Date on observations. */
-function TargetDayRulesEditor() {
+const toCell = (hours: number): Cell => hours % 24 === 0 ? { value: hours / 24, unit: 'days' } : { value: hours, unit: 'hours' }
+const toHours = (c: Cell) => c.value === '' ? NaN : c.unit === 'days' ? Number(c.value) * 24 : Number(c.value)
+
+/** Severity × Probability → time to rectify. Drives the auto-filled (and maximum) Target Date. */
+function TargetMatrixEditor() {
   const qc = useQueryClient()
   const { data: saved = [] as any[] } = useQuery<any[]>({
-    queryKey: ['target-day-rules'],
-    queryFn: () => api.get('/admin/target-day-rules').then(r => r.data),
+    queryKey: ['target-matrix'],
+    queryFn: () => api.get('/admin/target-matrix').then(r => r.data),
     staleTime: 60_000,
   })
-  const [rows, setRows] = useState<Rule[] | null>(null)
+  const savedCells = useMemo(() => {
+    const m: Record<string, Cell> = {}
+    for (const c of saved) m[key(c.severity, c.probability)] = toCell(c.hours)
+    return m
+  }, [saved])
+  const [draft, setDraft] = useState<Record<string, Cell> | null>(null)
   const [saving, setSaving] = useState(false)
-  const current: Rule[] = rows ?? saved.map((r: any) => ({ min_score: r.min_score, max_score: r.max_score, days: r.days }))
-  const dirty = rows !== null
-
-  const update = (i: number, k: keyof Rule, v: string) =>
-    setRows(current.map((r, idx) => idx === i ? { ...r, [k]: v === '' ? '' : Number(v) } : r))
-  const add = () => setRows([...current, { min_score: '', max_score: '', days: '' }])
-  const remove = (i: number) => setRows(current.filter((_, idx) => idx !== i))
-
-  // Scores 0–25 not covered by any range get no automatic target date.
-  const uncovered = useMemo(() => {
-    const gaps: number[] = []
-    for (let s = 0; s <= 25; s++) {
-      if (!current.some(r => r.min_score !== '' && r.max_score !== '' && s >= r.min_score && s <= r.max_score)) gaps.push(s)
-    }
-    return gaps
-  }, [current])
+  const cells = draft ?? savedCells
+  const cell = (s: number, p: number): Cell => cells[key(s, p)] ?? { value: '', unit: 'days' }
+  const update = (s: number, p: number, patch: Partial<Cell>) =>
+    setDraft({ ...cells, [key(s, p)]: { ...cell(s, p), ...patch } })
 
   async function save() {
-    if (current.some(r => r.min_score === '' || r.max_score === '' || r.days === '')) {
-      toast.error('Fill in every score range and number of days'); return
+    const body = MATRIX.flatMap(p => MATRIX.map(s => ({ severity: s, probability: p, hours: toHours(cell(s, p)) })))
+    if (body.some(c => !Number.isFinite(c.hours) || c.hours < 1)) {
+      toast.error('Every cell needs a duration of at least 1 hour'); return
     }
     setSaving(true)
     try {
-      await api.put('/admin/target-day-rules', current)
-      qc.invalidateQueries({ queryKey: ['target-day-rules'] })
-      setRows(null)
-      toast.success('Target date rules saved')
+      await api.put('/admin/target-matrix', body)
+      qc.invalidateQueries({ queryKey: ['target-matrix'] })
+      setDraft(null)
+      toast.success('Target date matrix saved')
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || 'Failed to save')
     } finally { setSaving(false) }
@@ -141,51 +142,67 @@ function TargetDayRulesEditor() {
 
   return (
     <div className="card p-5 space-y-4 lg:col-span-2">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5"><CalendarClock className="w-4 h-4 text-indigo-500" /> Target Date for Rectification</h3>
-          <p className="text-xs text-gray-400 mt-0.5">
-            Risk score = Severity × Probability (0–25). The observation form auto-fills the target date as
-            observation date + the days for its score range.
-          </p>
-        </div>
-        <button onClick={add} className="btn-secondary btn-sm flex-shrink-0"><Plus className="w-3.5 h-3.5" /> Add range</button>
-      </div>
-
-      <div className="space-y-2">
-        <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-[11px] font-semibold text-gray-400 uppercase tracking-wide px-1">
-          <span>Score from</span><span>Score to</span><span>Days to rectify</span><span className="w-8" />
-        </div>
-        {current.map((r, i) => (
-          <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
-            <input type="number" min={0} max={25} className="input text-sm py-1.5" value={r.min_score} onChange={e => update(i, 'min_score', e.target.value)} />
-            <input type="number" min={0} max={25} className="input text-sm py-1.5" value={r.max_score} onChange={e => update(i, 'max_score', e.target.value)} />
-            <div className="flex items-center gap-2">
-              <input type="number" min={0} max={365} className="input text-sm py-1.5 flex-1 min-w-0" value={r.days} onChange={e => update(i, 'days', e.target.value)} />
-              {r.max_score !== '' && (
-                <span className={`hidden sm:inline text-[11px] font-semibold px-2 py-1 rounded-md whitespace-nowrap ${ruleTone(Number(r.max_score))}`}>
-                  {r.days === 0 ? 'Same day' : r.days === '' ? '—' : `${r.days} day${r.days === 1 ? '' : 's'}`}
-                </span>
-              )}
-            </div>
-            <button onClick={() => remove(i)} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-red-500" title="Remove range"><Trash2 className="w-4 h-4" /></button>
-          </div>
-        ))}
-        {current.length === 0 && <p className="text-xs text-gray-400 py-2">No ranges yet — add one.</p>}
-      </div>
-
-      {uncovered.length > 0 && (
-        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-          Scores not covered: {uncovered.join(', ')} — no target date will be auto-filled for these.
+      <div>
+        <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-1.5"><CalendarClock className="w-4 h-4 text-indigo-500" /> Target Date for Rectification — Risk Matrix</h3>
+        <p className="text-xs text-gray-400 mt-0.5">
+          Time allowed to rectify for each Consequence (Severity) × Probability. The observation form auto-fills the target
+          date from the observation date &amp; time; users may pick an earlier date but not a later one.
         </p>
-      )}
+      </div>
 
-      {dirty && (
+      <div className="overflow-x-auto">
+        <table className="border-collapse text-xs mx-auto">
+          <thead>
+            <tr>
+              <th className="p-1" />
+              <th className="p-1" />
+              <th colSpan={5} className="p-2 bg-rose-100 text-gray-800 font-semibold border border-gray-300">Consequence (Severity)</th>
+            </tr>
+            <tr>
+              <th className="p-1" />
+              <th className="p-1 border border-gray-300 bg-gray-800" />
+              {MATRIX.map(s => <th key={s} className="p-2 w-28 bg-yellow-200 border border-gray-300 font-semibold">{s}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {MATRIX.map((p, i) => (
+              <tr key={p}>
+                {i === 0 && (
+                  <th rowSpan={5} className="p-2 bg-rose-100 border border-gray-300 font-semibold text-gray-800">
+                    <span className="[writing-mode:vertical-rl] rotate-180">Probability</span>
+                  </th>
+                )}
+                <th className="p-2 bg-yellow-200 border border-gray-300 font-semibold">{p}</th>
+                {MATRIX.map(s => {
+                  const c = cell(s, p)
+                  return (
+                    <td key={s} className={`p-1.5 border border-gray-300 text-center ${cellTone(s * p)}`}>
+                      <div className="font-bold text-sm leading-none mb-1">{s * p}</div>
+                      <div className="flex items-center gap-1 justify-center">
+                        <input type="number" min={1} value={c.value}
+                          onChange={e => update(s, p, { value: e.target.value === '' ? '' : Number(e.target.value) })}
+                          className="w-11 rounded px-1 py-0.5 text-center text-gray-900 bg-white/90 border border-black/10 text-xs" />
+                        <select value={c.unit} onChange={e => update(s, p, { unit: e.target.value as Unit })}
+                          className="rounded px-0.5 py-0.5 text-gray-900 bg-white/90 border border-black/10 text-[11px]">
+                          <option value="days">days</option>
+                          <option value="hours">hours</option>
+                        </select>
+                      </div>
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {draft && (
         <div className="flex items-center justify-end gap-2">
-          <button onClick={() => setRows(null)} className="btn-ghost btn-sm">Cancel</button>
+          <button onClick={() => setDraft(null)} className="btn-ghost btn-sm">Cancel</button>
           <button onClick={save} disabled={saving} className="btn-primary btn-sm">
             {saving ? <span className="animate-spin w-3 h-3 border-2 border-white border-t-transparent rounded-full" /> : <Save className="w-3.5 h-3.5" />}
-            Save rules
+            Save matrix
           </button>
         </div>
       )}
@@ -196,7 +213,7 @@ function TargetDayRulesEditor() {
 export default function RiskLabelsTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <TargetDayRulesEditor />
+      <TargetMatrixEditor />
       <LabelEditor
         title="Severity of Consequence"
         hint="Labels shown in the risk assessment dropdown (1 = least severe, 5 = fatal)."

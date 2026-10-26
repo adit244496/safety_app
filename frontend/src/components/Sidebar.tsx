@@ -24,7 +24,7 @@ const NAV = [
   { to: '/work-permits', icon: FileCheck2, label: 'Work Permits', exact: false, roles: null },
   { to: '/meeting-minutes', icon: NotebookPen, label: 'Meeting Minutes', exact: false, roles: ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Observer'] },
   { to: '/library', icon: BookOpen, label: 'Library', exact: true, roles: null },
-  { to: '/legacy-data', icon: Database, label: 'Legacy Data', exact: true, roles: ['SuperAdmin', 'Admin', 'HO'] },
+  { to: '/legacy-data', icon: Database, label: 'Legacy Data', exact: true, roles: ['SuperAdmin', 'Admin', 'HO', 'PIC', 'EIC', 'PSO', 'Observer'] },
 ]
 
 export default function Sidebar({ mobileOpen, onMobileClose, collapsed, onToggleCollapse }: Props) {

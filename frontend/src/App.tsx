@@ -46,10 +46,11 @@ function ContractorGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Legacy Data: every role except Contractor (only Admin/SuperAdmin can upload).
 function LegacyDataGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   if (!user) return null
-  if (!['SuperAdmin', 'Admin', 'HO'].includes(user.role)) return <Navigate to="/" replace />
+  if (user.role === 'Contractor') return <Navigate to="/" replace />
   return <>{children}</>
 }
 

@@ -601,46 +601,39 @@ def upsert_probability_label(level: int, body: RiskLabelBody, db: Session = Depe
     return {"id": row.id, "level": row.level, "label": row.label}
 
 
-# ── Target-date rules (risk score range → days to rectify) ────────────────────
-MAX_SCORE = 25   # severity (0–5) × probability (0–5)
+# ── Target-date risk matrix (severity × probability → time to rectify) ──────────
+MATRIX_LEVELS = range(1, 6)
+MAX_HOURS = 365 * 24
 
 
-class TargetDayRuleBody(BaseModel):
-    min_score: int
-    max_score: int
-    days: int
+class MatrixCellBody(BaseModel):
+    severity: int
+    probability: int
+    hours: int
 
 
-def _rule_dict(r: models.TargetDayRule) -> dict:
-    return {"id": r.id, "min_score": r.min_score, "max_score": r.max_score, "days": r.days}
+@router.get("/target-matrix")
+def get_target_matrix(db: Session = Depends(get_db), _=Depends(get_current_user)):
+    rows = db.query(models.TargetMatrixCell).order_by(
+        models.TargetMatrixCell.probability, models.TargetMatrixCell.severity).all()
+    return [{"severity": r.severity, "probability": r.probability, "hours": r.hours} for r in rows]
 
 
-@router.get("/target-day-rules")
-def get_target_day_rules(db: Session = Depends(get_db), _=Depends(get_current_user)):
-    rows = db.query(models.TargetDayRule).order_by(models.TargetDayRule.min_score).all()
-    return [_rule_dict(r) for r in rows]
-
-
-@router.put("/target-day-rules")
-def replace_target_day_rules(body: List[TargetDayRuleBody], db: Session = Depends(get_db), _=Depends(require_admin)):
-    """Replace all rules at once so ranges can be re-split without passing through
-    an invalid intermediate state. Ranges must lie within 0–25 and must not overlap."""
-    rules = sorted(body, key=lambda r: r.min_score)
-    if not rules:
-        raise HTTPException(400, "Add at least one score range")
-    for r in rules:
-        if not (0 <= r.min_score <= r.max_score <= MAX_SCORE):
-            raise HTTPException(400, f"Score range {r.min_score}–{r.max_score} must be within 0–{MAX_SCORE}, min ≤ max")
-        if not (0 <= r.days <= 365):
-            raise HTTPException(400, "Days must be between 0 and 365")
-    for a, b in zip(rules, rules[1:]):
-        if b.min_score <= a.max_score:
-            raise HTTPException(400, f"Score ranges {a.min_score}–{a.max_score} and {b.min_score}–{b.max_score} overlap")
-    db.query(models.TargetDayRule).delete()
-    for r in rules:
-        db.add(models.TargetDayRule(min_score=r.min_score, max_score=r.max_score, days=r.days))
+@router.put("/target-matrix")
+def replace_target_matrix(body: List[MatrixCellBody], db: Session = Depends(get_db), _=Depends(require_admin)):
+    """Save the whole 5×5 matrix at once. Every cell needs a duration (hours, 24 = 1 day)."""
+    cells = {(c.severity, c.probability): c.hours for c in body}
+    expected = {(s, p) for s in MATRIX_LEVELS for p in MATRIX_LEVELS}
+    if set(cells) != expected or len(body) != len(expected):
+        raise HTTPException(400, "Provide exactly one duration for each of the 25 matrix cells (1–5 × 1–5)")
+    for (s, p), hours in cells.items():
+        if not (1 <= hours <= MAX_HOURS):
+            raise HTTPException(400, f"Severity {s} × Probability {p}: duration must be between 1 hour and 365 days")
+    db.query(models.TargetMatrixCell).delete()
+    for (s, p), hours in cells.items():
+        db.add(models.TargetMatrixCell(severity=s, probability=p, hours=hours))
     db.commit()
-    return get_target_day_rules(db)
+    return get_target_matrix(db)
 
 
 @router.post("/smtp-settings/test")
