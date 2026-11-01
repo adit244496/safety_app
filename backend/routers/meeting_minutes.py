@@ -1,6 +1,7 @@
 import os
 import uuid
 import base64
+import logging
 from datetime import datetime
 from typing import Optional, List
 
@@ -12,10 +13,12 @@ from sqlalchemy import nullslast
 from database import get_db
 import models
 import ai_service
-from auth import get_current_user
+from auth import get_current_user, block_contractor
 from routers.observations import get_allowed_project_ids
 
-router = APIRouter(prefix="/api/meeting-minutes", tags=["meeting-minutes"])
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/meeting-minutes", tags=["meeting-minutes"], dependencies=[Depends(block_contractor)])
 
 # Roles allowed to create / edit / delete meeting minutes.
 # "PSO and CST/admin" — interpreted as PSO plus Admin/SuperAdmin.
@@ -115,6 +118,7 @@ def _pdf_page_images(abs_path: str) -> list:
                 data = pix.tobytes("jpeg", jpg_quality=80)
                 out.append(("image/jpeg", base64.standard_b64encode(data).decode("utf-8")))
     except Exception:
+        logger.exception("Could not render PDF pages for AI summary: %s", abs_path)
         return []
     return out
 
@@ -344,6 +348,7 @@ def generate_ai_summary(mom_id: int, db: Session = Depends(get_db), user: models
     try:
         summary = ai_service.summarize_minutes(source, db, images=images)
     except Exception:
+        logger.exception("AI summary failed for meeting minutes %s", mom_id)
         raise HTTPException(502, "Failed to generate the AI summary. Please try again.")
 
     m.ai_summary = summary

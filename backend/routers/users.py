@@ -246,9 +246,11 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_admin)):
 
 
 @router.post("/", status_code=201)
-def create_user(body: UserCreate, db: Session = Depends(get_db), _=Depends(require_admin)):
+def create_user(body: UserCreate, db: Session = Depends(get_db), current=Depends(require_admin)):
     if body.role not in VALID_ROLES:
         raise HTTPException(400, "Invalid role")
+    if body.role == "SuperAdmin" and current.role != "SuperAdmin":
+        raise HTTPException(403, "Only a SuperAdmin can create a SuperAdmin")
     _check_uniqueness(db, body.role, body.name.strip(), body.email.lower().strip())
 
     user = models.User(
@@ -269,12 +271,15 @@ def create_user(body: UserCreate, db: Session = Depends(get_db), _=Depends(requi
 
 
 @router.put("/{user_id}")
-def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db), _=Depends(require_admin)):
+def update_user(user_id: int, body: UserUpdate, db: Session = Depends(get_db), current=Depends(require_admin)):
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(404, "User not found")
     if body.role not in VALID_ROLES:
         raise HTTPException(400, "Invalid role")
+    # Covers changing a SuperAdmin's password too, which would hand over the account.
+    if "SuperAdmin" in (body.role, user.role) and current.role != "SuperAdmin":
+        raise HTTPException(403, "Only a SuperAdmin can change a SuperAdmin account")
     _check_uniqueness(db, body.role, body.name.strip(), body.email.lower().strip(), exclude_id=user_id)
 
     user.name = body.name.strip()

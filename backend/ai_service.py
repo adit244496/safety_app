@@ -194,6 +194,8 @@ MINUTES_SYSTEM_PROMPT = (
     "Then, if present, a short list of key discussion points, decisions, and action items as lines "
     "starting with '- '. For action items include the owner and any due date when stated.\n"
     "Only use information present in the minutes — never invent attendees, dates, decisions or owners. "
+    "If the document is only an attendance sheet, say so and give the date and the attendees "
+    "with their company and designation as far as legible. "
     "If the text is unclear or empty, say so briefly."
 )
 

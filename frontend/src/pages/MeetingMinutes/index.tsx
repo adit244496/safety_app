@@ -317,12 +317,14 @@ export default function MeetingMinutes() {
   })
 
   const minutes: Mom[] = data?.minutes || []
+  // The open record comes from the live list, so a newly generated summary shows straight away.
+  const openMom = detail ? (minutes.find(m => m.id === detail.id) ?? detail) : null
   const canDelete = (m: Mom) => user?.role === 'SuperAdmin' || user?.role === 'Admin' || (m.created_by === user?.id && canWrite)
 
   return (
     <div className="space-y-4">
       {createOpen && <CreateModal projects={projects || []} onClose={() => setCreateOpen(false)} />}
-      {detail && <DetailModal mom={detail} canDelete={canDelete(detail)} onClose={() => setDetail(null)} />}
+      {openMom && <DetailModal mom={openMom} canDelete={canDelete(openMom)} onClose={() => setDetail(null)} />}
 
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

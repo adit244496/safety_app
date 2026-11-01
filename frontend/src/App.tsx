@@ -46,16 +46,8 @@ function ContractorGuard({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// Legacy Data: every role except Contractor (only Admin/SuperAdmin can upload).
-function LegacyDataGuard({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth()
-  if (!user) return null
-  if (user.role === 'Contractor') return <Navigate to="/" replace />
-  return <>{children}</>
-}
-
-// Meeting minutes: everyone except contractors
-function MinutesGuard({ children }: { children: React.ReactNode }) {
+// SHE Report, Summary, Legacy Data and Meeting Minutes: every role except Contractor.
+function NoContractorGuard({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   if (!user) return null
   if (user.role === 'Contractor') return <Navigate to="/" replace />
@@ -88,9 +80,9 @@ export default function App() {
           <Route path="observations/new" element={<ObservationForm />} />
           <Route path="observations/:id" element={<ObservationDetail />} />
           <Route path="observations/:id/edit" element={<ObservationForm />} />
-          <Route path="summary" element={<ContractorGuard><Summary /></ContractorGuard>} />
-          <Route path="report" element={<ContractorGuard><ReportPage /></ContractorGuard>} />
-          <Route path="legacy-data" element={<LegacyDataGuard><LegacyData /></LegacyDataGuard>} />
+          <Route path="summary" element={<NoContractorGuard><Summary /></NoContractorGuard>} />
+          <Route path="report" element={<NoContractorGuard><ReportPage /></NoContractorGuard>} />
+          <Route path="legacy-data" element={<NoContractorGuard><LegacyData /></NoContractorGuard>} />
           <Route path="trainings" element={<ContractorGuard><Trainings /></ContractorGuard>} />
           <Route path="trainings/new" element={<ContractorGuard><TrainingForm /></ContractorGuard>} />
           <Route path="trainings/:id/edit" element={<ContractorGuard><TrainingForm /></ContractorGuard>} />
@@ -98,7 +90,7 @@ export default function App() {
           <Route path="work-permits/new" element={<PermitFormGuard><WorkPermitForm /></PermitFormGuard>} />
           <Route path="work-permits/:id" element={<WorkPermitDetail />} />
           <Route path="work-permits/:id/edit" element={<PermitFormGuard><WorkPermitForm /></PermitFormGuard>} />
-          <Route path="meeting-minutes" element={<MinutesGuard><MeetingMinutes /></MinutesGuard>} />
+          <Route path="meeting-minutes" element={<NoContractorGuard><MeetingMinutes /></NoContractorGuard>} />
           <Route path="library" element={<Guidelines />} />
           <Route path="guidelines" element={<Navigate to="/library" replace />} />
           <Route path="admin/*" element={<AdminGuard><Admin /></AdminGuard>} />

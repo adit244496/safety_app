@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from database import get_db
 import models
-from auth import get_current_user, require_admin, require_super_admin
+from auth import get_current_user, require_admin, require_super_admin, block_contractor
 
-router = APIRouter(prefix="/api/ease-score", tags=["ease-score"])
+router = APIRouter(prefix="/api/ease-score", tags=["ease-score"], dependencies=[Depends(block_contractor)])
 
 MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]

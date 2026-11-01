@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 import re
 from database import get_db
 import models
-from auth import get_current_user, require_admin
+from auth import get_current_user, require_admin, block_contractor
 from routers.observations import get_allowed_project_ids
 
 router = APIRouter(prefix="/api/ohs-statistics", tags=["ohs-statistics"])
@@ -29,7 +29,7 @@ def _form_item_dict(it: models.OhsFormItem) -> dict:
             "label": it.label, "sort_order": it.sort_order, "active": bool(it.active)}
 
 
-@router.get("/form-config")
+@router.get("/form-config", dependencies=[Depends(block_contractor)])
 def form_config(db: Session = Depends(get_db), _user: models.User = Depends(get_current_user)):
     """Active OH&S form rows grouped by section (for the form & report)."""
     rows = (db.query(models.OhsFormItem).filter(models.OhsFormItem.active == True)  # noqa: E712
@@ -243,7 +243,7 @@ def _for_month_map(raw) -> dict:
     return out
 
 
-@router.get("/series")
+@router.get("/series", dependencies=[Depends(block_contractor)])
 def get_series(
     project_id: List[int] = Query(default=[]),
     db: Session = Depends(get_db),
@@ -282,7 +282,7 @@ def get_series(
     return [months[k] for k in sorted(months)]
 
 
-@router.get("/cumulative")
+@router.get("/cumulative", dependencies=[Depends(block_contractor)])
 def get_cumulative(
     project_id: int = Query(...),
     month: int = Query(..., ge=1, le=12),
@@ -312,7 +312,7 @@ def get_cumulative(
     }
 
 
-@router.get("/periods")
+@router.get("/periods", dependencies=[Depends(block_contractor)])
 def list_periods(
     project_id: int = Query(...),
     db: Session = Depends(get_db),
@@ -329,7 +329,7 @@ def list_periods(
     return [{"month": r.month, "year": r.year, "updated_at": r.updated_at.isoformat() if r.updated_at else None} for r in rows]
 
 
-@router.get("/")
+@router.get("/", dependencies=[Depends(block_contractor)])
 def get_statistics(
     project_id: int = Query(...),
     month: int = Query(..., ge=1, le=12),

@@ -51,6 +51,12 @@ def require_admin(user: models.User = Depends(get_current_user)) -> models.User:
     return user
 
 
+def block_contractor(user: models.User = Depends(get_current_user)) -> models.User:
+    if user.role == "Contractor":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Contractors do not have access to this")
+    return user
+
+
 def require_super_admin(user: models.User = Depends(get_current_user)) -> models.User:
     if user.role != "SuperAdmin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="SuperAdmin access required")

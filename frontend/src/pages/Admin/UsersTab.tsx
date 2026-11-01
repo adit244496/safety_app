@@ -427,9 +427,11 @@ export default function UsersTab() {
                 </td>
                 <td className="td">
                   <div className="flex gap-1">
-                    <button onClick={() => openEdit(u)} className="btn-icon" title="Edit">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
+                    {(isSuperAdmin() || u.role !== 'SuperAdmin') && (
+                      <button onClick={() => openEdit(u)} className="btn-icon" title="Edit">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
                     {isSuperAdmin() && (
                       <button
                         onClick={() => deleteUser(u.id)}

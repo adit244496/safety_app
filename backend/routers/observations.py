@@ -10,12 +10,12 @@ import logging
 import ai_service
 from difflib import get_close_matches
 from types import SimpleNamespace
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session
 from sqlalchemy import func, extract, case, nullslast, and_, or_
 from datetime import datetime, date, timedelta
 from database import get_db, SessionLocal
 import models
-from auth import get_current_user, require_admin
+from auth import get_current_user, require_admin, block_contractor
 from email_service import send_observation_email, build_observation_email
 
 logger = logging.getLogger(__name__)
@@ -50,6 +50,11 @@ def _assert_obs_access(obs: models.Observation, user: models.User, write_roles: 
         raise HTTPException(403, "Access denied to this observation")
     if write_roles and user.role not in write_roles:
         raise HTTPException(403, "Your role cannot perform this action")
+    if user.role == "Contractor":
+        ids = _contractor_company_ids(user)
+        assigned = json.loads(obs.contractor_user_ids) if obs.contractor_user_ids else []
+        if obs.contractor_user_id not in ids and not ids.intersection(assigned):
+            raise HTTPException(403, "Access denied to this observation")
 
 
 def get_allowed_project_ids(user: models.User) -> Optional[List[int]]:
@@ -60,6 +65,24 @@ def get_allowed_project_ids(user: models.User) -> Optional[List[int]]:
     if not project_ids:
         return None  # no assignments = full access (admin intent: "all projects")
     return project_ids
+
+
+def _contractor_company_ids(user: models.User) -> set:
+    """A contractor company can have several logins under one name; they share its observations."""
+    rows = object_session(user).query(models.User.id, models.User.name).filter(models.User.role == "Contractor").all()
+    return {uid for uid, name in rows if name == user.name}
+
+
+def contractor_scope(user: models.User):
+    """Condition limiting a contractor to observations assigned to their company (primary or
+    additional contractor). None for every other role."""
+    if user.role != "Contractor":
+        return None
+    O = models.Observation
+    ids = _contractor_company_ids(user)
+    rows = object_session(user).query(O.id, O.contractor_user_ids).filter(O.contractor_user_ids.isnot(None)).all()
+    additional = [oid for oid, raw in rows if ids.intersection(json.loads(raw))]
+    return or_(O.contractor_user_id.in_(ids), O.id.in_(additional))
 
 
 # Statuses that are still "open" (not finally closed) — these flip to Overdue past target.
@@ -345,11 +368,14 @@ def stats(
     user: models.User = Depends(get_current_user),
 ):
     allowed = get_allowed_project_ids(user)
+    own = contractor_scope(user)
     today = date.today()
 
     def apply_filters(q):
         if allowed is not None:
             q = q.filter(models.Observation.project_id.in_(allowed))
+        if own is not None:
+            q = q.filter(own)
         if project_id:
             q = q.filter(models.Observation.project_id.in_(project_id))
         if building_id:
@@ -523,6 +549,9 @@ def stats_details(
     allowed = get_allowed_project_ids(user)
     # Drafts are unsubmitted — excluded, matching the dashboard summary.
     conditions = [models.Observation.status != 'Draft']
+    own = contractor_scope(user)
+    if own is not None:
+        conditions.append(own)
     if allowed is not None:
         conditions.append(models.Observation.project_id.in_(allowed))
     if project_id:
@@ -690,6 +719,9 @@ def list_observations(
         if not allowed:
             return {"observations": [], "total": 0, "pages": 0}
         q = q.filter(models.Observation.project_id.in_(allowed))
+    own = contractor_scope(user)
+    if own is not None:
+        q = q.filter(own)
     if project_id:
         q = q.filter(models.Observation.project_id.in_(project_id))
     if status:
@@ -807,6 +839,9 @@ def observation_facets(
     )
     if allowed is not None:
         q = q.filter(O.project_id.in_(allowed))
+    own = contractor_scope(user)
+    if own is not None:
+        q = q.filter(own)
     if date_from:
         q = q.filter(O.obs_date >= date_from)
     if date_to:
@@ -861,6 +896,9 @@ def status_options(db: Session = Depends(get_db), user: models.User = Depends(ge
         if not allowed:
             return []
         q = q.filter(models.Observation.project_id.in_(allowed))
+    own = contractor_scope(user)
+    if own is not None:
+        q = q.filter(own)
     if user.role not in ("SuperAdmin", "Admin"):
         q = q.filter((models.Observation.status != 'Draft') | (models.Observation.created_by == user.id))
 
@@ -886,6 +924,9 @@ def she_report_stats(
     today = date.today()
 
     conditions = [models.Observation.status != "Draft"]
+    own = contractor_scope(user)
+    if own is not None:
+        conditions.append(own)
     if allowed is not None:
         conditions.append(models.Observation.project_id.in_(allowed))
     if project_id:
@@ -1211,7 +1252,7 @@ def _mis_data(db: Session, user: models.User, date_from: Optional[str],
     }
 
 
-@router.get("/mis-report")
+@router.get("/mis-report", dependencies=[Depends(block_contractor)])
 def mis_report(
     project_id: List[int] = Query(default=[]),
     date_from: Optional[str] = Query(None),
@@ -1222,7 +1263,7 @@ def mis_report(
     return _mis_data(db, user, date_from, date_to, project_id)
 
 
-@router.get("/mis-report.docx")
+@router.get("/mis-report.docx", dependencies=[Depends(block_contractor)])
 def mis_report_docx(
     project_id: List[int] = Query(default=[]),
     date_from: Optional[str] = Query(None),
@@ -1354,7 +1395,7 @@ def mis_report_docx(
     )
 
 
-@router.get("/report")
+@router.get("/report", dependencies=[Depends(block_contractor)])
 def get_report_data(
     project_id: List[int] = Query(default=[]),
     date_from: Optional[str] = Query(None),

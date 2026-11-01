@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 import models
 from auth import get_current_user
+from routers.observations import _assert_obs_access
 from datetime import datetime
 
 router = APIRouter(prefix="/api", tags=["uploads"])
@@ -28,6 +29,7 @@ async def upload_images(
     obs = db.query(models.Observation).filter(models.Observation.id == obs_id).first()
     if not obs:
         raise HTTPException(404, "Observation not found")
+    _assert_obs_access(obs, user)
 
     # The limit applies per stage (initial / followup / closure …), so a full set of
     # initial photos never blocks the rectification (after) photos. Follow-up photos
