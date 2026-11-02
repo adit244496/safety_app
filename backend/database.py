@@ -122,6 +122,14 @@ def _run_migrations():
                     except Exception:
                         conn.rollback()  # clear failed transaction so next stmt can run
 
+        # Severity 0 × Probability 0 = risk not applicable (older rows were scored 1 × 1 = Low)
+        try:
+            conn.execute(text("UPDATE observations SET risk_factor=NULL, risk_level=NULL "
+                              "WHERE severity=0 AND probability=0 AND risk_level IS NOT NULL"))
+            conn.commit()
+        except Exception:
+            conn.rollback()
+
         # Rename status: Pending → Overdue
         try:
             conn.execute(text("UPDATE observations SET status='Overdue' WHERE status='Pending'"))

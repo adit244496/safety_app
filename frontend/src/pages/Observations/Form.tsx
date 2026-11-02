@@ -189,6 +189,8 @@ export default function ObservationForm() {
   // Severity / probability / observation date & time changes re-derive the target date.
   const setRiskInput = (k: 'severity' | 'probability' | 'obs_date' | 'obs_time', v: string) => {
     const next = { ...form, [k]: v }
+    // 0 × 0 = not applicable, which is only ever a Positive Approach.
+    if (next.severity === '0' && next.probability === '0' && next.status !== 'Draft') next.status = 'Positive Approach'
     const t = autoTarget(next)
     if (t) { next.target_date_actual = t; setTargetAuto(true) }
     setForm(next)
@@ -297,7 +299,16 @@ export default function ObservationForm() {
     }
   }, [existing])
 
-  const risk = form.severity && form.probability
+  // Switching to Positive Approach pre-fills Severity & Probability with 0 (the user may
+  // change them). Leaving it clears a 0 × 0, which only a Positive Approach can have.
+  const setStatus = (s: string) => setForm((f: any) => {
+    if (s === 'Positive Approach') return { ...f, status: s, severity: '0', probability: '0' }
+    if (f.severity === '0' && f.probability === '0' && s !== 'Draft') return { ...f, status: s, severity: '', probability: '' }
+    return { ...f, status: s }
+  })
+  const riskNA = form.severity === '0' && form.probability === '0'
+  const oneZero = (form.severity === '0') !== (form.probability === '0') && form.severity !== '' && form.probability !== ''
+  const risk = form.severity && form.probability && !riskNA && !oneZero
     ? calcRisk(Number(form.severity), Number(form.probability))
     : null
   const riskHours = risk ? matrixHours(form.severity, form.probability) : undefined
@@ -376,6 +387,11 @@ export default function ObservationForm() {
       if (!form.specific_concern_id)            missing.push('Specific Concern')
       if (!form.severity)                       missing.push('Severity of Consequence')
       if (!form.probability)                    missing.push('Probability of Occurrence')
+      if (oneZero) {
+        setError('Set both Severity and Probability to 0 (not applicable), or neither.')
+        isSavingRef.current = false
+        return
+      }
       if (form.status !== 'Positive Approach') {
         // Rectification fields only required for non-positive (unsafe) observations
         if (!form.contractor_company)           missing.push('Contractor Company')
@@ -489,7 +505,7 @@ export default function ObservationForm() {
         {/* Action buttons */}
         <div className="flex items-center gap-2">
           {isEdit && (
-            <select className="select flex-1 sm:flex-none sm:w-auto text-sm py-1.5" value={form.status} onChange={e => set('status', e.target.value)}>
+            <select className="select flex-1 sm:flex-none sm:w-auto text-sm py-1.5" value={form.status} onChange={e => setStatus(e.target.value)}>
               {STATUSES.map(s => <option key={s}>{s}</option>)}
             </select>
           )}
@@ -525,7 +541,7 @@ export default function ObservationForm() {
             className={`flex items-center justify-between gap-4 px-4 py-3 rounded-xl border cursor-pointer transition-colors ${
               isPositive ? 'bg-teal-50 border-teal-300' : 'bg-gray-50 border-gray-200 hover:border-gray-300'
             }`}
-            onClick={() => set('status', isPositive ? 'Open' : 'Positive Approach')}
+            onClick={() => setStatus(isPositive ? 'Open' : 'Positive Approach')}
           >
             <div className="flex items-center gap-3">
               <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isPositive ? 'bg-teal-500' : 'bg-gray-200'}`}>
@@ -764,7 +780,7 @@ export default function ObservationForm() {
       {/* ── Risk Assessment ──────────────────────── */}
       <SectionCard title="Risk Assessment" icon={<ShieldAlert className="w-3.5 h-3.5" />}>
         <p className="text-xs text-gray-400 mb-4">
-          Risk Factor = Severity × Probability. Select 1 (lowest) to 5 (highest) for each.
+          Risk Factor = Severity × Probability. Select 1 (lowest) to 5 (highest) for each, or 0 for both when not applicable (Positive Approach).
         </p>
         <div className={G3}>
           <Field label="Severity of Consequence" required hint="1 = First Aid only  →  5 = Fatality">
@@ -797,6 +813,19 @@ export default function ObservationForm() {
                     : 'No matrix entry for this combination — set the date manually'}
                 </p>
               </div>
+            </div>
+          ) : riskNA ? (
+            <div className="flex items-center gap-3 p-4 rounded-xl border border-teal-300 bg-teal-50 self-end">
+              <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
+              <div>
+                <p className="font-bold text-sm text-teal-800">Risk factor: Not applicable</p>
+                <p className="text-xs text-gray-600 mt-0.5 leading-tight">Severity 0 × Probability 0 — saved as a Positive Approach.</p>
+              </div>
+            </div>
+          ) : oneZero ? (
+            <div className="flex items-center gap-3 p-4 rounded-xl border border-amber-300 bg-amber-50 self-end">
+              <AlertTriangle className="w-5 h-5 text-amber-700 flex-shrink-0" />
+              <p className="text-xs text-amber-800 leading-tight">Set both Severity and Probability to 0 (not applicable), or neither.</p>
             </div>
           ) : (
             <div className="flex items-center justify-center p-4 rounded-xl border border-dashed border-gray-200 self-end">

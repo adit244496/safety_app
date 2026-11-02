@@ -11,7 +11,7 @@ import ai_service
 from difflib import get_close_matches
 from types import SimpleNamespace
 from sqlalchemy.orm import Session, object_session
-from sqlalchemy import func, extract, case, nullslast, and_, or_
+from sqlalchemy import func, extract, case, nullslast, and_, or_, cast, String
 from datetime import datetime, date, timedelta
 from database import get_db, SessionLocal
 import models
@@ -24,6 +24,9 @@ router = APIRouter(prefix="/api/observations", tags=["observations"])
 
 
 def calc_risk(severity: int, probability: int):
+    # Severity 0 × Probability 0 means the risk is not applicable — no factor, no level.
+    if severity == 0 or probability == 0:
+        return None, None
     factor = severity * probability
     level = "Low" if factor <= 4 else "Medium" if factor <= 12 else "High"
     return factor, level
@@ -120,9 +123,11 @@ def _status_filter_condition(status: List[str]):
     """Translate an effective-status filter (incl. derived Overdue / Overdue & Closed) into SQL."""
     today = date.today().isoformat()
     O = models.Observation
+    # Closure date as text, to compare with the text target date (Postgres rejects date vs text).
+    closed_on = cast(func.date(O.closed_at), String)
     past_target = and_(O.closed_at.is_(None), O.target_date_actual.isnot(None), O.target_date_actual < today)
     closed_late = and_(O.status == "Closed", O.target_date_actual.isnot(None),
-                       func.date(O.closed_at) > O.target_date_actual)
+                       closed_on > O.target_date_actual)
     conds = []
     for s in status:
         if s == "Overdue":
@@ -138,7 +143,7 @@ def _status_filter_condition(status: List[str]):
                                                  O.closed_at.isnot(None))))
         elif s == "Closed":
             conds.append(and_(O.status == "Closed",
-                              or_(O.target_date_actual.is_(None), func.date(O.closed_at) <= O.target_date_actual)))
+                              or_(O.target_date_actual.is_(None), closed_on <= O.target_date_actual)))
         else:
             conds.append(O.status == s)
     return or_(*conds)
@@ -272,6 +277,20 @@ def _latest_target(db: Session, severity, probability, obs_date, obs_time):
     except ValueError:
         return None
     return (start + timedelta(hours=cell.hours)).date().isoformat(), cell.hours
+
+
+def _risk_not_applicable(severity, probability) -> bool:
+    return severity == 0 and probability == 0
+
+
+def _apply_zero_risk_rule(severity, probability, status: Optional[str]) -> Optional[str]:
+    """Severity and Probability are 0 together or not at all. Both 0 = not applicable,
+    which is only a Positive Approach (drafts stay drafts). Returns the status to save."""
+    if (severity == 0) != (probability == 0) and severity is not None and probability is not None:
+        raise HTTPException(400, "Set both Severity and Probability to 0 (not applicable), or neither.")
+    if _risk_not_applicable(severity, probability) and status != "Draft":
+        return "Positive Approach"
+    return status
 
 
 def _check_target_limit(db: Session, severity, probability, obs_date, obs_time, target, status) -> None:
@@ -774,6 +793,7 @@ def list_observations(
     obs_list = q.order_by(
         nullslast(models.Observation.created_at.desc()),
         models.Observation.obs_date.desc(),
+        models.Observation.id.desc(),   # unique tiebreak — without it Postgres can repeat/skip rows across pages
     ).offset((page - 1) * limit).limit(limit).all()
 
     return {
@@ -1508,9 +1528,11 @@ def generate_ai_summary(obs_id: str, db: Session = Depends(get_db), user: models
 def create_observation(body: ObsCreate, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     if user.role == "Contractor":
         raise HTTPException(status_code=403, detail="Your role cannot create observations")
+    body.status = _apply_zero_risk_rule(body.severity, body.probability, body.status or "Open")
     _check_target_limit(db, body.severity, body.probability, body.obs_date, body.obs_time,
                         body.target_date_actual, body.status)
-    factor, level = calc_risk(body.severity or 1, body.probability or 1)
+    factor, level = calc_risk(1 if body.severity is None else body.severity,
+                              1 if body.probability is None else body.probability)
     obs_id = generate_obs_id(db, body.project_id)
 
     obs = models.Observation(
@@ -1696,13 +1718,17 @@ def update_observation(obs_id: int, body: ObsUpdate, db: Session = Depends(get_d
 
     was_draft = obs.status == 'Draft'
     prev_status = obs.status
-    factor, level = calc_risk(body.severity or obs.severity or 1, body.probability or obs.probability or 1)
 
     body_dict = body.model_dump(exclude_unset=True)
     # Enforce the target-date limit only when the date or its inputs change, so older
     # records with a longer target can still be edited for other fields.
     merged = {k: body_dict.get(k, getattr(obs, k))
               for k in ("severity", "probability", "obs_date", "obs_time", "target_date_actual", "status")}
+    status = _apply_zero_risk_rule(merged["severity"], merged["probability"], merged["status"])
+    if status != merged["status"]:
+        merged["status"] = body_dict["status"] = status
+    factor, level = calc_risk(1 if merged["severity"] is None else merged["severity"],
+                              1 if merged["probability"] is None else merged["probability"])
     if any(merged[k] != getattr(obs, k) for k in ("severity", "probability", "obs_date", "obs_time", "target_date_actual")):
         _check_target_limit(db, merged["severity"], merged["probability"], merged["obs_date"], merged["obs_time"],
                             merged["target_date_actual"], merged["status"])
@@ -1764,6 +1790,9 @@ def update_status(obs_id: int, body: StatusBody, db: Session = Depends(get_db), 
     reopening = prev_status == 'Closed' and body.status != 'Closed'
     if reopening and user.role == 'Contractor':
         raise HTTPException(403, "Only the SHE team can reopen a closed observation")
+    if _risk_not_applicable(obs.severity, obs.probability) and body.status not in ("Positive Approach", "Draft"):
+        raise HTTPException(400, "Severity 0 × Probability 0 (not applicable) is always a Positive Approach. "
+                                 "Edit the observation and change Severity and Probability first.")
     obs.status = body.status
     obs.updated_at = datetime.now()
     if prev_status != 'Closed' and body.status == 'Closed' and obs.closed_at is None:

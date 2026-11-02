@@ -30,7 +30,16 @@ function NotificationPanel({ onClose }: { onClose: () => void }) {
       qc.invalidateQueries({ queryKey: ['notifications'] })
     }
     onClose()
-    if (n.obs_ref) navigate(`/observations/${n.obs_ref}`)
+    if (!n.obs_ref) return
+    // Work-permit notifications carry the permit number (CHWP-…), not an observation id.
+    if (!n.observation_id && n.obs_ref.startsWith('CHWP-')) {
+      try {
+        const { data } = await api.get(`/work-permits/lookup/${encodeURIComponent(n.obs_ref)}`)
+        navigate(`/work-permits/${data.id}`)
+      } catch { navigate('/work-permits') }
+      return
+    }
+    navigate(`/observations/${n.obs_ref}`)
   }
 
   return (

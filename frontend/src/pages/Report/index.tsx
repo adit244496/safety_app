@@ -7,6 +7,7 @@ import { FileText, AlertTriangle, ZoomIn, ZoomOut, X, Download, LayoutList, BarC
 import ExcelJS from 'exceljs'
 import { generateHtmlReportPdf } from '../../lib/printPdf'
 import api from '../../lib/api'
+import { isRiskNA } from '../../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
 import { useFacets } from '../../lib/facets'
 import MisReport from './MisReport'
@@ -225,7 +226,7 @@ async function exportTrackerExcel(
       obs.observation_id || '', fmtD(obs.obs_date), detailedObs,
       obs.core_concern_name || '', obs.root_cause_category_name || '', obs.possible_outcome || '',
       sevText(obs.severity), sevText(obs.probability),
-      obs.risk_factor ?? '', obs.risk_level || '',
+      isRiskNA(obs) ? 'N/A' : (obs.risk_factor ?? ''), isRiskNA(obs) ? 'Not applicable' : (obs.risk_level || ''),
       obs.violation_name || obs.specific_concern_name || '',
       obs.to_be_rectified_by || obs.contractor_name || '',
       obs.eic_user_name || '',
@@ -445,8 +446,8 @@ async function exportInspectionExcel(
     styled(rn, 2, 2,  obs.core_concern_name || '—',                     'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 3, 3,  sevText(obs.severity),                            riskArgb,   riskFontA,  true, 8)
     styled(rn, 4, 4,  sevText(obs.probability),                         riskArgb,   riskFontA,  true, 8)
-    styled(rn, 5, 5,  String(obs.risk_factor ?? '—'),                   riskArgb,   riskFontA,  true, 8)
-    styled(rn, 6, 8,  `${obs.risk_level || '—'} | ${obs.possible_outcome || '—'}`, riskArgb, riskFontA, true, 8)
+    styled(rn, 5, 5,  isRiskNA(obs) ? 'N/A' : String(obs.risk_factor ?? '—'),                   riskArgb,   riskFontA,  true, 8)
+    styled(rn, 6, 8,  `${isRiskNA(obs) ? 'Not applicable' : (obs.risk_level || '—')} | ${obs.possible_outcome || '—'}`, riskArgb, riskFontA, true, 8)
     styled(rn, 9, 9,  obs.contractor_name || '—',                       'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 10, 10, obs.eic_user_name || '—', 'FFFFFF00', 'FF000000', true, 8)
     styled(rn, 11, 12, fmtD(obs.target_date_actual) || obs.target_date_name || '—', 'FFFFFF00', 'FF000000', true, 8)
@@ -945,8 +946,8 @@ function ObsBlock({ obs, idx }: { obs: any; idx: number }) {
         <td>{obs.core_concern_name || '—'}</td>
         <td>{sevText(obs.severity)}</td>
         <td>{sevText(obs.probability)}</td>
-        <td className={riskCls}>{obs.risk_factor ?? '—'}</td>
-        <td className={riskCls} colSpan={3}>{obs.risk_level || '—'} | {obs.possible_outcome || '—'}</td>
+        <td className={riskCls}>{isRiskNA(obs) ? 'N/A' : (obs.risk_factor ?? '—')}</td>
+        <td className={riskCls} colSpan={3}>{isRiskNA(obs) ? 'Not applicable' : (obs.risk_level || '—')} | {obs.possible_outcome || '—'}</td>
         <td>{obs.contractor_name || '—'}</td>
         <td>{obs.eic_user_name || '—'}</td>
         <td colSpan={2}>{fmtD(obs.target_date_actual) || obs.target_date_name || '—'}</td>
@@ -1244,8 +1245,8 @@ function SHETrackerTab({
                   <td>{obs.possible_outcome || '—'}</td>
                   <td className="trk-center">{sevText(obs.severity)}</td>
                   <td className="trk-center">{sevText(obs.probability)}</td>
-                  <td className={`trk-num ${riskCls}`}>{obs.risk_factor ?? '—'}</td>
-                  <td className={riskCls}>{obs.risk_level || '—'}</td>
+                  <td className={`trk-num ${riskCls}`}>{isRiskNA(obs) ? 'N/A' : (obs.risk_factor ?? '—')}</td>
+                  <td className={riskCls}>{isRiskNA(obs) ? 'Not applicable' : (obs.risk_level || '—')}</td>
                   <td>{obs.violation_name || obs.specific_concern_name || '—'}</td>
                   <td>{obs.to_be_rectified_by || obs.contractor_name || '—'}</td>
                   <td>{obs.eic_user_name || '—'}</td>

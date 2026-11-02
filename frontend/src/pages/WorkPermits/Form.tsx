@@ -62,10 +62,13 @@ export default function WorkPermitForm() {
   const existingFor = (cat: string) => existingImages.filter((im: any) => im.category === cat)
   const stageFiles = (cat: string, files: FileList | null) => {
     if (!files?.length) return
+    // Copy now: the input is cleared right after this call, which empties the live FileList
+    // before the state updater below runs.
+    const picked = Array.from(files)
     setPhotos(prev => {
       const have = (prev[cat]?.length || 0) + existingFor(cat).length
       const room = Math.max(0, imgLimit(cat) - have)
-      return { ...prev, [cat]: [...(prev[cat] || []), ...Array.from(files).slice(0, room)] }
+      return { ...prev, [cat]: [...(prev[cat] || []), ...picked.slice(0, room)] }
     })
   }
   const removeStaged = (cat: string, i: number) => setPhotos(prev => ({ ...prev, [cat]: (prev[cat] || []).filter((_, idx) => idx !== i) }))
@@ -79,7 +82,8 @@ export default function WorkPermitForm() {
       const fd = new FormData()
       fd.append('category', cat)
       files.forEach(f => fd.append('files', f))
-      try { await api.post(`/work-permits/${permitId}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }) } catch { /* non-fatal */ }
+      try { await api.post(`/work-permits/${permitId}/images`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }) }
+      catch (err: any) { toast.error(err.response?.data?.detail || 'Some photos could not be saved — open the permit and add them again') }
     }
   }
   const [error, setError] = useState('')

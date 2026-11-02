@@ -7,7 +7,7 @@ import json
 import threading
 import logging
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, cast, String
 from datetime import datetime, date, timedelta
 from database import get_db, SessionLocal
 import models
@@ -18,6 +18,9 @@ from email_service import send_observation_email
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/work-permits", tags=["work-permits"])
+
+# Public address of the app, used for the "View permit" link in emails.
+APP_URL = os.getenv("APP_URL", "https://neoshe.ambujaneotia.com").rstrip("/")
 
 CREATE_ROLES = {"Contractor", "SuperAdmin"}   # contractors submit permits; SuperAdmin may also create
 APPROVER_ROLES = {"PIC", "PSO", "EIC"}
@@ -240,7 +243,7 @@ def _permit_people(p: models.WorkPermit, db: Session):
 
 def _build_permit_email(p: models.WorkPermit, event: str, actor_name: str = "") -> tuple:
     titles = {
-        "submitted": ("Permit Awaiting Your Approval", "#2563eb"),
+        "submitted": ("New Permit Raised — Awaiting Approval", "#2563eb"),
         "approved": ("Permit Approved", "#16a34a"),
         "declined": ("Permit Declined", "#dc2626"),
         "cancelled": ("Permit Cancelled", "#dc2626"),
@@ -270,6 +273,11 @@ def _build_permit_email(p: models.WorkPermit, event: str, actor_name: str = "") 
             extra += row("Reason", p.extension_reason)
     if event in ("approved", "declined", "closed") and actor_name:
         extra += row("Action by", actor_name)
+    if event == "submitted":
+        creator = p.creator.name if p.creator else ""
+        extra += (row("Raised by", creator) if creator else "") + row(
+            "Approvers", ", ".join(f"{u.name} ({r})" for r, u in (("PIC", p.pic_user), ("PSO", p.pso_user), ("EIC", p.eic_user)) if u))
+    link = f"{APP_URL}/work-permits/{p.id}"
 
     html = f"""<!DOCTYPE html><html><body style="margin:0;background:#f3f4f6;font-family:Arial,sans-serif;">
 <div style="max-width:620px;margin:28px auto;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
@@ -286,6 +294,10 @@ def _build_permit_email(p: models.WorkPermit, event: str, actor_name: str = "") 
     {row("Status", p.status)}
     {extra}
   </table>
+  <div style="padding:18px 30px 22px;">
+    <a href="{link}" style="display:inline-block;background:{color};color:#fff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 20px;border-radius:8px;">View permit &amp; track status</a>
+    <p style="margin:10px 0 0;color:#6b7280;font-size:12px;">Or open this link: <a href="{link}" style="color:#4f46e5;">{link}</a></p>
+  </div>
   <div style="padding:14px 30px;background:#f9fafb;border-top:1px solid #e5e7eb;">
     <p style="margin:0;color:#9ca3af;font-size:12px;">Automated notification from the Safety App — Construction Hazardous Work Permit system.</p>
   </div>
@@ -314,7 +326,12 @@ def _fire_permit_email(permit_id: int, event: str, actor_name: str = ""):
         issued_to_users = db.query(models.User).filter(models.User.id.in_(receiver_ids)).all() if receiver_ids else []
         issued_to_emails = [u.email for u in issued_to_users if u and u.email]
 
-        if event in ("submitted", "closure_requested"):
+        if event == "submitted":
+            # A newly raised permit goes to every stakeholder — PIC, PSO, EIC and the
+            # Issued-To receivers — with the contractor in cc as their confirmation.
+            to = approver_emails + issued_to_emails
+            cc = creator_email
+        elif event == "closure_requested":
             # Notify only the Issued-To folks (fall back to all approvers if none set), cc the contractor
             to = issued_to_emails or approver_emails
             cc = creator_email
@@ -413,8 +430,10 @@ def _inapp(db: Session, user_ids: list, permit: models.WorkPermit, message: str)
 
 # ── Lookups ──────────────────────────────────────────────────────────────────
 def _issue_date_expr():
-    """A permit's issue date: its issued date, else the date it was approved."""
-    return func.coalesce(func.nullif(models.WorkPermit.issued_date, ""), func.date(models.WorkPermit.approved_at))
+    """A permit's issue date: its issued date, else the date it was approved.
+    The cast keeps both sides text — Postgres rejects COALESCE(text, date)."""
+    return func.coalesce(func.nullif(models.WorkPermit.issued_date, ""),
+                         cast(func.date(models.WorkPermit.approved_at), String))
 
 
 @router.get("/stats")
@@ -750,6 +769,17 @@ def delete_permit_image(image_id: int, db: Session = Depends(get_db), user: mode
     return {"success": True}
 
 
+@router.get("/lookup/{permit_no}")
+def lookup_permit(permit_no: str, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
+    """Permit id for a permit number — notifications carry only the number."""
+    p = db.query(models.WorkPermit).filter(models.WorkPermit.permit_no == permit_no).first()
+    if not p:
+        raise HTTPException(404, "Permit not found")
+    if not _can_view_permit(p, user, db):
+        raise HTTPException(403, "Access denied to this permit")
+    return {"id": p.id}
+
+
 @router.get("/{permit_id}")
 def get_permit(permit_id: int, db: Session = Depends(get_db), user: models.User = Depends(get_current_user)):
     p = db.query(models.WorkPermit).filter(models.WorkPermit.id == permit_id).first()
@@ -855,6 +885,7 @@ def create_permit(body: PermitBody, db: Session = Depends(get_db), user: models.
 
     if p.status == "Pending Approval":
         _inapp(db, [p.pic_user_id, p.pso_user_id, p.eic_user_id], p, f"Work permit {p.permit_no} awaiting your approval.")
+        _inapp(db, [p.created_by], p, f"Work permit {p.permit_no} submitted — awaiting approval. Track its status in Work Permits.")
         db.commit()
         _notify(p.id, "submitted")
     return permit_to_dict(p)
@@ -883,6 +914,7 @@ def update_permit(permit_id: int, body: PermitBody, db: Session = Depends(get_db
 
     if body.submit:
         _inapp(db, [p.pic_user_id, p.pso_user_id, p.eic_user_id], p, f"Work permit {p.permit_no} awaiting your approval.")
+        _inapp(db, [p.created_by], p, f"Work permit {p.permit_no} submitted — awaiting approval. Track its status in Work Permits.")
         db.commit()
         _notify(p.id, "submitted")
     return permit_to_dict(p)

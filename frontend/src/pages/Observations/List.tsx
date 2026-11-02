@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { Plus, ChevronRight, ChevronDown, SlidersHorizontal, X, MessageSquare, PencilLine, Trash2 } from 'lucide-react'
 import api from '../../lib/api'
-import { fmtDate, getStatusClass, getRiskClass, STATUSES } from '../../lib/utils'
+import { fmtDate, getStatusClass, getRiskClass, isRiskNA, STATUSES } from '../../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
 import { useFacets } from '../../lib/facets'
 import { useAuth } from '../../store/authStore'
@@ -587,7 +587,9 @@ export default function ObservationsList() {
                     <td className="td">
                       {o.risk_level
                         ? <span className={getRiskClass(o.risk_level)}>{o.risk_level} · {o.risk_factor}</span>
-                        : <span className="text-gray-300 text-xs">—</span>}
+                        : isRiskNA(o)
+                          ? <span className="text-xs text-teal-700">N/A</span>
+                          : <span className="text-gray-300 text-xs">—</span>}
                     </td>
                     <td className="td">
                       <span className={getStatusClass(o.status)}>{o.status}</span>

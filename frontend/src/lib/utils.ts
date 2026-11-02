@@ -56,6 +56,10 @@ export const fmtDateTime = (s?: string | null) => {
   return parseIST(s).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: IST })
 }
 
+// Severity 0 × Probability 0 = risk not applicable (always a Positive Approach).
+export const isRiskNA = (o: { severity?: number | null; probability?: number | null } | null | undefined) =>
+  o?.severity === 0 && o?.probability === 0
+
 export const calcRisk = (s: number, p: number) => {
   const f = s * p
   return { factor: f, level: f <= 4 ? 'Low' : f <= 12 ? 'Medium' : 'High' }

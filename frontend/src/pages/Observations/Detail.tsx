@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '../../lib/api'
-import { fmtDate, fmtDateTime, getStatusClass } from '../../lib/utils'
+import { fmtDate, fmtDateTime, getStatusClass, isRiskNA } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
 
 // ── Role colour tokens ────────────────────────────────────────────────────
@@ -701,6 +701,7 @@ export default function ObservationDetail() {
               {obs.risk_level && (
                 <span className={`badge border ${riskBg}`}>{obs.risk_level} · {obs.risk_factor}</span>
               )}
+              {isRiskNA(obs) && <span className="badge border bg-teal-50 text-teal-700 border-teal-200">Risk: Not applicable</span>}
             </div>
             <p className="text-xs text-gray-500 mt-1">
               {obs.created_by_name} &nbsp;·&nbsp; {fmtDateTime(obs.created_at)}
@@ -761,6 +762,12 @@ export default function ObservationDetail() {
 
           {/* Risk assessment */}
           {obs.risk_level && <RiskCard obs={obs} />}
+          {isRiskNA(obs) && (
+            <div className="rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-800">
+              <span className="font-semibold">Risk factor: Not applicable</span>
+              <span className="text-teal-700"> — Severity 0 × Probability 0 (Positive Approach)</span>
+            </div>
+          )}
 
           {/* Site & key information */}
           <Section title="Site Information" icon={<MapPin className="w-3.5 h-3.5" />} defaultOpen>
@@ -907,7 +914,7 @@ export default function ObservationDetail() {
                     obs.contractor_name,
                     obs.project_name,
                     obs.core_concern_name,
-                    obs.risk_level && obs.risk_factor != null ? `${obs.risk_level} · ${obs.risk_factor}` : obs.risk_level,
+                    isRiskNA(obs) ? 'Risk not applicable' : obs.risk_level && obs.risk_factor != null ? `${obs.risk_level} · ${obs.risk_factor}` : obs.risk_level,
                     obs.obs_date ? `raised on ${obs.obs_date}` : null,
                   ].filter(Boolean).join(' — ')}
                 </p>

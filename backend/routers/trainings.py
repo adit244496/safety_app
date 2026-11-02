@@ -363,7 +363,8 @@ def list_trainings(
 
     total = q.count()
     rows = (
-        q.order_by(nullslast(models.Training.training_date.desc()), models.Training.created_at.desc())
+        q.order_by(nullslast(models.Training.training_date.desc()), models.Training.created_at.desc(),
+                   models.Training.id.desc())   # unique tiebreak keeps pages stable
         .offset((page - 1) * limit)
         .limit(limit)
         .all()
