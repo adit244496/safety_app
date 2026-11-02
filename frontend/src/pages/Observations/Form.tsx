@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-quer
 import { Save, ArrowLeft, X, Camera, AlertTriangle, CheckCircle2, MapPin, ClipboardList, ShieldAlert, GitBranch, ImagePlus, FileEdit } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '../../lib/api'
-import { calcRisk, STATUSES, fmtDate } from '../../lib/utils'
+import { calcRisk, STATUSES, fmtDate, statusLabel } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
 import { MultiSelectFilter } from '../../components/MultiSelectFilter'
 
@@ -506,7 +506,7 @@ export default function ObservationForm() {
         <div className="flex items-center gap-2">
           {isEdit && (
             <select className="select flex-1 sm:flex-none sm:w-auto text-sm py-1.5" value={form.status} onChange={e => setStatus(e.target.value)}>
-              {STATUSES.map(s => <option key={s}>{s}</option>)}
+              {STATUSES.map(s => <option key={s} value={s}>{statusLabel(s)}</option>)}
             </select>
           )}
           <button type="button" onClick={() => navigate(-1)} className="btn-secondary btn-sm flex-1 sm:flex-none justify-center">

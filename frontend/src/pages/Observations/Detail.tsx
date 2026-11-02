@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import api from '../../lib/api'
-import { fmtDate, fmtDateTime, getStatusClass, isRiskNA } from '../../lib/utils'
+import { fmtDate, fmtDateTime, getStatusClass, isRiskNA, statusLabel } from '../../lib/utils'
 import { useAuth } from '../../store/authStore'
 
 // ── Role colour tokens ────────────────────────────────────────────────────
@@ -697,7 +697,7 @@ export default function ObservationDetail() {
               <span className="font-mono text-sm font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg tracking-wide">
                 {obs.observation_id}
               </span>
-              <span className={getStatusClass(obs.status)}>{obs.status}</span>
+              <span className={getStatusClass(obs.status)}>{statusLabel(obs.status)}</span>
               {obs.risk_level && (
                 <span className={`badge border ${riskBg}`}>{obs.risk_level} · {obs.risk_factor}</span>
               )}
@@ -937,7 +937,7 @@ export default function ObservationDetail() {
           {/* Status sub-bar + change status */}
           <div className="border-b border-gray-100 flex-shrink-0">
             <div className="px-4 py-2 bg-slate-50 flex items-center gap-2.5">
-              <span className={getStatusClass(obs.status)}>{obs.status}</span>
+              <span className={getStatusClass(obs.status)}>{statusLabel(obs.status)}</span>
               {obs.updated_at && (
                 <span className="text-[11px] text-gray-400">
                   Updated {relTime(obs.updated_at)}
@@ -961,7 +961,7 @@ export default function ObservationDetail() {
                     onChange={e => setNewStatus(e.target.value)}
                   >
                     {['Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Positive Approach', 'Unresolved & Closed'].map(s => (
-                      <option key={s} value={s}>{s}</option>
+                      <option key={s} value={s}>{statusLabel(s)}</option>
                     ))}
                   </select>
                   <button

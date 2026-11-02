@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { Plus, ChevronRight, ChevronDown, SlidersHorizontal, X, MessageSquare, PencilLine, Trash2 } from 'lucide-react'
 import api from '../../lib/api'
-import { fmtDate, getStatusClass, getRiskClass, isRiskNA, STATUSES } from '../../lib/utils'
+import { fmtDate, getStatusClass, getRiskClass, isRiskNA, statusLabel, STATUSES } from '../../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
 import { useFacets } from '../../lib/facets'
 import { useAuth } from '../../store/authStore'
@@ -175,7 +175,7 @@ export default function ObservationsList() {
     queryFn: () => api.get('/observations/status-options').then(r => r.data),
     staleTime: 60_000,
   })
-  const statusOptions: MSOption[] = ((statusOptionsData as string[]) || STATUSES).map(s => ({ value: s, label: s }))
+  const statusOptions: MSOption[] = ((statusOptionsData as string[]) || STATUSES).map(s => ({ value: s, label: statusLabel(s) }))
   const { data: contractors = [] as any[] } = useQuery({
     queryKey: ['contractors'],
     queryFn: () => api.get('/users/contractors').then(r => r.data),
@@ -490,7 +490,7 @@ export default function ObservationsList() {
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     {o.risk_level && <span className={getRiskClass(o.risk_level)}>{o.risk_level}</span>}
-                    <span className={getStatusClass(o.status)}>{o.status}</span>
+                    <span className={getStatusClass(o.status)}>{statusLabel(o.status)}</span>
                   </div>
                 </div>
                 <p className="text-sm font-medium text-gray-800 leading-snug">{o.core_concern_name || '—'}</p>
@@ -597,7 +597,7 @@ export default function ObservationsList() {
                           : <span className="text-gray-300 text-xs">—</span>}
                     </td>
                     <td className="td">
-                      <span className={getStatusClass(o.status)}>{o.status}</span>
+                      <span className={getStatusClass(o.status)}>{statusLabel(o.status)}</span>
                     </td>
                     <td className="td whitespace-nowrap">
                       <span className={ageingClass(calcAgeingDays(o))}>{fmtAgeing(calcAgeingDays(o))}</span>

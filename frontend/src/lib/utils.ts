@@ -65,5 +65,8 @@ export const calcRisk = (s: number, p: number) => {
   return { factor: f, level: f <= 4 ? 'Low' : f <= 12 ? 'Medium' : 'High' }
 }
 
+// Display name for a status; the stored value is unchanged.
+export const statusLabel = (s?: string | null) => (s === 'Overdue' ? 'Open & Overdue' : s || '')
+
 export const STATUSES = ['Draft', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Overdue & Closed', 'Positive Approach', 'Unresolved & Closed']
 export const ROLES = ['SuperAdmin', 'Admin', 'PIC', 'EIC', 'HO', 'PSO', 'Contractor', 'Observer']
