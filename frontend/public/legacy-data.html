@@ -1604,7 +1604,10 @@ function toISODate(v){
   if (v===null || v===undefined) return null;
   if (v instanceof Date){
     if (isNaN(v.getTime())) return null;
-    return v.getFullYear()+'-'+pad2(v.getMonth()+1)+'-'+pad2(v.getDate());
+    // The Excel reader can land a few minutes before local midnight (historic time-zone
+    // offsets), which would read as the previous day — round to the nearest day first.
+    const d = new Date(v.getTime() + 12*3600*1000);
+    return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
   }
   if (typeof v === 'number'){
     if (window.XLSX && XLSX.SSF && XLSX.SSF.parse_date_code){
@@ -1655,40 +1658,96 @@ function findTrackerSheet(wb){
   return name || null;
 }
 
-function parseTrackerSheet(ws, fallbackName){
-  const g1 = excelCell(ws, 0, 6);
-  const project = cleanStr(g1) || fallbackName;
+// Tracker column headings → field. Older files put the project name in G1 and the
+// headings in row 2; newer (merged) files put the headings in row 1 and may carry a
+// Project column. Columns are matched by heading so their order can change.
+const TRACKER_HEADINGS = {
+  'project':'project', 'project name':'project', 'status':'status', '#':'sno', 's.no':'sno', 's. no.':'sno', 'sno':'sno', 'sl no':'sno',
+  'f.y':'fy', 'fy':'fy', 'f.y.':'fy', 'financial year':'fy', 'quarter':'quarter', 'month':'month',
+  'report no.':'report_no', 'report no':'report_no', 'report date':'report_date',
+  'detailed observations':'observation', 'detailed observation':'observation', 'observation':'observation', 'observations':'observation',
+  'violation category':'violation_category', 'violation catergory':'violation_category', 'root cause':'root_cause', 'hazard type':'hazard_type',
+  'severity':'severity', 'probability':'probability', 'risk rating':'risk_rating', 'risk grade':'risk_grade',
+  'potential consequence':'potential_consequence', 'concerned contrctor':'contractor', 'concerned contractor':'contractor', 'contractor':'contractor',
+  'concerned eic':'eic', 'eic':'eic', 'target date':'target_date', 'corrective action plan':'corrective_action', 'corrective action':'corrective_action',
+  'closure date':'closure_date', 'delay':'delay', 'remarks':'remarks'
+};
+// Positions in the original layout, used when no heading row is recognised.
+const TRACKER_DEFAULT_COLS = { status:0, sno:1, fy:2, quarter:3, month:4, report_no:5, report_date:6, observation:7,
+  violation_category:8, root_cause:9, hazard_type:10, severity:11, probability:12, risk_rating:13, risk_grade:14,
+  potential_consequence:15, contractor:16, eic:17, target_date:18, corrective_action:19, closure_date:20, delay:21, remarks:22 };
+
+function findTrackerHeading(ws, range){
+  for (let r=0; r<=Math.min(range.e.r, 5); r++){
+    const cols = {};
+    for (let c=0; c<=range.e.c; c++){
+      const v = excelCell(ws, r, c);
+      const key = v===undefined || v===null ? '' : TRACKER_HEADINGS[String(v).trim().toLowerCase().replace(/\s+/g,' ')];
+      if (key && cols[key]===undefined) cols[key] = c;
+    }
+    if (cols.status!==undefined && cols.sno!==undefined && cols.report_no!==undefined) return { row:r, cols:cols };
+  }
+  return null;
+}
+
+// Report numbers start with a project code (e.g. "UDMKT/17-18/Q1/01"): learn code → project from data already loaded.
+function reportPrefix(v){ return v ? String(v).split('/')[0].trim().toUpperCase() : ''; }
+function projectsByPrefix(rows){
+  const tally = {};
+  rows.forEach(function(r){
+    const p = reportPrefix(r[IDX.report_no]); const name = r[IDX.project];
+    if (!p || !name) return;
+    const t = tally[p] = tally[p] || {};
+    t[name] = (t[name] || 0) + 1;
+  });
+  const out = {};
+  Object.keys(tally).forEach(function(p){
+    out[p] = Object.keys(tally[p]).sort(function(a,b){ return tally[p][b]-tally[p][a]; })[0];
+  });
+  return out;
+}
+
+function parseTrackerSheet(ws, fallbackName, prefixMap){
   const ref = ws['!ref'];
-  if (!ref) return { project:project, rows:[] };
+  if (!ref) return { project:fallbackName, rows:[] };
   const range = XLSX.utils.decode_range(ref);
+  const heading = findTrackerHeading(ws, range);
+  const C = heading ? heading.cols : TRACKER_DEFAULT_COLS;
+  const firstRow = heading ? heading.row + 1 : 2;
+  // Old layout: the project name sits in G1, above a heading row in row 2.
+  const g1 = heading && heading.row===0 ? null : cleanStr(excelCell(ws, 0, 6));
+  const sheetProject = (typeof g1 === 'string' && g1) ? g1 : null;
+  const get = function(r, key){ return C[key]===undefined ? undefined : excelCell(ws, r, C[key]); };
   const rows = [];
-  for (let r=2; r<=range.e.r; r++){
-    const sno = excelCell(ws, r, 1);
+  for (let r=firstRow; r<=range.e.r; r++){
+    const sno = get(r, 'sno');
     if (sno===undefined || sno===null || sno==='') continue;
-    const status = cleanStr(excelCell(ws,r,0));
-    const fy = cleanStr(excelCell(ws,r,2));
-    const quarter = cleanStr(excelCell(ws,r,3));
-    const month = cleanStr(excelCell(ws,r,4));
-    const report_no = cleanStr(excelCell(ws,r,5));
-    const report_date = toISODate(excelCell(ws,r,6));
-    const observation = cleanStr(excelCell(ws,r,7));
-    const violation_category = cleanStr(excelCell(ws,r,8));
-    const root_cause = cleanStr(excelCell(ws,r,9));
-    const hazard_type = cleanStr(excelCell(ws,r,10));
-    const severity = cleanStr(excelCell(ws,r,11));
-    const probability = cleanStr(excelCell(ws,r,12));
-    let risk_rating = excelCell(ws,r,13);
+    const status = cleanStr(get(r,'status'));
+    const fy = cleanStr(get(r,'fy'));
+    const quarter = cleanStr(get(r,'quarter'));
+    const month = cleanStr(get(r,'month'));
+    const report_no = cleanStr(get(r,'report_no'));
+    const project = cleanStr(get(r,'project')) || sheetProject ||
+      prefixMap[reportPrefix(report_no)] || reportPrefix(report_no) || fallbackName;
+    const report_date = toISODate(get(r,'report_date'));
+    const observation = cleanStr(get(r,'observation'));
+    const violation_category = cleanStr(get(r,'violation_category'));
+    const root_cause = cleanStr(get(r,'root_cause'));
+    const hazard_type = cleanStr(get(r,'hazard_type'));
+    const severity = cleanStr(get(r,'severity'));
+    const probability = cleanStr(get(r,'probability'));
+    let risk_rating = get(r,'risk_rating');
     risk_rating = (risk_rating===undefined || risk_rating===null || risk_rating==='') ? null : Number(risk_rating);
     if (risk_rating!==null && isNaN(risk_rating)) risk_rating = null;
-    const risk_grade = cleanStr(excelCell(ws,r,14));
-    const potential_consequence = cleanStr(excelCell(ws,r,15));
-    const contractor = cleanStr(excelCell(ws,r,16));
-    const eic = cleanStr(excelCell(ws,r,17));
-    const target_date = cleanStr(excelCell(ws,r,18));
-    const corrective_action = cleanStr(excelCell(ws,r,19));
-    const closure_date = toISODate(excelCell(ws,r,20));
-    const delayInfo = normDelay(excelCell(ws,r,21));
-    const remarks = cleanStr(excelCell(ws,r,22));
+    const risk_grade = cleanStr(get(r,'risk_grade'));
+    const potential_consequence = cleanStr(get(r,'potential_consequence'));
+    const contractor = cleanStr(get(r,'contractor'));
+    const eic = cleanStr(get(r,'eic'));
+    const target_date = cleanStr(get(r,'target_date'));
+    const corrective_action = cleanStr(get(r,'corrective_action'));
+    const closure_date = toISODate(get(r,'closure_date'));
+    const delayInfo = normDelay(get(r,'delay'));
+    const remarks = cleanStr(get(r,'remarks'));
     const snoVal = (typeof sno === 'number') ? sno : cleanStr(sno);
     // Order MUST match HEADER exactly:
     // project,status,sno,fy,quarter,month,report_no,report_date,observation,violation_category,
@@ -1699,7 +1758,7 @@ function parseTrackerSheet(ws, fallbackName){
       potential_consequence, contractor, eic, target_date, corrective_action, closure_date,
       delayInfo.days, delayInfo.label, remarks]);
   }
-  return { project:project, rows:rows };
+  return { project:sheetProject || fallbackName, rows:rows };
 }
 
 function handleFiles(fileList){
@@ -1717,9 +1776,19 @@ function handleFiles(fileList){
     return;
   }
   let pending = files.length;
-  let totalAdded = 0;
   let filesOk = 0;
   const problems = [];
+  const prefixMap = projectsByPrefix(ROWS);
+  let incoming = [];
+  // A tracker holds a project's full history, so uploaded projects replace their earlier rows
+  // (re-uploading or uploading a merged file must not double-count them).
+  const done = function(){
+    const projects = {};
+    incoming.forEach(function(row){ projects[row[IDX.project]] = true; });
+    const before = ROWS.length;
+    ROWS = ROWS.filter(function(row){ return !projects[row[IDX.project]]; }).concat(incoming);
+    finishUpload(incoming.length, filesOk, files.length, problems, before - (ROWS.length - incoming.length), Object.keys(projects).length);
+  };
 
   files.forEach(function(file){
     const reader = new FileReader();
@@ -1733,12 +1802,11 @@ function handleFiles(fileList){
         } else {
           const ws = wb.Sheets[sheetName];
           const fallback = file.name.replace(/\.xlsx?$/i,'');
-          const result = parseTrackerSheet(ws, fallback);
+          const result = parseTrackerSheet(ws, fallback, prefixMap);
           if (result.rows.length===0){
             problems.push(file.name + ': "Tracker" sheet found but no data rows detected');
           } else {
-            ROWS = ROWS.concat(result.rows);
-            totalAdded += result.rows.length;
+            incoming = incoming.concat(result.rows);
             filesOk++;
           }
         }
@@ -1746,22 +1814,24 @@ function handleFiles(fileList){
         problems.push(file.name + ': ' + (err && err.message ? err.message : 'failed to parse'));
       }
       pending--;
-      if (pending===0) finishUpload(totalAdded, filesOk, files.length, problems);
+      if (pending===0) done();
     };
     reader.onerror = function(){
       problems.push(file.name + ': could not read file');
       pending--;
-      if (pending===0) finishUpload(totalAdded, filesOk, files.length, problems);
+      if (pending===0) done();
     };
     reader.readAsArrayBuffer(file);
   });
 }
 
-function finishUpload(totalAdded, filesOk, filesTotal, problems){
+function finishUpload(totalAdded, filesOk, filesTotal, problems, replaced, projectCount){
   let msg = '';
   if (filesOk>0){
-    msg = 'Added ' + totalAdded.toLocaleString() + ' observation' + (totalAdded!==1?'s':'') +
-      ' from ' + filesOk + ' file' + (filesOk!==1?'s':'') + '.';
+    msg = 'Loaded ' + totalAdded.toLocaleString() + ' observation' + (totalAdded!==1?'s':'') +
+      ' for ' + projectCount + ' project' + (projectCount!==1?'s':'') +
+      ' from ' + filesOk + ' file' + (filesOk!==1?'s':'') + '.' +
+      (replaced ? ' Replaced ' + replaced.toLocaleString() + ' older row' + (replaced!==1?'s':'') + ' of those projects.' : '');
   }
   if (problems.length){
     msg += (msg ? ' ' : '') + problems.length + ' file' + (problems.length!==1?'s':'') + ' skipped \u2014 ' + problems.join('; ');

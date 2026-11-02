@@ -369,7 +369,7 @@ async function exportInspectionExcel(
   styled(rn, 3, 5, dateRange,        'FFF5F5F5', 'FF000000', false, 8, aLeft)
   styled(rn, 6, 7, 'Contractor:',   'FFF5F5F5', 'FF222222', true, 8, aLeft)
   styled(rn, 8, 9, contractorLabel, 'FFF5F5F5', 'FF000000', false, 8, aLeft)
-  styled(rn, 10, 10, 'Priority:',   'FFF5F5F5', 'FF222222', true, 8, aLeft)
+  styled(rn, 10, 10, 'Risk:',   'FFF5F5F5', 'FF222222', true, 8, aLeft)
   styled(rn, 11, 11, priorityLabel, 'FFF5F5F5', 'FF000000', false, 8, aCenter)
   styled(rn, 12, 14,
     'Compliance date auto-filled from contractor action.\nCompliance photos show contractor-uploaded evidence.',
@@ -1201,7 +1201,7 @@ function SHETrackerTab({
             {/* Filter row */}
             <tr>
               <td colSpan={7} style={{ background: '#e9ecef', fontSize: '7pt', padding: '3px 6px', borderTop: '2px solid #1f3864' }}>
-                Contractor: {contractorLabel} &nbsp;|&nbsp; Priority: {priorityLabel}
+                Contractor: {contractorLabel} &nbsp;|&nbsp; Risk: {priorityLabel}
               </td>
               <td colSpan={17} style={{ background: '#e9ecef', fontSize: '7pt', padding: '3px 6px', borderTop: '2px solid #1f3864' }} />
             </tr>
@@ -1504,7 +1504,7 @@ export default function ReportPage() {
               <span className="text-gray-300">·</span>
               <span><span className="text-gray-400">Period:</span> <span className="font-medium text-gray-700">{dateRange}</span></span>
               {!isContractor && selectedContractors.length > 0 && <><span className="text-gray-300">·</span><span><span className="text-gray-400">Contractor:</span> <span className="font-medium text-gray-700">{contractorLabel}</span></span></>}
-              {riskLevels.length > 0 && <><span className="text-gray-300">·</span><span><span className="text-gray-400">Priority:</span> <span className="font-medium text-gray-700">{priorityLabel}</span></span></>}
+              {riskLevels.length > 0 && <><span className="text-gray-300">·</span><span><span className="text-gray-400">Risk:</span> <span className="font-medium text-gray-700">{priorityLabel}</span></span></>}
               {!isFetching && <span className="text-gray-400">· {observations.length} found</span>}
               <button onClick={() => setFiltersOpen(true)}
                 className="ml-auto flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
@@ -1561,13 +1561,13 @@ export default function ReportPage() {
                 placeholder="All EICs" className="w-full" />
             </div>
             <div>
-              <label className="label">Issue Priority</label>
+              <label className="label">Risk</label>
               <MultiSelectFilter
                 options={facet.narrow('risk_level', priorityOptions)}
                 value={riskLevels}
                 prune={facet.ready}
                 onChange={v => { setRiskLevels(v as string[]); setGenerated(false) }}
-                placeholder="All Priorities"
+                placeholder="All Risk Levels"
                 className="w-full"
               />
             </div>
@@ -1717,7 +1717,7 @@ export default function ReportPage() {
                 <td colSpan={3} className="v">{dateRange}</td>
                 <td colSpan={2} className="k">Contractor:</td>
                 <td colSpan={2} className="v">{contractorLabel}</td>
-                <td className="k">Priority:</td>
+                <td className="k">Risk:</td>
                 <td className="v">{priorityLabel}</td>
               </tr>
 

@@ -1,5 +1,5 @@
 // Bump when public/legacy-data.html changes so browsers don't keep a stale cached copy.
-const LEGACY_PAGE_VERSION = '2026-10-26'
+const LEGACY_PAGE_VERSION = '2026-11-02'
 
 export default function LegacyData() {
   return (

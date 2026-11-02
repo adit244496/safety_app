@@ -213,10 +213,11 @@ export default function ObservationsList() {
     const seen = new Set<string>()
     return contractors
       .filter((c: any) => {
+        // Project check first: a company can have several logins, and only some may be on the project.
+        if (projectIds.length > 0 && !(c.projects || []).some((p: any) => projectIds.includes(p.id))) return false
         if (seen.has(c.name)) return false
         seen.add(c.name)
-        if (projectIds.length === 0) return true
-        return (c.projects || []).some((p: any) => projectIds.includes(p.id))
+        return true
       })
       .map((c: any) => ({ value: c.name, label: c.name }))
   }, [contractors, projectIds])
@@ -495,7 +496,7 @@ export default function ObservationsList() {
                 <p className="text-sm font-medium text-gray-800 leading-snug">{o.core_concern_name || '—'}</p>
                 <div className="flex items-center justify-between mt-1.5">
                   <div className="text-xs text-gray-400 space-y-0.5">
-                    <p>{o.project_name || '—'} · {fmtDate(o.obs_date || o.created_at)}</p>
+                    <p>{o.project_name || '—'}{o.contractor_name ? ` · ${o.contractor_name}` : ''} · {fmtDate(o.obs_date || o.created_at)}</p>
                     {o.target_date_actual && <p>Target: {fmtDate(o.target_date_actual)}</p>}
                     <p className="text-gray-400">{o.observer_name || o.created_by_name || '—'}</p>
                   </div>
@@ -544,6 +545,7 @@ export default function ObservationsList() {
                 <tr className="border-b border-gray-100">
                   <th className="th">Obs. ID</th>
                   <th className="th">Project</th>
+                  <th className="th">Contractor</th>
                   <th className="th">Core Concern</th>
                   <th className="th">Observer</th>
                   <th className="th">Obs Date</th>
@@ -575,6 +577,9 @@ export default function ObservationsList() {
                     </td>
                     <td className="td">
                       <span className="text-gray-700 text-xs font-medium">{o.project_name || '—'}</span>
+                    </td>
+                    <td className="td max-w-[160px]">
+                      <span className="block text-gray-600 text-xs" title={o.contractor_name || ''}>{o.contractor_name || '—'}</span>
                     </td>
                     <td className="td max-w-[180px]">
                       <span className="truncate block text-gray-700" title={o.core_concern_name}>

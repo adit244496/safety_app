@@ -447,10 +447,11 @@ function ComplianceAnalysis() {
     const seen = new Set<string>()
     return contractors
       .filter((c: any) => {
+        // Project check first: a company can have several logins, and only some may be on the project.
+        if (projectIds.length > 0 && !(c.projects || []).some((p: any) => projectIds.includes(p.id))) return false
         if (seen.has(c.name)) return false
         seen.add(c.name)
-        if (projectIds.length === 0) return true
-        return (c.projects || []).some((p: any) => projectIds.includes(p.id))
+        return true
       })
       .map((c: any) => ({ value: c.name, label: c.name }))
   }, [contractors, projectIds])

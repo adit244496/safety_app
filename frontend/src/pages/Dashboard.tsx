@@ -26,8 +26,8 @@ const STATUS_COLORS: Record<string, string> = {
 }
 const RISK_COLORS: Record<string, string> = { Low: '#10b981', Medium: '#f59e0b', High: '#f43f5e' }
 
-// "Positive Approach" is displayed as "Praiseworthy Observation" on the dashboard; the backend value is unchanged.
-const STATUS_DISPLAY: Record<string, string> = { 'Positive Approach': 'Praiseworthy Observation' }
+// Dashboard display names for statuses; the backend values are unchanged.
+const STATUS_DISPLAY: Record<string, string> = { 'Positive Approach': 'Praiseworthy Observation', 'Overdue': 'Open & Overdue' }
 const displayStatus = (s: string) => STATUS_DISPLAY[s] || s
 
 const PRIORITY_OPTIONS: MSOption[] = [
@@ -139,10 +139,11 @@ export default function Dashboard() {
     const seen = new Set<string>()
     return contractors
       .filter((c: any) => {
+        // Project check first: a company can have several logins, and only some may be on the project.
+        if (projectIds.length > 0 && !(c.projects || []).some((p: any) => projectIds.includes(p.id))) return false
         if (seen.has(c.name)) return false
         seen.add(c.name)
-        if (projectIds.length === 0) return true
-        return (c.projects || []).some((p: any) => projectIds.includes(p.id))
+        return true
       })
       .map((c: any) => ({ value: c.name, label: c.name }))
   }, [contractors, projectIds])
@@ -393,7 +394,7 @@ export default function Dashboard() {
 
     // Sheet 2 – Trend
     const ws2 = wb.addWorksheet(viewMode === 'quarterly' ? 'Quarterly Trend' : 'Monthly Trend')
-    const trendCols = ['Period', 'Open', 'Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Praiseworthy Observation', 'Unresolved & Closed', 'Total']
+    const trendCols = ['Period', 'Open', 'Open & Overdue', 'Under Review', 'Partially Closed', 'Closed', 'Praiseworthy Observation', 'Unresolved & Closed', 'Total']
     ws2.columns = trendCols.map((h, i) => ({ header: h, width: i === 0 ? 16 : 14 }))
     addHeaderRow(ws2, trendCols, 'FF4F46E5')
     trendData.forEach((d: any, i) => {
@@ -408,7 +409,7 @@ export default function Dashboard() {
     ws3.columns = [{ width: 20 }, { width: 12 }]
     addHeaderRow(ws3, ['Status', 'Count'], 'FF4F46E5')
     statusPie.forEach((s: any, i: number) => {
-      const row = ws3.addRow([s.name, s.value])
+      const row = ws3.addRow([displayStatus(s.name), s.value])
       row.getCell(1).fill = hFill(i % 2 === 0 ? 'FFF5F5FF' : 'FFFFFFFF')
       row.getCell(2).alignment = { horizontal: 'center' }
     })
