@@ -40,6 +40,14 @@ function DualScrollX({ id, children }: { id: string; children: React.ReactNode }
   )
 }
 
+// Contractor company for the tracker. "To be rectified by" often holds the contact's
+// email or mobile, so it is used only when no contractor is linked and it isn't one of those.
+function contractorOf(obs: any): string {
+  if (obs.contractor_name) return obs.contractor_name
+  const v = String(obs.to_be_rectified_by || '').trim()
+  return v && !v.includes('@') && !/^[+\d\s-]{7,}$/.test(v) ? v : ''
+}
+
 function sevText(n?: number | null) {
   if (!n) return '—'
   if (n <= 2) return 'Low'
@@ -188,7 +196,7 @@ async function exportTrackerExcel(
     '#', 'Project', 'Status', 'F', 'Quarter', 'Mo.', 'Report No.', 'Report Date',
     'Detailed Observations', 'Violation Category', 'Root Cause', 'Possible Outcome',
     'Severity', 'Probability', 'Risk Rating', 'Risk Grade', 'Violation Caused Due To',
-    'Concerned Contractor', 'Concerned EIC / PIC', 'Target Date',
+    'Name of Contractor', 'Concerned EIC / PIC', 'Target Date',
     'Corrective Action Plan', 'Closure Date', 'Delay (Days)', 'Remarks',
   ]
   const hdrRow = ws.addRow(headers)
@@ -213,8 +221,8 @@ async function exportTrackerExcel(
     const riskFontA = obs.risk_level === 'High' ? 'FFFFFFFF' : 'FF000000'
     const statusArgb = status === 'Overdue' ? 'FFC00000' : status === 'Due' ? 'FFFFC000' : 'FF375623'
     const statusFontA = status === 'Overdue' ? 'FFFFFFFF' : status === 'Due' ? 'FF000000' : 'FFFFFFFF'
-    const action = obs.to_be_rectified_by
-      ? `Ensure immediate rectification. Responsible party: ${obs.to_be_rectified_by}. Target: ${obs.target_date_name || '—'}.`
+    const action = contractorOf(obs)
+      ? `Ensure immediate rectification. Responsible party: ${contractorOf(obs)}. Target: ${obs.target_date_name || '—'}.`
       : `Ensure immediate rectification. Target: ${obs.target_date_name || '—'}.`
     const closureDate = obs.status === 'Closed' && obs.updated_at ? fmtD(obs.updated_at) : ''
     const detailedObs = [obs.specific_concern_text, obs.specific_concern_name].filter(Boolean).join('\n')
@@ -228,7 +236,7 @@ async function exportTrackerExcel(
       sevText(obs.severity), sevText(obs.probability),
       isRiskNA(obs) ? 'N/A' : (obs.risk_factor ?? ''), isRiskNA(obs) ? 'Not applicable' : (obs.risk_level || ''),
       obs.violation_name || obs.specific_concern_name || '',
-      obs.to_be_rectified_by || obs.contractor_name || '',
+      contractorOf(obs),
       obs.eic_user_name || '',
       obs.target_date_name || '', action, closureDate,
       delay, remarks,
@@ -1132,7 +1140,7 @@ function SHETrackerTab({
     { label: 'Risk Rating',           w: '2.5%' },
     { label: 'Risk Grade',            w: '3.5%' },
     { label: 'Violation Caused Due To', w: '5.5%' },
-    { label: 'Concerned Contractor',  w: '5%'   },
+    { label: 'Name of Contractor',    w: '5%'   },
     { label: 'Concerned EIC / PIC',   w: '5%'   },
     { label: 'Target Date',           w: '4%'   },
     { label: 'Corrective Action Plan',w: '10%'  },
@@ -1221,8 +1229,8 @@ function SHETrackerTab({
               const statusCls = status === 'Overdue' ? 'trk-status-overdue'
                 : status === 'Due' ? 'trk-status-due' : 'trk-status-closed'
               const rowCls = idx % 2 === 0 ? 'trk-row-even' : 'trk-row-odd'
-              const action = obs.to_be_rectified_by
-                ? `Ensure immediate rectification. Responsible party: ${obs.to_be_rectified_by}. Target: ${obs.target_date_name || '—'}.`
+              const action = contractorOf(obs)
+                ? `Ensure immediate rectification. Responsible party: ${contractorOf(obs)}. Target: ${obs.target_date_name || '—'}.`
                 : `Ensure immediate rectification. Target: ${obs.target_date_name || '—'}.`
 
               return (
@@ -1248,7 +1256,7 @@ function SHETrackerTab({
                   <td className={`trk-num ${riskCls}`}>{isRiskNA(obs) ? 'N/A' : (obs.risk_factor ?? '—')}</td>
                   <td className={riskCls}>{isRiskNA(obs) ? 'Not applicable' : (obs.risk_level || '—')}</td>
                   <td>{obs.violation_name || obs.specific_concern_name || '—'}</td>
-                  <td>{obs.to_be_rectified_by || obs.contractor_name || '—'}</td>
+                  <td>{contractorOf(obs) || '—'}</td>
                   <td>{obs.eic_user_name || '—'}</td>
                   <td className="trk-center">{obs.target_date_name || '—'}</td>
                   <td style={{ fontSize: '7pt' }}>{action}</td>
