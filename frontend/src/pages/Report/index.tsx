@@ -7,7 +7,7 @@ import { FileText, AlertTriangle, ZoomIn, ZoomOut, X, Download, LayoutList, BarC
 import ExcelJS from 'exceljs'
 import { generateHtmlReportPdf } from '../../lib/printPdf'
 import api from '../../lib/api'
-import { isRiskNA } from '../../lib/utils'
+import { isRiskNA, statusLabel, STATUSES } from '../../lib/utils'
 import { MultiSelectFilter, type MSOption } from '../../components/MultiSelectFilter'
 import { useFacets } from '../../lib/facets'
 import MisReport from './MisReport'
@@ -1324,6 +1324,7 @@ export default function ReportPage() {
     () => isContractor && user?.name ? [user.name] : []
   )
   const [riskLevels,      setRiskLevels]      = useState<string[]>([])
+  const [statuses,        setStatuses]        = useState<string[]>([])
   const [buildingIds,     setBuildingIds]     = useState<number[]>([])
   const [floorIds,        setFloorIds]        = useState<number[]>([])
   const [eicIds,          setEicIds]          = useState<number[]>([])
@@ -1391,7 +1392,7 @@ export default function ReportPage() {
   // Cascading filters: each dropdown lists only values present in (non-draft)
   // observations matching the other selected filters.
   const facet = useFacets('/observations/facets', {
-    project_id: projectIds, contractor_user_id: expandedContractorIds, risk_level: riskLevels,
+    project_id: projectIds, contractor_user_id: expandedContractorIds, risk_level: riskLevels, status: statuses,
     building_id: buildingIds, floor_id: floorIds, eic_user_id: eicIds, possible_outcome: outcomeFilter,
     violation_id: violationIds, root_cause_category_id: rcCatIds, root_cause_specific_id: rcSpecIds,
     date_from: dateFrom || undefined, date_to: dateTo || undefined, exclude_drafts: true,
@@ -1408,7 +1409,7 @@ export default function ReportPage() {
     [allRcSpecifics, rcCatIds])
 
   const { data: reportData, isFetching } = useQuery({
-    queryKey: ['report', projectIds, dateFrom, dateTo, selectedContractors, riskLevels, buildingIds, floorIds, eicIds, outcomeFilter, violationIds, rcCatIds, rcSpecIds],
+    queryKey: ['report', projectIds, dateFrom, dateTo, selectedContractors, riskLevels, statuses, buildingIds, floorIds, eicIds, outcomeFilter, violationIds, rcCatIds, rcSpecIds],
     queryFn: () => api.get('/observations/report', {
       params: {
         project_id:         projectIds.length            ? projectIds            : undefined,
@@ -1416,6 +1417,7 @@ export default function ReportPage() {
         date_to:            dateTo                       || undefined,
         contractor_user_id: expandedContractorIds.length ? expandedContractorIds : undefined,
         risk_level:         riskLevels.length    ? riskLevels    : undefined,
+        status:             statuses.length      ? statuses      : undefined,
         building_id:        buildingIds.length   ? buildingIds   : undefined,
         floor_id:           floorIds.length      ? floorIds      : undefined,
         eic_user_id:        eicIds.length        ? eicIds        : undefined,
@@ -1437,6 +1439,9 @@ export default function ReportPage() {
     : selectedContractors.length === 1 ? selectedContractors[0]
     : `${selectedContractors.length} contractors`
   const priorityLabel   = riskLevels.length === 0 ? 'All' : riskLevels.join(', ')
+  const statusFilterLabel = statuses.map(statusLabel).join(', ')
+  // Effective statuses (incl. derived Open & Overdue / Overdue & Closed); drafts never appear in reports.
+  const statusOptions: MSOption[] = STATUSES.filter(s => s !== 'Draft').map(s => ({ value: s, label: statusLabel(s) }))
 
   const dateRange = dateFrom && dateTo
     ? `${fmtD(dateFrom)} to ${fmtD(dateTo)}`
@@ -1460,7 +1465,7 @@ export default function ReportPage() {
   const reset = () => {
     setProjectIds([]); setDateFrom(quarterStart); setDateTo(today)
     if (!isContractor) setSelectedContractors([])
-    setRiskLevels([]); setBuildingIds([]); setFloorIds([]); setEicIds([])
+    setRiskLevels([]); setStatuses([]); setBuildingIds([]); setFloorIds([]); setEicIds([])
     setOutcomeFilter([]); setViolationIds([]); setRcCatIds([]); setRcSpecIds([])
     setGenerated(false); setTrackerNo('')
   }
@@ -1539,6 +1544,7 @@ export default function ReportPage() {
               <span><span className="text-gray-400">Period:</span> <span className="font-medium text-gray-700">{dateRange}</span></span>
               {!isContractor && selectedContractors.length > 0 && <><span className="text-gray-300">·</span><span><span className="text-gray-400">Contractor:</span> <span className="font-medium text-gray-700">{contractorLabel}</span></span></>}
               {riskLevels.length > 0 && <><span className="text-gray-300">·</span><span><span className="text-gray-400">Risk:</span> <span className="font-medium text-gray-700">{priorityLabel}</span></span></>}
+              {statuses.length > 0 && <><span className="text-gray-300">·</span><span><span className="text-gray-400">Status:</span> <span className="font-medium text-gray-700">{statusFilterLabel}</span></span></>}
               {!isFetching && <span className="text-gray-400">· {observations.length} found</span>}
               <button onClick={() => setFiltersOpen(true)}
                 className="ml-auto flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
@@ -1548,6 +1554,12 @@ export default function ReportPage() {
           )}
           {filtersOpen && (
           <div className="grid gap-1.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <div>
+              <label className="label">Status</label>
+              <MultiSelectFilter options={facet.narrow('status', statusOptions)} value={statuses} prune={facet.ready}
+                onChange={v => { setStatuses(v as string[]); setGenerated(false) }}
+                placeholder="All Statuses" className="w-full" />
+            </div>
             <div>
               <label className="label">Project</label>
               <MultiSelectFilter
