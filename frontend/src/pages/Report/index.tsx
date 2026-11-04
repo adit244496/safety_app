@@ -95,22 +95,55 @@ function getTargetDays(name?: string | null): number {
   return 7
 }
 
-function computeTrackerStatus(obs: any): 'Overdue' | 'Due' | 'Closed' {
-  if (obs.status === 'Closed') return 'Closed'
-  if (!obs.obs_date) return 'Due'
-  const deadline = new Date(obs.obs_date + 'T00:00:00')
-  deadline.setDate(deadline.getDate() + getTargetDays(obs.target_date_name))
-  return new Date() > deadline ? 'Overdue' : 'Due'
+type TrackerStatus = 'Overdue' | 'Due' | 'Closed' | 'Praiseworthy'
+const CLOSED_STATUSES = ['Closed', 'Overdue & Closed', 'Unresolved & Closed']
+
+// End of the target day: the observation's target date, else (older records) the
+// observation date plus the named target ("Within 2 Days" …). Null when there is none.
+function trackerDeadline(obs: any): Date | null {
+  if (obs.target_date_actual) return new Date(obs.target_date_actual.slice(0, 10) + 'T23:59:59')
+  if (!obs.obs_date || !obs.target_date_name) return null
+  const d = new Date(obs.obs_date + 'T23:59:59')
+  d.setDate(d.getDate() + getTargetDays(obs.target_date_name))
+  return d
 }
 
-function computeDelay(obs: any): number {
-  if (!obs.obs_date) return 0
-  const deadline = new Date(obs.obs_date + 'T00:00:00')
-  deadline.setDate(deadline.getDate() + getTargetDays(obs.target_date_name))
-  const endDate = obs.status === 'Closed' && obs.updated_at
-    ? new Date(obs.updated_at)
-    : new Date()
-  return Math.max(0, Math.floor((endDate.getTime() - deadline.getTime()) / 86400000))
+// Follows the observation's own status: Praiseworthy (Positive Approach) needs no
+// rectification, so it is never Due / Overdue and has no delay.
+function computeTrackerStatus(obs: any): TrackerStatus {
+  if (obs.status === 'Positive Approach') return 'Praiseworthy'
+  if (CLOSED_STATUSES.includes(obs.status)) return 'Closed'
+  if (obs.status === 'Overdue') return 'Overdue'
+  const deadline = trackerDeadline(obs)
+  return deadline && new Date() > deadline ? 'Overdue' : 'Due'
+}
+
+// Days past the target date (until closure, or today while open). Null = not applicable.
+function computeDelay(obs: any): number | null {
+  if (obs.status === 'Positive Approach') return null
+  const deadline = trackerDeadline(obs)
+  if (!deadline) return null
+  const end = CLOSED_STATUSES.includes(obs.status) ? new Date(obs.closed_at || obs.updated_at || Date.now()) : new Date()
+  return end > deadline ? Math.ceil((end.getTime() - deadline.getTime()) / 86400000) : 0
+}
+
+function trackerTarget(obs: any): string {
+  return obs.target_date_actual ? fmtD(obs.target_date_actual) : (obs.target_date_name || '')
+}
+
+function trackerClosure(obs: any): string {
+  const at = obs.closed_at || obs.updated_at
+  return CLOSED_STATUSES.includes(obs.status) && at ? fmtD(at) : ''
+}
+
+function trackerRemarks(status: TrackerStatus): string {
+  return status === 'Praiseworthy' ? 'Praiseworthy' : status === 'Closed' ? 'Closed' : status === 'Overdue' ? 'Pending' : 'Open'
+}
+
+function trackerAction(obs: any, status: TrackerStatus): string {
+  if (status === 'Praiseworthy') return 'No rectification required — good practice observed.'
+  const who = contractorOf(obs)
+  return `Ensure immediate rectification.${who ? ` Responsible party: ${who}.` : ''} Target: ${trackerTarget(obs) || '—'}.`
 }
 
 function buildFRef(observations: any[]): Map<number, string> {
@@ -219,14 +252,12 @@ async function exportTrackerExcel(
     const delay  = computeDelay(obs)
     const riskArgb  = obs.risk_level === 'High' ? 'FFFF0000' : obs.risk_level === 'Medium' ? 'FFFFC000' : 'FF92D050'
     const riskFontA = obs.risk_level === 'High' ? 'FFFFFFFF' : 'FF000000'
-    const statusArgb = status === 'Overdue' ? 'FFC00000' : status === 'Due' ? 'FFFFC000' : 'FF375623'
-    const statusFontA = status === 'Overdue' ? 'FFFFFFFF' : status === 'Due' ? 'FF000000' : 'FFFFFFFF'
-    const action = contractorOf(obs)
-      ? `Ensure immediate rectification. Responsible party: ${contractorOf(obs)}. Target: ${obs.target_date_name || '—'}.`
-      : `Ensure immediate rectification. Target: ${obs.target_date_name || '—'}.`
-    const closureDate = obs.status === 'Closed' && obs.updated_at ? fmtD(obs.updated_at) : ''
+    const statusArgb = status === 'Overdue' ? 'FFC00000' : status === 'Due' ? 'FFFFC000' : status === 'Praiseworthy' ? 'FF0F766E' : 'FF375623'
+    const statusFontA = status === 'Due' ? 'FF000000' : 'FFFFFFFF'
+    const action = trackerAction(obs, status)
+    const closureDate = trackerClosure(obs)
     const detailedObs = [obs.specific_concern_text, obs.specific_concern_name].filter(Boolean).join('\n')
-    const remarks     = obs.status === 'Closed' ? 'Closed' : status === 'Overdue' ? 'Pending' : 'Open'
+    const remarks     = trackerRemarks(status)
     const rowBg       = i % 2 === 0 ? 'FFFFFFFF' : 'FFF4F8FF'
 
     const values: ExcelJS.CellValue[] = [
@@ -238,8 +269,8 @@ async function exportTrackerExcel(
       obs.violation_name || obs.specific_concern_name || '',
       contractorOf(obs),
       obs.eic_user_name || '',
-      obs.target_date_name || '', action, closureDate,
-      delay, remarks,
+      trackerTarget(obs), action, closureDate,
+      delay ?? '—', remarks,
     ]
 
     const dataRow = ws.addRow(values)
@@ -1101,6 +1132,7 @@ const TRACKER_STYLE = `
 .trk-status-overdue { background:#c00000 !important; color:#fff !important; font-weight:700; text-align:center; }
 .trk-status-due      { background:#ffc000 !important; color:#000 !important; font-weight:700; text-align:center; }
 .trk-status-closed   { background:#375623 !important; color:#fff !important; font-weight:700; text-align:center; }
+.trk-status-positive { background:#0f766e !important; color:#fff !important; font-weight:700; text-align:center; }
 .trk-risk-h { background:#ff0000 !important; color:#fff !important; font-weight:700; text-align:center; }
 .trk-risk-m { background:#ffc000 !important; color:#000 !important; font-weight:700; text-align:center; }
 .trk-risk-l { background:#92d050 !important; color:#000 !important; font-weight:700; text-align:center; }
@@ -1227,11 +1259,9 @@ function SHETrackerTab({
                 : obs.risk_level === 'Medium' ? 'trk-risk-m'
                 : obs.risk_level ? 'trk-risk-l' : ''
               const statusCls = status === 'Overdue' ? 'trk-status-overdue'
-                : status === 'Due' ? 'trk-status-due' : 'trk-status-closed'
+                : status === 'Due' ? 'trk-status-due' : status === 'Praiseworthy' ? 'trk-status-positive' : 'trk-status-closed'
               const rowCls = idx % 2 === 0 ? 'trk-row-even' : 'trk-row-odd'
-              const action = contractorOf(obs)
-                ? `Ensure immediate rectification. Responsible party: ${contractorOf(obs)}. Target: ${obs.target_date_name || '—'}.`
-                : `Ensure immediate rectification. Target: ${obs.target_date_name || '—'}.`
+              const action = trackerAction(obs, status)
 
               return (
                 <tr key={obs.id} className={rowCls}>
@@ -1258,15 +1288,11 @@ function SHETrackerTab({
                   <td>{obs.violation_name || obs.specific_concern_name || '—'}</td>
                   <td>{contractorOf(obs) || '—'}</td>
                   <td>{obs.eic_user_name || '—'}</td>
-                  <td className="trk-center">{obs.target_date_name || '—'}</td>
+                  <td className="trk-center">{trackerTarget(obs) || '—'}</td>
                   <td style={{ fontSize: '7pt' }}>{action}</td>
-                  <td className="trk-center">
-                    {obs.status === 'Closed' && obs.updated_at ? fmtD(obs.updated_at) : '—'}
-                  </td>
-                  <td className={`trk-num ${delay > 0 ? 'trk-risk-h' : 'trk-risk-l'}`}>{delay}</td>
-                  <td className="trk-center" style={{ fontSize: '7pt' }}>
-                    {obs.status === 'Closed' ? 'Closed' : status === 'Overdue' ? 'Pending' : 'Open'}
-                  </td>
+                  <td className="trk-center">{trackerClosure(obs) || '—'}</td>
+                  <td className={`trk-num ${delay === null ? '' : delay > 0 ? 'trk-risk-h' : 'trk-risk-l'}`}>{delay ?? '—'}</td>
+                  <td className="trk-center" style={{ fontSize: '7pt' }}>{trackerRemarks(status)}</td>
                 </tr>
               )
             })}
